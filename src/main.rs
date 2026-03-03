@@ -6,7 +6,6 @@ mod render;
 mod cmux;
 mod preview;
 mod input;
-mod terminal;
 
 use std::io;
 use std::path::PathBuf;

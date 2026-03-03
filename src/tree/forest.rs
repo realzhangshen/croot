@@ -8,16 +8,20 @@ pub struct FileTree {
     pub cursor: usize,
     pub scroll_offset: usize,
     pub root: PathBuf,
+    pub show_hidden: bool,
+    pub dirs_first: bool,
 }
 
 impl FileTree {
-    pub fn new(root: PathBuf) -> Self {
-        let children = load_children(&root, 0);
+    pub fn new(root: PathBuf, show_hidden: bool, dirs_first: bool) -> Self {
+        let children = load_children(&root, 0, show_hidden, dirs_first);
         Self {
             nodes: children,
             cursor: 0,
             scroll_offset: 0,
             root,
+            show_hidden,
+            dirs_first,
         }
     }
 
@@ -35,6 +39,9 @@ impl FileTree {
 
     /// Expand a directory node: load its children and insert them after it.
     pub fn expand(&mut self, index: usize) {
+        if index >= self.nodes.len() {
+            return;
+        }
         let node = &self.nodes[index];
         if !node.is_dir() || node.is_expanded {
             return;
@@ -43,7 +50,7 @@ impl FileTree {
         let depth = node.depth + 1;
         let path = node.path.clone();
 
-        let children = load_children(&path, depth);
+        let children = load_children(&path, depth, self.show_hidden, self.dirs_first);
 
         self.nodes[index].is_expanded = true;
         self.nodes[index].children_loaded = true;
@@ -55,6 +62,9 @@ impl FileTree {
 
     /// Collapse a directory node: remove all descendant nodes.
     pub fn collapse(&mut self, index: usize) {
+        if index >= self.nodes.len() {
+            return;
+        }
         let node = &self.nodes[index];
         if !node.is_dir() || !node.is_expanded {
             return;
@@ -173,36 +183,39 @@ impl FileTree {
     }
 
     /// Refresh expanded directories (re-read from filesystem).
+    /// Preserves which directories were expanded by collecting their paths first.
     pub fn refresh(&mut self) {
-        // Collect indices of expanded directories (in reverse to preserve indices)
-        let expanded: Vec<usize> = self
+        // Collect paths of expanded directories before rebuilding
+        let expanded_paths: Vec<PathBuf> = self
             .nodes
             .iter()
-            .enumerate()
-            .filter(|(_, n)| n.is_dir() && n.is_expanded)
-            .map(|(i, _)| i)
+            .filter(|n| n.is_dir() && n.is_expanded)
+            .map(|n| n.path.clone())
             .collect();
 
-        // Collapse all expanded dirs (reverse order to preserve indices)
-        for &idx in expanded.iter().rev() {
-            self.collapse(idx);
+        // Remember cursor path for restoration
+        let cursor_path = self.nodes.get(self.cursor).map(|n| n.path.clone());
+
+        // Re-read root from scratch
+        self.nodes = load_children(&self.root, 0, self.show_hidden, self.dirs_first);
+
+        // Re-expand previously expanded dirs (forward scan, expanding shifts indices)
+        let mut i = 0;
+        while i < self.nodes.len() {
+            if self.nodes[i].is_dir() && expanded_paths.contains(&self.nodes[i].path) {
+                self.expand(i);
+            }
+            i += 1;
         }
 
-        // Re-read root
-        let children = load_children(&self.root, 0);
-        self.nodes = children;
-
-        // Re-expand previously expanded dirs (forward order)
-        // We match by path since indices have shifted
-        let expanded_paths: Vec<PathBuf> = expanded
-            .iter()
-            .filter_map(|_| None::<PathBuf>) // placeholder — we need to collect before collapsing
-            .collect();
-
-        // Simpler approach: just reset. The user can re-expand.
-        // A smarter refresh is a Phase 4 enhancement.
-        let _ = expanded_paths;
-
+        // Restore cursor position by path, or clamp to valid range
+        if let Some(ref target) = cursor_path {
+            self.cursor = self
+                .nodes
+                .iter()
+                .position(|n| n.path == *target)
+                .unwrap_or(0);
+        }
         self.cursor = self.cursor.min(self.nodes.len().saturating_sub(1));
     }
 
@@ -226,18 +239,184 @@ impl FileTree {
         let mut guides = vec![false; node.depth];
 
         // For each ancestor depth, check if there are more nodes at that depth after this index
-        for d in 0..node.depth {
+        for (d, guide) in guides.iter_mut().enumerate() {
             for i in (index + 1)..self.nodes.len() {
                 if self.nodes[i].depth < d {
                     break;
                 }
                 if self.nodes[i].depth == d {
-                    guides[d] = true;
+                    *guide = true;
                     break;
                 }
             }
         }
 
         guides
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tree::node::{NodeKind, TreeNode};
+
+    /// Build a FileTree from a list of (name, kind, depth) tuples — no filesystem needed.
+    fn tree_from(entries: &[(&str, NodeKind, usize)]) -> FileTree {
+        let nodes = entries
+            .iter()
+            .map(|(name, kind, depth)| TreeNode::new(PathBuf::from(name), *kind, *depth))
+            .collect();
+        FileTree {
+            nodes,
+            cursor: 0,
+            scroll_offset: 0,
+            root: PathBuf::from("/tmp/test"),
+            show_hidden: true,
+            dirs_first: true,
+        }
+    }
+
+    fn names(tree: &FileTree) -> Vec<&str> {
+        tree.nodes.iter().map(|n| n.name.as_str()).collect()
+    }
+
+    #[test]
+    fn expand_out_of_bounds_is_noop() {
+        let mut tree = tree_from(&[("a.txt", NodeKind::File, 0)]);
+        tree.expand(99); // should not panic
+        assert_eq!(tree.len(), 1);
+    }
+
+    #[test]
+    fn collapse_out_of_bounds_is_noop() {
+        let mut tree = tree_from(&[("a.txt", NodeKind::File, 0)]);
+        tree.collapse(99); // should not panic
+        assert_eq!(tree.len(), 1);
+    }
+
+    #[test]
+    fn expand_file_is_noop() {
+        let mut tree = tree_from(&[("a.txt", NodeKind::File, 0)]);
+        tree.expand(0);
+        assert_eq!(tree.len(), 1);
+        assert!(!tree.nodes[0].is_expanded);
+    }
+
+    #[test]
+    fn collapse_unexpanded_dir_is_noop() {
+        let mut tree = tree_from(&[("src", NodeKind::Directory, 0)]);
+        tree.collapse(0);
+        assert!(!tree.nodes[0].is_expanded);
+    }
+
+    #[test]
+    fn collapse_removes_children_and_adjusts_cursor() {
+        let mut tree = tree_from(&[
+            ("src", NodeKind::Directory, 0),
+            ("main.rs", NodeKind::File, 1),
+            ("lib.rs", NodeKind::File, 1),
+            ("README", NodeKind::File, 0),
+        ]);
+        tree.nodes[0].is_expanded = true;
+        tree.cursor = 3; // pointing at README
+
+        tree.collapse(0);
+
+        assert_eq!(names(&tree), vec!["src", "README"]);
+        // cursor was at index 3 (README), which was beyond the removed range (1..3)
+        // so it should shift down by 2
+        assert_eq!(tree.cursor, 1);
+    }
+
+    #[test]
+    fn collapse_moves_cursor_to_parent_if_inside_children() {
+        let mut tree = tree_from(&[
+            ("src", NodeKind::Directory, 0),
+            ("main.rs", NodeKind::File, 1),
+            ("lib.rs", NodeKind::File, 1),
+        ]);
+        tree.nodes[0].is_expanded = true;
+        tree.cursor = 2; // pointing at lib.rs (inside collapsed range)
+
+        tree.collapse(0);
+
+        assert_eq!(names(&tree), vec!["src"]);
+        assert_eq!(tree.cursor, 0); // snapped to parent
+    }
+
+    #[test]
+    fn cursor_up_at_top_stays() {
+        let mut tree = tree_from(&[("a", NodeKind::File, 0), ("b", NodeKind::File, 0)]);
+        tree.cursor = 0;
+        tree.cursor_up();
+        assert_eq!(tree.cursor, 0);
+    }
+
+    #[test]
+    fn cursor_down_at_bottom_stays() {
+        let mut tree = tree_from(&[("a", NodeKind::File, 0), ("b", NodeKind::File, 0)]);
+        tree.cursor = 1;
+        tree.cursor_down();
+        assert_eq!(tree.cursor, 1);
+    }
+
+    #[test]
+    fn cursor_up_down_navigates() {
+        let mut tree = tree_from(&[
+            ("a", NodeKind::File, 0),
+            ("b", NodeKind::File, 0),
+            ("c", NodeKind::File, 0),
+        ]);
+        tree.cursor_down();
+        assert_eq!(tree.cursor, 1);
+        tree.cursor_down();
+        assert_eq!(tree.cursor, 2);
+        tree.cursor_up();
+        assert_eq!(tree.cursor, 1);
+    }
+
+    #[test]
+    fn toggle_on_empty_tree_is_noop() {
+        let mut tree = tree_from(&[]);
+        tree.toggle(0); // should not panic
+    }
+
+    #[test]
+    fn toggle_on_file_is_noop() {
+        let mut tree = tree_from(&[("a.txt", NodeKind::File, 0)]);
+        tree.toggle(0);
+        assert!(!tree.nodes[0].is_expanded);
+    }
+
+    #[test]
+    fn is_last_sibling_single_node() {
+        let tree = tree_from(&[("a.txt", NodeKind::File, 0)]);
+        assert!(tree.is_last_sibling(0));
+    }
+
+    #[test]
+    fn is_last_sibling_among_peers() {
+        let tree = tree_from(&[
+            ("a", NodeKind::File, 0),
+            ("b", NodeKind::File, 0),
+            ("c", NodeKind::File, 0),
+        ]);
+        assert!(!tree.is_last_sibling(0));
+        assert!(!tree.is_last_sibling(1));
+        assert!(tree.is_last_sibling(2));
+    }
+
+    #[test]
+    fn adjust_scroll_keeps_cursor_visible() {
+        let mut tree = tree_from(&[
+            ("a", NodeKind::File, 0),
+            ("b", NodeKind::File, 0),
+            ("c", NodeKind::File, 0),
+            ("d", NodeKind::File, 0),
+            ("e", NodeKind::File, 0),
+        ]);
+        tree.cursor = 4;
+        tree.adjust_scroll(3); // viewport of 3 lines
+        assert!(tree.scroll_offset <= 2); // cursor 4 visible in window of 3
     }
 }

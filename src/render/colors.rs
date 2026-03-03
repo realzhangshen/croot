@@ -5,7 +5,6 @@ pub const GIT_MODIFIED: Color = Color::Rgb(0xE2, 0xC0, 0x6A);   // #E2C06A yello
 pub const GIT_ADDED: Color = Color::Rgb(0x73, 0xC9, 0x90);      // #73C990 green
 pub const GIT_DELETED: Color = Color::Rgb(0xE8, 0x59, 0x50);    // #E85950 red
 pub const GIT_IGNORED: Color = Color::Rgb(0x80, 0x80, 0x80);    // #808080 gray
-pub const GIT_UNTRACKED: Color = Color::Rgb(0x73, 0xC9, 0x90);  // #73C990 green (same as added)
 pub const GIT_CONFLICTED: Color = Color::Rgb(0xE8, 0x59, 0x50); // #E85950 red
 
 // UI colors

@@ -40,3 +40,48 @@ pub fn propagate_to_dirs(
 
     dir_statuses
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clean_files_are_not_propagated() {
+        let mut files = HashMap::new();
+        files.insert(PathBuf::from("/repo/src/main.rs"), GitStatus::Clean);
+
+        let dirs = propagate_to_dirs(&files, Path::new("/repo"));
+        assert!(dirs.is_empty());
+    }
+
+    #[test]
+    fn modified_file_propagates_to_all_ancestors() {
+        let mut files = HashMap::new();
+        files.insert(PathBuf::from("/repo/src/main.rs"), GitStatus::Modified);
+
+        let dirs = propagate_to_dirs(&files, Path::new("/repo"));
+        assert_eq!(dirs.get(Path::new("/repo/src")), Some(&GitStatus::Modified));
+        assert_eq!(dirs.get(Path::new("/repo")), Some(&GitStatus::Modified));
+    }
+
+    #[test]
+    fn most_severe_status_wins() {
+        let mut files = HashMap::new();
+        files.insert(PathBuf::from("/repo/src/a.rs"), GitStatus::Added);
+        files.insert(PathBuf::from("/repo/src/b.rs"), GitStatus::Conflicted);
+
+        let dirs = propagate_to_dirs(&files, Path::new("/repo"));
+        // Conflicted > Added, so src/ should be Conflicted
+        assert_eq!(dirs.get(Path::new("/repo/src")), Some(&GitStatus::Conflicted));
+    }
+
+    #[test]
+    fn does_not_propagate_above_repo_root() {
+        let mut files = HashMap::new();
+        files.insert(PathBuf::from("/repo/file.rs"), GitStatus::Modified);
+
+        let dirs = propagate_to_dirs(&files, Path::new("/repo"));
+        assert_eq!(dirs.get(Path::new("/repo")), Some(&GitStatus::Modified));
+        assert!(dirs.get(Path::new("/")).is_none());
+    }
+}

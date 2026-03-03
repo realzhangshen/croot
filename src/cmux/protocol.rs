@@ -8,7 +8,6 @@ pub struct CmuxCli;
 #[derive(Debug)]
 pub struct SplitResult {
     pub surface_ref: String,
-    pub pane_ref: String,
 }
 
 impl CmuxCli {
@@ -34,16 +33,15 @@ impl CmuxCli {
     pub async fn new_split(direction: &str) -> anyhow::Result<SplitResult> {
         let stdout = Self::run(&["--json", "new-split", direction]).await?;
 
-        // Parse JSON: {"surface_ref": "surface:23", "pane_ref": "pane:27", ...}
-        let surface_ref = extract_json_string(&stdout, "surface_ref")
-            .ok_or_else(|| anyhow::anyhow!("missing surface_ref in cmux output"))?;
-        let pane_ref = extract_json_string(&stdout, "pane_ref")
-            .ok_or_else(|| anyhow::anyhow!("missing pane_ref in cmux output"))?;
+        let parsed: serde_json::Value = serde_json::from_str(&stdout)
+            .map_err(|e| anyhow::anyhow!("failed to parse cmux JSON: {e}"))?;
 
-        Ok(SplitResult {
-            surface_ref,
-            pane_ref,
-        })
+        let surface_ref = parsed["surface_ref"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("missing surface_ref in cmux output"))?
+            .to_string();
+
+        Ok(SplitResult { surface_ref })
     }
 
     /// Send text to a specific surface.
@@ -56,23 +54,4 @@ impl CmuxCli {
     pub async fn list_panes() -> anyhow::Result<String> {
         Self::run(&["--json", "list-panes"]).await
     }
-
-    /// Get info about the current surface.
-    pub async fn identify() -> anyhow::Result<String> {
-        Self::run(&["--json", "identify"]).await
-    }
-}
-
-/// Simple JSON string field extraction without pulling in serde_json.
-fn extract_json_string(json: &str, key: &str) -> Option<String> {
-    let pattern = format!("\"{}\"", key);
-    let start = json.find(&pattern)?;
-    let after_key = &json[start + pattern.len()..];
-    // Skip whitespace and colon
-    let after_colon = after_key.trim_start().strip_prefix(':')?;
-    let after_ws = after_colon.trim_start();
-    // Extract quoted string value
-    let value_start = after_ws.strip_prefix('"')?;
-    let end = value_start.find('"')?;
-    Some(value_start[..end].to_string())
 }

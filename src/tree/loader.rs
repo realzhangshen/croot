@@ -7,12 +7,12 @@ use super::sorter::sort_nodes;
 
 /// Read one level of a directory, respecting .gitignore rules.
 /// Returns sorted children (directories first, then natural sort).
-pub fn load_children(dir: &Path, depth: usize) -> Vec<TreeNode> {
+pub fn load_children(dir: &Path, depth: usize, show_hidden: bool, dirs_first: bool) -> Vec<TreeNode> {
     let mut nodes = Vec::new();
 
     let walker = WalkBuilder::new(dir)
         .max_depth(Some(1))
-        .hidden(false) // Show dotfiles by default; .gitignore still respected
+        .hidden(!show_hidden) // hidden(true) = skip dotfiles
         .git_ignore(true)
         .git_global(true)
         .git_exclude(true)
@@ -38,6 +38,6 @@ pub fn load_children(dir: &Path, depth: usize) -> Vec<TreeNode> {
         nodes.push(TreeNode::new(path, kind, depth));
     }
 
-    sort_nodes(&mut nodes);
+    sort_nodes(&mut nodes, dirs_first);
     nodes
 }

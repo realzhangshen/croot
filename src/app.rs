@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crossterm::event::{Event, EventStream};
@@ -12,6 +12,7 @@ use ratatui::{
 use tokio::sync::mpsc;
 
 use crate::cmux::bridge::CmuxBridge;
+use crate::config::Config;
 use crate::git::status::GitState;
 use crate::input::handler::{handle_key, Action};
 use crate::input::mouse::handle_mouse;
@@ -25,6 +26,8 @@ pub struct App {
     pub tree: FileTree,
     pub git: Option<GitState>,
     pub cmux: Option<CmuxBridge>,
+    #[allow(dead_code)] // preview/cmux config not yet consumed
+    pub config: Config,
     pub root: PathBuf,
     pub should_quit: bool,
     tree_area_y: u16,
@@ -33,7 +36,12 @@ pub struct App {
 
 impl App {
     pub fn new(root: PathBuf) -> anyhow::Result<Self> {
-        let mut tree = FileTree::new(root.clone());
+        let config = Config::load();
+        let mut tree = FileTree::new(
+            root.clone(),
+            config.tree.show_hidden,
+            config.tree.dirs_first,
+        );
         let git = GitState::load(&root);
         let cmux = CmuxBridge::detect();
 
@@ -45,6 +53,7 @@ impl App {
             tree,
             git,
             cmux,
+            config,
             root,
             should_quit: false,
             tree_area_y: 0,
@@ -246,7 +255,7 @@ fn apply_git_statuses(tree: &mut FileTree, git: &GitState) {
 
 /// Set up a file system watcher that sends a signal on changes (100ms debounce).
 fn setup_watcher(
-    root: &PathBuf,
+    root: &Path,
     tx: mpsc::Sender<()>,
 ) -> Option<notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>> {
     let debouncer = new_debouncer(
@@ -265,9 +274,15 @@ fn setup_watcher(
 
     match debouncer {
         Ok(mut d) => {
-            let _ = d.watcher().watch(root, notify::RecursiveMode::Recursive);
+            if let Err(e) = d.watcher().watch(root, notify::RecursiveMode::Recursive) {
+                eprintln!("croot: failed to watch {}: {e}", root.display());
+                return None;
+            }
             Some(d)
         }
-        Err(_) => None,
+        Err(e) => {
+            eprintln!("croot: failed to initialize file watcher: {e}");
+            None
+        }
     }
 }

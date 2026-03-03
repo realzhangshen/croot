@@ -99,5 +99,5 @@ fn default_icon(name: &str) -> IconInfo {
 
 /// Icon for expanded/collapsed directory indicator.
 pub fn dir_icon(expanded: bool) -> &'static str {
-    if expanded { "" } else { "" }
+    if expanded { "\u{f0770}" } else { "\u{f024b}" }
 }

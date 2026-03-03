@@ -1,3 +1,5 @@
+#![allow(dead_code)] // Config schema fields are deserialized from TOML; not all consumed yet
+
 use std::path::PathBuf;
 
 use serde::Deserialize;
