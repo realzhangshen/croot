@@ -21,7 +21,7 @@ use ratatui::prelude::*;
 use app::App;
 
 #[derive(Parser)]
-#[command(name = "croot", about = "A lightweight terminal file tree sidebar")]
+#[command(name = "croot", version, about = "A lightweight terminal file tree sidebar")]
 struct Cli {
     /// Directory to browse (defaults to current directory)
     #[arg(default_value = ".")]
