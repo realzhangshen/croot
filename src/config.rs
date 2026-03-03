@@ -18,10 +18,12 @@ pub struct Config {
 pub struct TreeConfig {
     #[serde(default = "default_true")]
     pub show_hidden: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub show_ignored: bool,
     #[serde(default = "default_true")]
     pub dirs_first: bool,
+    #[serde(default = "default_exclude")]
+    pub exclude: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,10 +61,18 @@ impl Default for TreeConfig {
     fn default() -> Self {
         Self {
             show_hidden: true,
-            show_ignored: false,
+            show_ignored: true,
             dirs_first: true,
+            exclude: default_exclude(),
         }
     }
+}
+
+fn default_exclude() -> Vec<String> {
+    [".git", ".svn", ".hg", "CVS", ".DS_Store", "Thumbs.db"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
 }
 
 impl Default for PreviewConfig {

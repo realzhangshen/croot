@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use ignore::WalkBuilder;
@@ -5,17 +6,18 @@ use ignore::WalkBuilder;
 use super::node::{NodeKind, TreeNode};
 use super::sorter::sort_nodes;
 
-/// Read one level of a directory, respecting .gitignore rules.
+/// Read one level of a directory, respecting .gitignore rules and exclude list.
 /// Returns sorted children (directories first, then natural sort).
-pub fn load_children(dir: &Path, depth: usize, show_hidden: bool, dirs_first: bool) -> Vec<TreeNode> {
+pub fn load_children(dir: &Path, depth: usize, show_hidden: bool, dirs_first: bool, exclude: &[String], show_ignored: bool) -> Vec<TreeNode> {
     let mut nodes = Vec::new();
+    let exclude_set: HashSet<&str> = exclude.iter().map(|s| s.as_str()).collect();
 
     let walker = WalkBuilder::new(dir)
         .max_depth(Some(1))
         .hidden(!show_hidden) // hidden(true) = skip dotfiles
-        .git_ignore(true)
-        .git_global(true)
-        .git_exclude(true)
+        .git_ignore(!show_ignored)
+        .git_global(!show_ignored)
+        .git_exclude(!show_ignored)
         .sort_by_file_name(|a, b| a.cmp(b))
         .build();
 
@@ -25,6 +27,13 @@ pub fn load_children(dir: &Path, depth: usize, show_hidden: bool, dirs_first: bo
         // Skip the directory itself (depth 0 entry)
         if path == dir {
             continue;
+        }
+
+        // Skip entries matching the exclude list
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            if exclude_set.contains(name) {
+                continue;
+            }
         }
 
         let kind = if path.is_symlink() {

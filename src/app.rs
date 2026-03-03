@@ -41,6 +41,8 @@ impl App {
             root.clone(),
             config.tree.show_hidden,
             config.tree.dirs_first,
+            config.tree.exclude.clone(),
+            config.tree.show_ignored,
         );
         let git = GitState::load(&root);
         let cmux = CmuxBridge::detect();
