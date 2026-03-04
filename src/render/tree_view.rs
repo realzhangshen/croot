@@ -11,16 +11,15 @@ use ratatui::{
 use crate::tree::forest::FileTree;
 use crate::tree::node::GitStatus;
 
+use super::colors;
 use super::icons;
-use super::theme::Theme;
 
-pub struct TreeView<'a> {
-    pub theme: &'a Theme,
+pub struct TreeView {
     pub show_size: bool,
     pub show_modified: bool,
 }
 
-impl StatefulWidget for TreeView<'_> {
+impl StatefulWidget for TreeView {
     type State = FileTree;
 
     #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
@@ -48,7 +47,7 @@ impl StatefulWidget for TreeView<'_> {
 
             let mut spans = Vec::new();
             let bg = if is_selected {
-                self.theme.selected_bg
+                colors::SELECTED_BG
             } else {
                 ratatui::style::Color::Reset
             };
@@ -62,7 +61,7 @@ impl StatefulWidget for TreeView<'_> {
                 let connector = if has_continuation { "│ " } else { "  " };
                 spans.push(Span::styled(
                     connector,
-                    Style::default().fg(self.theme.tree_line).bg(bg),
+                    Style::default().fg(colors::TREE_LINE).bg(bg),
                 ));
             }
 
@@ -72,7 +71,7 @@ impl StatefulWidget for TreeView<'_> {
                 let branch = if is_last { "└─" } else { "├─" };
                 spans.push(Span::styled(
                     branch,
-                    Style::default().fg(self.theme.tree_line).bg(bg),
+                    Style::default().fg(colors::TREE_LINE).bg(bg),
                 ));
             }
 
@@ -82,10 +81,10 @@ impl StatefulWidget for TreeView<'_> {
                 let dir_icon = icons::dir_icon(last_in_chain.is_expanded);
                 icons::IconInfo {
                     icon: dir_icon,
-                    color: self.theme.dir_color,
+                    color: colors::DIR_COLOR,
                 }
             } else {
-                icons::icon_for_file(&node.name, false, self.theme)
+                icons::icon_for_file(&node.name, false)
             };
 
             let is_ignored = node.git_status == GitStatus::Ignored;
@@ -103,7 +102,7 @@ impl StatefulWidget for TreeView<'_> {
                 node.name.clone()
             };
 
-            let name_color = git_status_color(node.git_status, self.theme);
+            let name_color = git_status_color(node.git_status);
             let name_style = if node.is_dir() {
                 let mut s = Style::default()
                     .fg(name_color)
@@ -126,7 +125,7 @@ impl StatefulWidget for TreeView<'_> {
             let git_marker = git_status_marker(node.git_status);
             if !git_marker.is_empty() {
                 let mut marker_style = Style::default()
-                    .fg(git_status_color(node.git_status, self.theme))
+                    .fg(git_status_color(node.git_status))
                     .bg(bg);
                 if is_ignored {
                     marker_style = marker_style.add_modifier(Modifier::DIM);
@@ -158,7 +157,7 @@ impl StatefulWidget for TreeView<'_> {
                 if line_width + min_gap + info_width < area.width {
                     let info_x = area.x + area.width - info_width;
                     let info_style = Style::default()
-                        .fg(self.theme.git_ignored) // dim gray
+                        .fg(colors::GIT_IGNORED) // dim gray
                         .bg(bg);
                     let info_span = Line::from(Span::styled(info_text, info_style));
                     info_span.render(Rect::new(info_x, y, info_width, 1), buf);
@@ -207,17 +206,17 @@ fn build_visible_indices(state: &mut FileTree, viewport_height: usize) -> Vec<us
     all_visible[start..end].to_vec()
 }
 
-fn git_status_color(status: GitStatus, theme: &Theme) -> ratatui::style::Color {
+fn git_status_color(status: GitStatus) -> ratatui::style::Color {
     match status {
-        GitStatus::Modified => theme.git_modified,
-        GitStatus::Added | GitStatus::Untracked => theme.git_added,
-        GitStatus::Deleted => theme.git_deleted,
-        GitStatus::Ignored => theme.git_ignored,
-        GitStatus::Conflicted => theme.git_conflicted,
-        GitStatus::StagedModified => theme.git_staged_modified,
-        GitStatus::StagedAdded => theme.git_staged_added,
-        GitStatus::StagedDeleted => theme.git_staged_deleted,
-        GitStatus::Clean => theme.default_fg,
+        GitStatus::Modified => colors::GIT_MODIFIED,
+        GitStatus::Added | GitStatus::Untracked => colors::GIT_ADDED,
+        GitStatus::Deleted => colors::GIT_DELETED,
+        GitStatus::Ignored => colors::GIT_IGNORED,
+        GitStatus::Conflicted => colors::GIT_CONFLICTED,
+        GitStatus::StagedModified => colors::GIT_STAGED_MODIFIED,
+        GitStatus::StagedAdded => colors::GIT_STAGED_ADDED,
+        GitStatus::StagedDeleted => colors::GIT_STAGED_DELETED,
+        GitStatus::Clean => colors::DEFAULT_FG,
     }
 }
 

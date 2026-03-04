@@ -8,15 +8,14 @@ use ratatui::{
 use unicode_width::UnicodeWidthChar;
 
 use crate::preview::state::{PreviewKind, PreviewState};
-use crate::render::theme::Theme;
+use crate::render::colors;
 
-pub struct PreviewView<'a> {
-    pub theme: &'a Theme,
+pub struct PreviewView {
     pub show_line_numbers: bool,
     pub focused: bool,
 }
 
-impl StatefulWidget for PreviewView<'_> {
+impl StatefulWidget for PreviewView {
     type State = PreviewState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut PreviewState) {
@@ -60,15 +59,15 @@ impl StatefulWidget for PreviewView<'_> {
     }
 }
 
-impl PreviewView<'_> {
+impl PreviewView {
     fn render_header(&self, area: Rect, buf: &mut Buffer, state: &PreviewState) {
         let bg = if self.focused {
-            self.theme.status_bar_bg
+            colors::STATUS_BAR_BG
         } else {
             Color::Rgb(0x3C, 0x3C, 0x3C)
         };
         let fg = if self.focused {
-            self.theme.status_bar_fg
+            colors::STATUS_BAR_FG
         } else {
             Color::Rgb(0xBB, 0xBB, 0xBB)
         };
@@ -143,7 +142,7 @@ impl PreviewView<'_> {
         // Pre-compute normalized selection range
         let sel_range = state.selection.normalized();
         let highlight_style = Style::default()
-            .bg(self.theme.selected_bg)
+            .bg(colors::SELECTED_BG)
             .fg(Color::White);
 
         for row in 0..height {

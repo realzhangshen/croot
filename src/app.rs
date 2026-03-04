@@ -21,9 +21,9 @@ use crate::input::mouse::handle_mouse;
 use crate::preview::dispatcher::preview_command;
 use crate::preview::loader::{load_preview, LoadedPreview};
 use crate::preview::state::{ContentPos, FocusPane, PreviewKind, PreviewState};
+use crate::render::colors;
 use crate::render::preview_view::PreviewView;
 use crate::render::status_bar::StatusBar;
-use crate::render::theme::Theme;
 use crate::render::tree_view::TreeView;
 use crate::tree::forest::FileTree;
 use crate::tree::node::NodeKind;
@@ -44,7 +44,6 @@ pub struct App {
     pub git: Option<GitState>,
     pub cmux: Option<CmuxBridge>,
     pub config: Config,
-    pub theme: Theme,
     pub root: PathBuf,
     pub should_quit: bool,
     tree_area_y: u16,
@@ -73,7 +72,6 @@ impl App {
         );
         let git = GitState::load(&root);
         let cmux = CmuxBridge::detect(config.cmux.split_direction.clone());
-        let theme = Theme::detect();
 
         if let Some(ref git) = git {
             apply_git_statuses(&mut tree, git);
@@ -86,7 +84,6 @@ impl App {
             git,
             cmux,
             config,
-            theme,
             root,
             should_quit: false,
             tree_area_y: 0,
@@ -234,14 +231,13 @@ impl App {
 
             // Render tree
             TreeView {
-                theme: &self.theme,
                 show_size: self.config.tree.show_size,
                 show_modified: self.config.tree.show_modified,
             }
             .render(tree_area, frame.buffer_mut(), &mut self.tree);
 
             // Render separator
-            let sep_style = Style::default().fg(self.theme.tree_line);
+            let sep_style = Style::default().fg(colors::TREE_LINE);
             for y in separator_area.y..separator_area.y + separator_area.height {
                 frame.buffer_mut().set_string(separator_area.x, y, "│", sep_style);
             }
@@ -270,7 +266,6 @@ impl App {
 
             // Render preview
             PreviewView {
-                theme: &self.theme,
                 show_line_numbers: self.config.preview.show_line_numbers,
                 focused: self.focus == FocusPane::Preview,
             }
@@ -282,7 +277,6 @@ impl App {
             self.tree_area_height = main_area.height;
 
             TreeView {
-                theme: &self.theme,
                 show_size: self.config.tree.show_size,
                 show_modified: self.config.tree.show_modified,
             }
@@ -312,7 +306,6 @@ impl App {
             dir_count,
             root_name: &root_name,
             cmux_status: cmux_indicator,
-            theme: &self.theme,
         };
         status_bar.render(status_area, frame.buffer_mut());
     }
@@ -511,7 +504,7 @@ impl App {
         let delay = Duration::from_millis(self.config.preview.preview_delay_ms);
         let max_file_size_kb = self.config.preview.max_file_size_kb;
         let syntax_highlight = self.config.preview.syntax_highlight;
-        let is_light = self.theme.is_light();
+        let is_light = colors::is_light();
 
         self.preview_debounce_handle = Some(tokio::spawn(async move {
             tokio::time::sleep(delay).await;

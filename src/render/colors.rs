@@ -12,10 +12,20 @@ pub const GIT_STAGED_MODIFIED: Color = Color::Rgb(0xB8, 0x9A, 0x50); // #B89A50 
 pub const GIT_STAGED_ADDED: Color = Color::Rgb(0x5A, 0xA0, 0x72); // #5AA072 darker green
 pub const GIT_STAGED_DELETED: Color = Color::Rgb(0xB8, 0x48, 0x40); // #B84840 darker red
 
-// UI colors
-pub const SELECTED_BG: Color = Color::Rgb(0x26, 0x4F, 0x78); // #264F78 VS Code selection blue
-pub const TREE_LINE: Color = Color::Rgb(0x58, 0x58, 0x58); // #585858 dim gray for connectors
-pub const STATUS_BAR_BG: Color = Color::Rgb(0x00, 0x7A, 0xCC); // #007ACC VS Code blue
-pub const STATUS_BAR_FG: Color = Color::Rgb(0xFF, 0xFF, 0xFF);
-pub const DIR_COLOR: Color = Color::Rgb(0xDC, 0xDC, 0xAA); // #DCDCAA warm yellow for dirs
-pub const DEFAULT_FG: Color = Color::Rgb(0xCC, 0xCC, 0xCC); // #CCCCCC light gray
+// UI colors — ANSI / terminal-default so they adapt to any theme
+pub const SELECTED_BG: Color = Color::DarkGray;
+pub const TREE_LINE: Color = Color::DarkGray;
+pub const STATUS_BAR_BG: Color = Color::DarkGray;
+pub const STATUS_BAR_FG: Color = Color::Reset;
+pub const DIR_COLOR: Color = Color::Yellow;
+pub const DEFAULT_FG: Color = Color::Reset;
+
+/// Whether the terminal is currently using a light colour scheme.
+/// Uses macOS `defaults` to check `AppleInterfaceStyle`; defaults to dark.
+pub fn is_light() -> bool {
+    !std::process::Command::new("defaults")
+        .args(["read", "-g", "AppleInterfaceStyle"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "Dark")
+        .unwrap_or(true)
+}

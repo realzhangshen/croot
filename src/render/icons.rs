@@ -1,6 +1,6 @@
 use ratatui::style::Color;
 
-use super::theme::Theme;
+use super::colors;
 
 pub struct IconInfo {
     pub icon: &'static str,
@@ -8,11 +8,11 @@ pub struct IconInfo {
 }
 
 /// Get Nerd Font icon and color for a file extension.
-pub fn icon_for_file(name: &str, is_dir: bool, theme: &Theme) -> IconInfo {
+pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
     if is_dir {
         return IconInfo {
             icon: "",
-            color: theme.dir_color,
+            color: colors::DIR_COLOR,
         };
     }
 
@@ -186,11 +186,11 @@ pub fn icon_for_file(name: &str, is_dir: bool, theme: &Theme) -> IconInfo {
             icon: "",
             color: Color::Rgb(0x65, 0x4F, 0xF0),
         },
-        _ => default_icon(name, theme),
+        _ => default_icon(name),
     }
 }
 
-fn default_icon(name: &str, theme: &Theme) -> IconInfo {
+fn default_icon(name: &str) -> IconInfo {
     // Special file names
     let lower = name.to_ascii_lowercase();
     match lower.as_str() {
@@ -212,7 +212,7 @@ fn default_icon(name: &str, theme: &Theme) -> IconInfo {
         },
         _ => IconInfo {
             icon: "",
-            color: theme.default_fg,
+            color: colors::DEFAULT_FG,
         },
     }
 }
