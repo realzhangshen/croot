@@ -34,13 +34,22 @@ pub struct TreeConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct PreviewConfig {
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub auto_preview: bool,
     #[serde(default = "default_preview_delay")]
     pub preview_delay_ms: u64,
     #[serde(default = "default_true")]
     pub close_on_exit: bool,
+    #[serde(default = "default_true")]
+    pub show_line_numbers: bool,
+    #[serde(default = "default_max_file_size_kb")]
+    pub max_file_size_kb: u64,
+    #[serde(default = "default_true")]
+    pub syntax_highlight: bool,
+    #[serde(default = "default_split_ratio")]
+    pub split_ratio: f32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -62,6 +71,9 @@ fn default_split_direction() -> String {
 }
 fn default_split_ratio() -> f32 {
     0.5
+}
+fn default_max_file_size_kb() -> u64 {
+    1024
 }
 
 impl Default for TreeConfig {
@@ -88,9 +100,13 @@ fn default_exclude() -> Vec<String> {
 impl Default for PreviewConfig {
     fn default() -> Self {
         Self {
-            auto_preview: true,
+            auto_preview: false,
             preview_delay_ms: 150,
             close_on_exit: true,
+            show_line_numbers: true,
+            max_file_size_kb: 1024,
+            syntax_highlight: true,
+            split_ratio: 0.5,
         }
     }
 }

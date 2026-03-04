@@ -46,6 +46,12 @@ impl Default for Theme {
 }
 
 impl Theme {
+    /// Whether this looks like a light terminal theme.
+    pub fn is_light(&self) -> bool {
+        // Light themes have dark foreground text (low luminance).
+        luminance(self.default_fg) < 0.5
+    }
+
     /// Detect terminal theme. Returns Ghostty-derived colors if running inside
     /// Ghostty, otherwise falls back to VS Code dark defaults.
     pub fn detect() -> Self {

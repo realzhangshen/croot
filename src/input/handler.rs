@@ -16,11 +16,21 @@ pub enum Action {
     GotoTop,
     GotoBottom,
     ClickRow(u16),
+    TogglePreview,
+    SwitchFocus,
+    FocusPreview,
+    #[allow(dead_code)]
+    PreviewScrollUp(u16),
+    #[allow(dead_code)]
+    PreviewScrollDown(u16),
     None,
 }
 
 /// Map a keyboard event to an Action.
-pub fn handle_key(key: KeyEvent) -> Action {
+///
+/// `preview_visible`: whether the preview panel is currently shown.
+/// When preview is hidden, Tab still acts as Toggle for backward compat.
+pub fn handle_key(key: KeyEvent, preview_visible: bool) -> Action {
     match key.code {
         // Quit
         KeyCode::Char('q') => Action::Quit,
@@ -35,7 +45,18 @@ pub fn handle_key(key: KeyEvent) -> Action {
         // Toggle expand/collapse
         KeyCode::Char(' ') => Action::Toggle,
         KeyCode::Enter => Action::Open,
-        KeyCode::Tab => Action::Toggle,
+
+        // Tab: switch focus when preview is visible, otherwise toggle
+        KeyCode::Tab => {
+            if preview_visible {
+                Action::SwitchFocus
+            } else {
+                Action::Toggle
+            }
+        }
+
+        // Preview toggle
+        KeyCode::Char('p') => Action::TogglePreview,
 
         // Refresh
         KeyCode::Char('r') => Action::Refresh,
