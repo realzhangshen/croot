@@ -18,6 +18,10 @@ pub struct Theme {
     pub git_deleted: Color,
     pub git_ignored: Color,
     pub git_conflicted: Color,
+    // Staged variants — muted shades to distinguish from unstaged
+    pub git_staged_modified: Color,
+    pub git_staged_added: Color,
+    pub git_staged_deleted: Color,
 }
 
 impl Default for Theme {
@@ -34,6 +38,9 @@ impl Default for Theme {
             git_deleted: colors::GIT_DELETED,
             git_ignored: colors::GIT_IGNORED,
             git_conflicted: colors::GIT_CONFLICTED,
+            git_staged_modified: colors::GIT_STAGED_MODIFIED,
+            git_staged_added: colors::GIT_STAGED_ADDED,
+            git_staged_deleted: colors::GIT_STAGED_DELETED,
         }
     }
 }

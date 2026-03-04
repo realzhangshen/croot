@@ -8,6 +8,7 @@ use super::sorter::sort_nodes;
 
 /// Read one level of a directory, respecting .gitignore rules and exclude list.
 /// Returns sorted children (directories first, then natural sort).
+#[allow(dead_code)]
 pub fn load_children(
     dir: &Path,
     depth: usize,
@@ -16,8 +17,24 @@ pub fn load_children(
     exclude: &[String],
     show_ignored: bool,
 ) -> Vec<TreeNode> {
+    load_children_with_meta(dir, depth, show_hidden, dirs_first, exclude, show_ignored, false, false)
+}
+
+/// Like `load_children` but optionally populates size and modified metadata.
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+pub fn load_children_with_meta(
+    dir: &Path,
+    depth: usize,
+    show_hidden: bool,
+    dirs_first: bool,
+    exclude: &[String],
+    show_ignored: bool,
+    show_size: bool,
+    show_modified: bool,
+) -> Vec<TreeNode> {
     let mut nodes = Vec::new();
     let exclude_set: HashSet<&str> = exclude.iter().map(std::string::String::as_str).collect();
+    let need_meta = show_size || show_modified;
 
     let walker = WalkBuilder::new(dir)
         .max_depth(Some(1))
@@ -51,7 +68,20 @@ pub fn load_children(
             NodeKind::File
         };
 
-        nodes.push(TreeNode::new(path, kind, depth));
+        let mut node = TreeNode::new(path.clone(), kind, depth);
+
+        if need_meta {
+            if let Ok(meta) = path.metadata() {
+                if show_size && kind != NodeKind::Directory {
+                    node.size = Some(meta.len());
+                }
+                if show_modified {
+                    node.modified = meta.modified().ok();
+                }
+            }
+        }
+
+        nodes.push(node);
     }
 
     sort_nodes(&mut nodes, dirs_first);

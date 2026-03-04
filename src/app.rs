@@ -45,6 +45,9 @@ impl App {
             config.tree.dirs_first,
             config.tree.exclude.clone(),
             config.tree.show_ignored,
+            config.tree.compact_folders,
+            config.tree.show_size,
+            config.tree.show_modified,
         );
         let git = GitState::load(&root);
         let cmux = CmuxBridge::detect();
@@ -133,7 +136,12 @@ impl App {
         self.tree_area_y = tree_area.y;
         self.tree_area_height = tree_area.height;
 
-        TreeView { theme: &self.theme }.render(tree_area, frame.buffer_mut(), &mut self.tree);
+        TreeView {
+            theme: &self.theme,
+            show_size: self.config.tree.show_size,
+            show_modified: self.config.tree.show_modified,
+        }
+        .render(tree_area, frame.buffer_mut(), &mut self.tree);
 
         let root_name = self.root.file_name().map_or_else(
             || self.root.to_string_lossy().into_owned(),
@@ -203,7 +211,12 @@ impl App {
                 }
             }
             Action::ClickRow(row) => {
-                let idx = self.tree.scroll_offset + row as usize;
+                let row_idx = row as usize;
+                let idx = if row_idx < self.tree.rendered_indices.len() {
+                    self.tree.rendered_indices[row_idx]
+                } else {
+                    return;
+                };
                 if idx < self.tree.len() {
                     self.tree.cursor = idx;
                     if self.tree.nodes[idx].is_dir() {

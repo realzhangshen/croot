@@ -120,27 +120,42 @@ impl GitState {
 
 fn convert_status(status: git2::Status) -> GitStatus {
     if status.is_conflicted() {
-        GitStatus::Conflicted
-    } else if status.is_index_deleted() && status.is_wt_new() {
-        // git rm --cached: removed from index but still on disk → untracked
-        GitStatus::Untracked
-    } else if status.is_wt_deleted() || status.is_index_deleted() {
-        GitStatus::Deleted
-    } else if status.is_wt_modified()
-        || status.is_index_modified()
-        || status.is_wt_renamed()
-        || status.is_index_renamed()
-    {
-        GitStatus::Modified
-    } else if status.is_index_new() {
-        GitStatus::Added
-    } else if status.is_wt_new() {
-        GitStatus::Untracked
-    } else if status.is_ignored() {
-        GitStatus::Ignored
-    } else {
-        GitStatus::Clean
+        return GitStatus::Conflicted;
     }
+
+    if status.is_index_deleted() && status.is_wt_new() {
+        // git rm --cached: removed from index but still on disk → untracked
+        return GitStatus::Untracked;
+    }
+
+    // Check for unstaged (working tree) changes first — they take priority
+    // because they represent the "current" state the user sees.
+    if status.is_wt_deleted() {
+        return GitStatus::Deleted;
+    }
+    if status.is_wt_modified() || status.is_wt_renamed() {
+        return GitStatus::Modified;
+    }
+    if status.is_wt_new() {
+        return GitStatus::Untracked;
+    }
+
+    // Pure staged changes (in index only, no working tree changes)
+    if status.is_index_deleted() {
+        return GitStatus::StagedDeleted;
+    }
+    if status.is_index_modified() || status.is_index_renamed() {
+        return GitStatus::StagedModified;
+    }
+    if status.is_index_new() {
+        return GitStatus::StagedAdded;
+    }
+
+    if status.is_ignored() {
+        return GitStatus::Ignored;
+    }
+
+    GitStatus::Clean
 }
 
 #[cfg(test)]
@@ -170,10 +185,10 @@ mod tests {
     }
 
     #[test]
-    fn index_deleted_maps_to_deleted() {
+    fn index_deleted_maps_to_staged_deleted() {
         assert_eq!(
             convert_status(git2::Status::INDEX_DELETED),
-            GitStatus::Deleted
+            GitStatus::StagedDeleted
         );
     }
 
@@ -186,16 +201,19 @@ mod tests {
     }
 
     #[test]
-    fn index_modified_maps_to_modified() {
+    fn index_modified_maps_to_staged_modified() {
         assert_eq!(
             convert_status(git2::Status::INDEX_MODIFIED),
-            GitStatus::Modified
+            GitStatus::StagedModified
         );
     }
 
     #[test]
-    fn index_new_maps_to_added() {
-        assert_eq!(convert_status(git2::Status::INDEX_NEW), GitStatus::Added);
+    fn index_new_maps_to_staged_added() {
+        assert_eq!(
+            convert_status(git2::Status::INDEX_NEW),
+            GitStatus::StagedAdded
+        );
     }
 
     #[test]

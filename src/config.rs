@@ -15,6 +15,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct TreeConfig {
     #[serde(default = "default_true")]
     pub show_hidden: bool,
@@ -24,6 +25,12 @@ pub struct TreeConfig {
     pub dirs_first: bool,
     #[serde(default = "default_exclude")]
     pub exclude: Vec<String>,
+    #[serde(default = "default_true")]
+    pub compact_folders: bool,
+    #[serde(default)]
+    pub show_size: bool,
+    #[serde(default)]
+    pub show_modified: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,6 +71,9 @@ impl Default for TreeConfig {
             show_ignored: true,
             dirs_first: true,
             exclude: default_exclude(),
+            compact_folders: true,
+            show_size: false,
+            show_modified: false,
         }
     }
 }

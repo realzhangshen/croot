@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
-use super::loader::load_children;
+use super::loader::load_children_with_meta;
 use super::node::TreeNode;
 
+#[allow(clippy::struct_excessive_bools)]
 pub struct FileTree {
     pub nodes: Vec<TreeNode>,
     pub cursor: usize,
@@ -12,17 +13,30 @@ pub struct FileTree {
     pub dirs_first: bool,
     pub exclude: Vec<String>,
     pub show_ignored: bool,
+    pub compact_folders: bool,
+    pub show_size: bool,
+    pub show_modified: bool,
+    /// Node indices currently rendered on screen, set by the renderer.
+    /// Used to map mouse click rows to actual node indices.
+    pub rendered_indices: Vec<usize>,
 }
 
 impl FileTree {
+    #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
     pub fn new(
         root: PathBuf,
         show_hidden: bool,
         dirs_first: bool,
         exclude: Vec<String>,
         show_ignored: bool,
+        compact_folders: bool,
+        show_size: bool,
+        show_modified: bool,
     ) -> Self {
-        let children = load_children(&root, 0, show_hidden, dirs_first, &exclude, show_ignored);
+        let children = load_children_with_meta(
+            &root, 0, show_hidden, dirs_first, &exclude, show_ignored,
+            show_size, show_modified,
+        );
         Self {
             nodes: children,
             cursor: 0,
@@ -32,6 +46,10 @@ impl FileTree {
             dirs_first,
             exclude,
             show_ignored,
+            compact_folders,
+            show_size,
+            show_modified,
+            rendered_indices: Vec::new(),
         }
     }
 
@@ -60,13 +78,15 @@ impl FileTree {
         let depth = node.depth + 1;
         let path = node.path.clone();
 
-        let children = load_children(
+        let children = load_children_with_meta(
             &path,
             depth,
             self.show_hidden,
             self.dirs_first,
             &self.exclude,
             self.show_ignored,
+            self.show_size,
+            self.show_modified,
         );
 
         self.nodes[index].is_expanded = true;
@@ -180,6 +200,9 @@ impl FileTree {
     }
 
     /// Ensure the cursor is visible within the given viewport height.
+    /// Note: when `compact_folders` is on, the renderer handles scroll adjustment
+    /// via `build_visible_indices`. This method is used as fallback and by tests.
+    #[allow(dead_code)]
     pub fn adjust_scroll(&mut self, viewport_height: usize) {
         if viewport_height == 0 {
             return;
@@ -193,6 +216,7 @@ impl FileTree {
     }
 
     /// Return the visible slice of nodes for the current viewport.
+    #[allow(dead_code)]
     pub fn visible_range(&self, viewport_height: usize) -> &[TreeNode] {
         let start = self.scroll_offset;
         let end = (start + viewport_height).min(self.nodes.len());
@@ -214,13 +238,15 @@ impl FileTree {
         let cursor_path = self.nodes.get(self.cursor).map(|n| n.path.clone());
 
         // Re-read root from scratch
-        self.nodes = load_children(
+        self.nodes = load_children_with_meta(
             &self.root,
             0,
             self.show_hidden,
             self.dirs_first,
             &self.exclude,
             self.show_ignored,
+            self.show_size,
+            self.show_modified,
         );
 
         // Re-expand previously expanded dirs (forward scan, expanding shifts indices)
@@ -254,6 +280,67 @@ impl FileTree {
             }
         }
         true // last node at this depth
+    }
+
+    /// Count how many single-child directory nodes form a chain starting at `index`.
+    /// Returns the number of intermediate dirs to skip (0 = no compaction).
+    /// Only applies to expanded directory nodes that have exactly one child which is also
+    /// an expanded directory.
+    pub fn compact_chain_len(&self, index: usize) -> usize {
+        if !self.compact_folders {
+            return 0;
+        }
+        let node = &self.nodes[index];
+        if !node.is_dir() || !node.is_expanded {
+            return 0;
+        }
+
+        let mut count = 0;
+        let mut cur = index;
+
+        loop {
+            let child_start = cur + 1;
+            if child_start >= self.nodes.len() {
+                break;
+            }
+            let child = &self.nodes[child_start];
+            if child.depth != self.nodes[cur].depth + 1 {
+                break;
+            }
+            // Check this dir has exactly one child (the next node after child_start
+            // must either not exist or have depth <= child's parent's depth + 1)
+            let second_child = child_start + 1;
+            let has_single_child = if second_child >= self.nodes.len() {
+                true
+            } else {
+                // If the second node is at same depth as child, there are multiple children
+                self.nodes[second_child].depth <= self.nodes[cur].depth
+                    || (child.is_dir()
+                        && child.is_expanded
+                        && self.nodes[second_child].depth > child.depth)
+            };
+
+            if !has_single_child || !child.is_dir() || !child.is_expanded {
+                break;
+            }
+
+            count += 1;
+            cur = child_start;
+        }
+
+        count
+    }
+
+    /// Build the compacted display name for a node at `index` that has `chain_len`
+    /// intermediate directories merged into it.
+    pub fn compact_display_name(&self, index: usize, chain_len: usize) -> String {
+        let mut parts = vec![self.nodes[index].name.clone()];
+        let mut cur = index;
+        for _ in 0..chain_len {
+            cur += 1;
+            parts.push(self.nodes[cur].name.clone());
+        }
+        parts.join("/") + "/"
     }
 
     /// For rendering tree connectors: determine which depths have a continuing vertical line.
@@ -299,6 +386,10 @@ mod tests {
             dirs_first: true,
             exclude: vec![],
             show_ignored: false,
+            compact_folders: false,
+            show_size: false,
+            show_modified: false,
+            rendered_indices: Vec::new(),
         }
     }
 
@@ -444,5 +535,88 @@ mod tests {
         tree.cursor = 4;
         tree.adjust_scroll(3); // viewport of 3 lines
         assert!(tree.scroll_offset <= 2); // cursor 4 visible in window of 3
+    }
+
+    // ── Compact folders tests ───────────────────────────────────────────
+
+    fn tree_from_compact(entries: &[(&str, NodeKind, usize, bool)]) -> FileTree {
+        let nodes = entries
+            .iter()
+            .map(|(name, kind, depth, expanded)| {
+                let mut node = TreeNode::new(PathBuf::from(name), *kind, *depth);
+                node.is_expanded = *expanded;
+                node.children_loaded = *expanded;
+                node
+            })
+            .collect();
+        FileTree {
+            nodes,
+            cursor: 0,
+            scroll_offset: 0,
+            root: PathBuf::from("/tmp/test"),
+            show_hidden: true,
+            dirs_first: true,
+            exclude: vec![],
+            show_ignored: false,
+            compact_folders: true,
+            show_size: false,
+            show_modified: false,
+            rendered_indices: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn compact_chain_single_child_dirs() {
+        // src/ (expanded) → utils/ (expanded) → helpers/ (expanded) → format.rs
+        let tree = tree_from_compact(&[
+            ("src", NodeKind::Directory, 0, true),
+            ("utils", NodeKind::Directory, 1, true),
+            ("helpers", NodeKind::Directory, 2, true),
+            ("format.rs", NodeKind::File, 3, false),
+        ]);
+        // src has one child (utils), utils has one child (helpers) → chain of 2
+        assert_eq!(tree.compact_chain_len(0), 2);
+        assert_eq!(
+            tree.compact_display_name(0, 2),
+            "src/utils/helpers/"
+        );
+    }
+
+    #[test]
+    fn compact_chain_stops_at_multiple_children() {
+        // src/ (expanded) → main.rs, lib.rs
+        let tree = tree_from_compact(&[
+            ("src", NodeKind::Directory, 0, true),
+            ("main.rs", NodeKind::File, 1, false),
+            ("lib.rs", NodeKind::File, 1, false),
+        ]);
+        assert_eq!(tree.compact_chain_len(0), 0);
+    }
+
+    #[test]
+    fn compact_chain_stops_at_file_child() {
+        // src/ (expanded) → main.rs
+        let tree = tree_from_compact(&[
+            ("src", NodeKind::Directory, 0, true),
+            ("main.rs", NodeKind::File, 1, false),
+        ]);
+        assert_eq!(tree.compact_chain_len(0), 0);
+    }
+
+    #[test]
+    fn compact_disabled_returns_zero() {
+        let mut tree = tree_from_compact(&[
+            ("src", NodeKind::Directory, 0, true),
+            ("utils", NodeKind::Directory, 1, true),
+            ("format.rs", NodeKind::File, 2, false),
+        ]);
+        tree.compact_folders = false;
+        assert_eq!(tree.compact_chain_len(0), 0);
+    }
+
+    #[test]
+    fn compact_chain_on_file_returns_zero() {
+        let tree = tree_from_compact(&[("a.txt", NodeKind::File, 0, false)]);
+        assert_eq!(tree.compact_chain_len(0), 0);
     }
 }
