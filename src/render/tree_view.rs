@@ -183,9 +183,8 @@ fn build_visible_indices(state: &mut FileTree, viewport_height: usize) -> Vec<us
 
     // Ensure cursor snaps to a visible index
     if let Some(pos) = all_visible.iter().position(|&idx| idx >= state.cursor) {
-        // If cursor is on a compacted-away node, snap to the chain head
-        if all_visible[pos] != state.cursor && pos > 0 {
-            state.cursor = all_visible[pos - 1];
+        if all_visible[pos] != state.cursor {
+            state.cursor = all_visible[pos]; // snap forward to nearest visible
         }
     }
 

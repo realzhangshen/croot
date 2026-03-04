@@ -67,7 +67,7 @@ dirs_first = true
 exclude = [".git", ".svn", ".hg", "CVS", ".DS_Store", "Thumbs.db"]
 
 [preview]
-auto_preview = true
+auto_preview = false
 preview_delay_ms = 150
 close_on_exit = true
 
@@ -85,7 +85,7 @@ split_ratio = 0.5
 - `exclude` — Glob patterns to always exclude
 
 **`[preview]`** — File preview (requires tmux)
-- `auto_preview` — Automatically preview selected file (default: `true`)
+- `auto_preview` — Automatically preview selected file (default: `false`)
 - `preview_delay_ms` — Delay before previewing in ms (default: `150`)
 - `close_on_exit` — Close preview pane on exit (default: `true`)
 

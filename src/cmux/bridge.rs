@@ -6,17 +6,19 @@ use super::protocol::CmuxCli;
 /// When cmux is not available, this is `None` and croot runs standalone.
 pub struct CmuxBridge {
     preview_surface: Option<String>,
+    split_direction: String,
 }
 
 impl CmuxBridge {
     /// Detect if we're running inside a cmux session.
-    pub fn detect() -> Option<Self> {
+    pub fn detect(split_direction: String) -> Option<Self> {
         let socket = env::var("CMUX_SOCKET_PATH").ok()?;
         if socket.is_empty() {
             return None;
         }
         Some(Self {
             preview_surface: None,
+            split_direction,
         })
     }
 
@@ -28,7 +30,7 @@ impl CmuxBridge {
             }
         }
 
-        let result = CmuxCli::new_split("right").await?;
+        let result = CmuxCli::new_split(&self.split_direction).await?;
         self.preview_surface = Some(result.surface_ref.clone());
         Ok(result.surface_ref)
     }

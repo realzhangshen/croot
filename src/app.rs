@@ -72,7 +72,7 @@ impl App {
             config.tree.show_modified,
         );
         let git = GitState::load(&root);
-        let cmux = CmuxBridge::detect();
+        let cmux = CmuxBridge::detect(config.cmux.split_direction.clone());
         let theme = Theme::detect();
 
         if let Some(ref git) = git {
@@ -109,6 +109,7 @@ impl App {
         // Set up file watcher with 100ms debounce
         let (fs_tx, mut fs_rx) = mpsc::channel::<()>(1);
         let _watcher = setup_watcher(&self.root, fs_tx);
+        let mut watcher_active = true;
 
         // Channel for receiving loaded preview results
         let (preview_tx, mut preview_rx) =
@@ -151,7 +152,12 @@ impl App {
                         _ => {}
                     }
                 }
-                _ = fs_rx.recv() => {
+                result = fs_rx.recv(), if watcher_active => {
+                    if result.is_none() {
+                        // Sender dropped (watcher failed to init). Disable this arm.
+                        watcher_active = false;
+                        continue;
+                    }
                     // File system change detected — refresh tree structure and git status
                     self.tree.refresh();
                     if let Some(ref mut git) = self.git {
@@ -176,8 +182,10 @@ impl App {
         }
 
         // Cleanup
-        if let Some(ref mut cmux) = self.cmux {
-            cmux.close_preview().await;
+        if self.config.preview.close_on_exit {
+            if let Some(ref mut cmux) = self.cmux {
+                cmux.close_preview().await;
+            }
         }
 
         Ok(())
@@ -444,7 +452,9 @@ impl App {
             }
             Action::TogglePreview => {
                 self.preview_visible = !self.preview_visible;
-                if !self.preview_visible {
+                if self.preview_visible {
+                    self.trigger_preview_load(preview_tx);
+                } else {
                     self.focus = FocusPane::Tree;
                 }
             }

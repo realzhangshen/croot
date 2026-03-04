@@ -9,8 +9,9 @@ mod tree;
 
 use std::io;
 use std::path::PathBuf;
+use std::process;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use crossterm::{
     event::{
         DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags,
@@ -27,19 +28,39 @@ use app::App;
 #[command(
     name = "croot",
     version,
-    about = "A lightweight terminal file tree sidebar"
+    about = "A lightweight terminal file tree sidebar",
+    args_conflicts_with_subcommands = true,
+    subcommand_negates_reqs = true,
 )]
 struct Cli {
     /// Directory to browse (defaults to current directory)
     #[arg(default_value = ".")]
     path: PathBuf,
+
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Update croot to the latest version
+    Update,
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
+    if let Some(Command::Update) = cli.command {
+        return self_update();
+    }
+
     let path = cli.path.canonicalize().unwrap_or_else(|_| cli.path.clone());
+
+    if !path.is_dir() {
+        eprintln!("error: '{}' is not a valid directory", cli.path.display());
+        std::process::exit(1);
+    }
 
     // Terminal setup
     enable_raw_mode()?;
@@ -76,4 +97,29 @@ async fn main() -> anyhow::Result<()> {
     terminal.show_cursor()?;
 
     result
+}
+
+fn self_update() -> anyhow::Result<()> {
+    println!("Updating croot...");
+
+    let status = process::Command::new("cargo")
+        .args(["install", "croot", "--force"])
+        .status();
+
+    match status {
+        Ok(s) if s.success() => {
+            println!("croot updated successfully.");
+            Ok(())
+        }
+        Ok(s) => {
+            process::exit(s.code().unwrap_or(1));
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            eprintln!("error: 'cargo' not found in PATH. Install Rust via https://rustup.rs");
+            process::exit(1);
+        }
+        Err(e) => {
+            Err(e.into())
+        }
+    }
 }
