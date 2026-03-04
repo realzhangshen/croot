@@ -48,7 +48,10 @@ impl GitState {
     /// Get the git status for a file or directory.
     pub fn status_for(&self, path: &Path, is_dir: bool) -> GitStatus {
         let direct = if is_dir {
-            self.dir_statuses.get(path).copied()
+            self.dir_statuses
+                .get(path)
+                .or_else(|| self.file_statuses.get(path))
+                .copied()
         } else {
             self.file_statuses.get(path).copied()
         };
@@ -275,6 +278,19 @@ mod tests {
         let state = make_state("/repo", vec![], vec![("/repo/target", GitStatus::Ignored)]);
         assert_eq!(
             state.status_for(Path::new("/repo/target/debug/build/foo.o"), false),
+            GitStatus::Ignored
+        );
+    }
+
+    #[test]
+    fn status_for_ignored_dir_found_in_file_statuses() {
+        let state = make_state(
+            "/repo",
+            vec![("/repo/target", GitStatus::Ignored)],
+            vec![],
+        );
+        assert_eq!(
+            state.status_for(Path::new("/repo/target"), true),
             GitStatus::Ignored
         );
     }

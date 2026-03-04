@@ -153,7 +153,7 @@ fn git_status_marker(status: GitStatus) -> &'static str {
         GitStatus::Added => "A",
         GitStatus::Deleted => "D",
         GitStatus::Untracked => "U",
-        GitStatus::Ignored => "!",
+        GitStatus::Ignored => "",
         GitStatus::Conflicted => "C",
         GitStatus::Clean => "",
     }
