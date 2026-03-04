@@ -284,11 +284,7 @@ mod tests {
 
     #[test]
     fn status_for_ignored_dir_found_in_file_statuses() {
-        let state = make_state(
-            "/repo",
-            vec![("/repo/target", GitStatus::Ignored)],
-            vec![],
-        );
+        let state = make_state("/repo", vec![("/repo/target", GitStatus::Ignored)], vec![]);
         assert_eq!(
             state.status_for(Path::new("/repo/target"), true),
             GitStatus::Ignored
