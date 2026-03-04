@@ -31,3 +31,36 @@ jobs:
 
       - name: cargo fmt
         run: cargo fmt --check
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo deny check
+        run: cargo deny check
+
+  msrv:
+    name: MSRV Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MSRV toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.75"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo check (MSRV)
+        run: cargo check
