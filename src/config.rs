@@ -71,7 +71,7 @@ impl Default for TreeConfig {
 fn default_exclude() -> Vec<String> {
     [".git", ".svn", ".hg", "CVS", ".DS_Store", "Thumbs.db"]
         .iter()
-        .map(|s| s.to_string())
+        .map(|s| (*s).to_string())
         .collect()
 }
 
@@ -106,9 +106,7 @@ impl Config {
 }
 
 fn config_path() -> PathBuf {
-    dirs_fallback()
-        .join("croot")
-        .join("config.toml")
+    dirs_fallback().join("croot").join("config.toml")
 }
 
 fn dirs_fallback() -> PathBuf {

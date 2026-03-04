@@ -15,7 +15,13 @@ pub struct FileTree {
 }
 
 impl FileTree {
-    pub fn new(root: PathBuf, show_hidden: bool, dirs_first: bool, exclude: Vec<String>, show_ignored: bool) -> Self {
+    pub fn new(
+        root: PathBuf,
+        show_hidden: bool,
+        dirs_first: bool,
+        exclude: Vec<String>,
+        show_ignored: bool,
+    ) -> Self {
         let children = load_children(&root, 0, show_hidden, dirs_first, &exclude, show_ignored);
         Self {
             nodes: children,
@@ -54,7 +60,14 @@ impl FileTree {
         let depth = node.depth + 1;
         let path = node.path.clone();
 
-        let children = load_children(&path, depth, self.show_hidden, self.dirs_first, &self.exclude, self.show_ignored);
+        let children = load_children(
+            &path,
+            depth,
+            self.show_hidden,
+            self.dirs_first,
+            &self.exclude,
+            self.show_ignored,
+        );
 
         self.nodes[index].is_expanded = true;
         self.nodes[index].children_loaded = true;
@@ -201,7 +214,14 @@ impl FileTree {
         let cursor_path = self.nodes.get(self.cursor).map(|n| n.path.clone());
 
         // Re-read root from scratch
-        self.nodes = load_children(&self.root, 0, self.show_hidden, self.dirs_first, &self.exclude, self.show_ignored);
+        self.nodes = load_children(
+            &self.root,
+            0,
+            self.show_hidden,
+            self.dirs_first,
+            &self.exclude,
+            self.show_ignored,
+        );
 
         // Re-expand previously expanded dirs (forward scan, expanding shifts indices)
         let mut i = 0;

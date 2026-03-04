@@ -46,10 +46,7 @@ impl Theme {
             return Self::default();
         }
 
-        match Self::from_ghostty() {
-            Some(theme) => theme,
-            None => Self::default(),
-        }
+        Self::from_ghostty().unwrap_or_default()
     }
 
     fn from_ghostty() -> Option<Self> {
@@ -123,7 +120,11 @@ fn ghostty_config_dir() -> Option<PathBuf> {
     }
     let home = std::env::var("HOME").ok()?;
     let p = PathBuf::from(home).join(".config/ghostty");
-    if p.is_dir() { Some(p) } else { None }
+    if p.is_dir() {
+        Some(p)
+    } else {
+        None
+    }
 }
 
 /// Parse key=value lines. Ignores comments (#) and blank lines.
@@ -217,7 +218,7 @@ fn parse_color_value(val: Option<&String>) -> Option<Color> {
 }
 
 fn parse_palette_color(map: &HashMap<String, String>, index: u8) -> Option<Color> {
-    let key = format!("palette.{}", index);
+    let key = format!("palette.{index}");
     parse_color_value(map.get(&key))
 }
 
@@ -228,8 +229,12 @@ fn luminance(color: Color) -> f64 {
         _ => return 0.0,
     };
     let to_linear = |c: u8| -> f64 {
-        let s = c as f64 / 255.0;
-        if s <= 0.04045 { s / 12.92 } else { ((s + 0.055) / 1.055).powf(2.4) }
+        let s = f64::from(c) / 255.0;
+        if s <= 0.04045 {
+            s / 12.92
+        } else {
+            ((s + 0.055) / 1.055).powf(2.4)
+        }
     };
     0.2126 * to_linear(r) + 0.7152 * to_linear(g) + 0.0722 * to_linear(b)
 }
@@ -245,11 +250,11 @@ fn contrast_ratio(a: Color, b: Color) -> f64 {
 /// Blend `from` toward `to` by factor t (0.0 = all `from`, 1.0 = all `to`).
 fn blend(from: Color, to: Color, t: f64) -> Color {
     let (r1, g1, b1) = match from {
-        Color::Rgb(r, g, b) => (r as f64, g as f64, b as f64),
+        Color::Rgb(r, g, b) => (f64::from(r), f64::from(g), f64::from(b)),
         _ => return from,
     };
     let (r2, g2, b2) = match to {
-        Color::Rgb(r, g, b) => (r as f64, g as f64, b as f64),
+        Color::Rgb(r, g, b) => (f64::from(r), f64::from(g), f64::from(b)),
         _ => return from,
     };
     Color::Rgb(
@@ -262,7 +267,7 @@ fn blend(from: Color, to: Color, t: f64) -> Color {
 /// Shift brightness of an RGB color by `delta` (-255..255).
 fn shift_brightness(color: Color, delta: i16) -> Color {
     let (r, g, b) = match color {
-        Color::Rgb(r, g, b) => (r as i16, g as i16, b as i16),
+        Color::Rgb(r, g, b) => (i16::from(r), i16::from(g), i16::from(b)),
         _ => return color,
     };
     Color::Rgb(
@@ -324,11 +329,7 @@ mod tests {
 
     #[test]
     fn blend_midpoint() {
-        let c = blend(
-            Color::Rgb(0, 0, 0),
-            Color::Rgb(200, 200, 200),
-            0.5,
-        );
+        let c = blend(Color::Rgb(0, 0, 0), Color::Rgb(200, 200, 200), 0.5);
         assert_eq!(c, Color::Rgb(100, 100, 100));
     }
 
@@ -344,7 +345,11 @@ mod tests {
     #[test]
     fn contrast_ratio_black_white() {
         let cr = contrast_ratio(Color::Rgb(0, 0, 0), Color::Rgb(255, 255, 255));
-        assert!((cr - 21.0).abs() < 0.1, "contrast ratio {} should be ~21", cr);
+        assert!(
+            (cr - 21.0).abs() < 0.1,
+            "contrast ratio {} should be ~21",
+            cr
+        );
     }
 
     #[test]
@@ -367,13 +372,19 @@ mod tests {
     #[test]
     fn resolve_theme_simple() {
         let raw = "catppuccin-mocha".to_string();
-        assert_eq!(resolve_theme_name(Some(&raw)), Some("catppuccin-mocha".to_string()));
+        assert_eq!(
+            resolve_theme_name(Some(&raw)),
+            Some("catppuccin-mocha".to_string())
+        );
     }
 
     #[test]
     fn resolve_theme_conditional() {
         let raw = "light:cursor-light,dark:cursor-dark".to_string();
-        assert_eq!(resolve_theme_name(Some(&raw)), Some("cursor-dark".to_string()));
+        assert_eq!(
+            resolve_theme_name(Some(&raw)),
+            Some("cursor-dark".to_string())
+        );
     }
 
     #[test]

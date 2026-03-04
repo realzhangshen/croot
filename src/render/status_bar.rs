@@ -17,7 +17,7 @@ pub struct StatusBar<'a> {
     pub theme: &'a Theme,
 }
 
-impl<'a> Widget for StatusBar<'a> {
+impl Widget for StatusBar<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let style = Style::default()
             .fg(self.theme.status_bar_fg)
@@ -34,7 +34,7 @@ impl<'a> Widget for StatusBar<'a> {
 
         // Branch info
         if let Some(branch) = self.branch {
-            spans.push(Span::styled(format!("  {} ", branch), style));
+            spans.push(Span::styled(format!("  {branch} "), style));
             spans.push(Span::styled("│ ", style));
         }
 
@@ -52,7 +52,7 @@ impl<'a> Widget for StatusBar<'a> {
         if let Some(status) = self.cmux_status {
             spans.push(Span::styled(" │ ", style));
             spans.push(Span::styled(
-                format!(" {} ", status),
+                format!(" {status} "),
                 Style::default()
                     .fg(self.theme.git_added)
                     .bg(self.theme.status_bar_bg),

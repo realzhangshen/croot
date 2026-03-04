@@ -31,10 +31,10 @@ pub struct TreeNode {
 
 impl TreeNode {
     pub fn new(path: PathBuf, kind: NodeKind, depth: usize) -> Self {
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| path.to_string_lossy().into_owned());
+        let name = path.file_name().map_or_else(
+            || path.to_string_lossy().into_owned(),
+            |n| n.to_string_lossy().into_owned(),
+        );
 
         Self {
             path,

@@ -1,11 +1,11 @@
 mod app;
-mod config;
-mod tree;
-mod git;
-mod render;
 mod cmux;
-mod preview;
+mod config;
+mod git;
 mod input;
+mod preview;
+mod render;
+mod tree;
 
 use std::io;
 use std::path::PathBuf;
@@ -21,7 +21,11 @@ use ratatui::prelude::*;
 use app::App;
 
 #[derive(Parser)]
-#[command(name = "croot", version, about = "A lightweight terminal file tree sidebar")]
+#[command(
+    name = "croot",
+    version,
+    about = "A lightweight terminal file tree sidebar"
+)]
 struct Cli {
     /// Directory to browse (defaults to current directory)
     #[arg(default_value = ".")]

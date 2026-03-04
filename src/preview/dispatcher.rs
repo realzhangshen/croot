@@ -13,17 +13,16 @@ pub fn preview_command(path: &Path) -> String {
     match ext.as_str() {
         // Images → chafa with kitty backend
         "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "ico" | "svg" => {
-            format!("chafa --format=kitty {} 2>/dev/null || file {}", path_str, path_str)
+            format!("chafa --format=kitty {path_str} 2>/dev/null || file {path_str}")
         }
         // Binary / archives → file info
         "zip" | "tar" | "gz" | "bz2" | "xz" | "7z" | "rar" | "exe" | "dll" | "so" | "dylib" => {
-            format!("file {} && ls -lh {}", path_str, path_str)
+            format!("file {path_str} && ls -lh {path_str}")
         }
         // Everything else → bat with syntax highlighting
         _ => {
             format!(
-                "bat --paging=always --style=numbers,grid --color=always {} 2>/dev/null || cat {}",
-                path_str, path_str
+                "bat --paging=always --style=numbers,grid --color=always {path_str} 2>/dev/null || cat {path_str}"
             )
         }
     }

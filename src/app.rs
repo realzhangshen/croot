@@ -124,10 +124,7 @@ impl App {
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(1),
-                Constraint::Length(1),
-            ])
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
             .split(size);
 
         let tree_area = chunks[0];
@@ -138,15 +135,22 @@ impl App {
 
         TreeView { theme: &self.theme }.render(tree_area, frame.buffer_mut(), &mut self.tree);
 
-        let root_name = self
-            .root
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| self.root.to_string_lossy().into_owned());
+        let root_name = self.root.file_name().map_or_else(
+            || self.root.to_string_lossy().into_owned(),
+            |n| n.to_string_lossy().into_owned(),
+        );
 
         let (file_count, dir_count) = self.count_visible();
-        let branch = self.git.as_ref().and_then(|g| g.branch()).map(|s| s.to_string());
-        let cmux_indicator = if self.cmux.is_some() { Some("cmux") } else { None };
+        let branch = self
+            .git
+            .as_ref()
+            .and_then(|g| g.branch())
+            .map(std::string::ToString::to_string);
+        let cmux_indicator = if self.cmux.is_some() {
+            Some("cmux")
+        } else {
+            None
+        };
 
         let status_bar = StatusBar {
             branch: branch.as_deref(),
@@ -270,9 +274,7 @@ fn setup_watcher(
         Duration::from_millis(100),
         move |events: Result<Vec<notify_debouncer_mini::DebouncedEvent>, notify::Error>| {
             if let Ok(events) = events {
-                let has_real_change = events
-                    .iter()
-                    .any(|e| e.kind == DebouncedEventKind::Any);
+                let has_real_change = events.iter().any(|e| e.kind == DebouncedEventKind::Any);
                 if has_real_change {
                     let _ = tx.try_send(());
                 }

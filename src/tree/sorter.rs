@@ -108,7 +108,10 @@ mod tests {
             dir_node("beta"),
         ];
         sort_nodes(&mut nodes, true);
-        assert_eq!(names(&nodes), vec!["alpha", "beta", "apple.txt", "zebra.txt"]);
+        assert_eq!(
+            names(&nodes),
+            vec!["alpha", "beta", "apple.txt", "zebra.txt"]
+        );
     }
 
     #[test]
@@ -120,7 +123,10 @@ mod tests {
             dir_node("beta"),
         ];
         sort_nodes(&mut nodes, false);
-        assert_eq!(names(&nodes), vec!["apple.txt", "beta", "delta", "zebra.txt"]);
+        assert_eq!(
+            names(&nodes),
+            vec!["apple.txt", "beta", "delta", "zebra.txt"]
+        );
     }
 
     #[test]

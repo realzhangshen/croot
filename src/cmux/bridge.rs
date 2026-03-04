@@ -45,7 +45,7 @@ impl CmuxBridge {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         // Send the new command with newline
-        let cmd_with_newline = format!("{}\n", cmd);
+        let cmd_with_newline = format!("{cmd}\n");
         CmuxCli::send_text(&surface, &cmd_with_newline).await?;
 
         Ok(())

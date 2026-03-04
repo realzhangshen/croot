@@ -8,9 +8,16 @@ use super::sorter::sort_nodes;
 
 /// Read one level of a directory, respecting .gitignore rules and exclude list.
 /// Returns sorted children (directories first, then natural sort).
-pub fn load_children(dir: &Path, depth: usize, show_hidden: bool, dirs_first: bool, exclude: &[String], show_ignored: bool) -> Vec<TreeNode> {
+pub fn load_children(
+    dir: &Path,
+    depth: usize,
+    show_hidden: bool,
+    dirs_first: bool,
+    exclude: &[String],
+    show_ignored: bool,
+) -> Vec<TreeNode> {
     let mut nodes = Vec::new();
-    let exclude_set: HashSet<&str> = exclude.iter().map(|s| s.as_str()).collect();
+    let exclude_set: HashSet<&str> = exclude.iter().map(std::string::String::as_str).collect();
 
     let walker = WalkBuilder::new(dir)
         .max_depth(Some(1))
@@ -18,7 +25,7 @@ pub fn load_children(dir: &Path, depth: usize, show_hidden: bool, dirs_first: bo
         .git_ignore(!show_ignored)
         .git_global(!show_ignored)
         .git_exclude(!show_ignored)
-        .sort_by_file_name(|a, b| a.cmp(b))
+        .sort_by_file_name(std::cmp::Ord::cmp)
         .build();
 
     for entry in walker.flatten() {
