@@ -130,16 +130,21 @@ impl PreviewView<'_> {
     fn render_content(&self, area: Rect, buf: &mut Buffer, state: &PreviewState) {
         let height = area.height as usize;
         let gutter_width = if self.show_line_numbers && state.kind == PreviewKind::Text {
-            // Calculate gutter width from total lines
             let digits = if state.total_lines == 0 {
                 1
             } else {
                 (state.total_lines as f64).log10().floor() as u16 + 1
             };
-            digits + 1 // digit count + 1 space padding
+            digits + 1
         } else {
             0
         };
+
+        // Pre-compute normalized selection range
+        let sel_range = state.selection.normalized();
+        let highlight_style = Style::default()
+            .bg(self.theme.selected_bg)
+            .fg(Color::White);
 
         for row in 0..height {
             let line_idx = state.scroll_offset + row;
@@ -161,26 +166,68 @@ impl PreviewView<'_> {
 
             let content_width = area.width.saturating_sub(gutter_width);
 
-            // Render styled spans
-            let mut col: u16 = 0;
-            for (text, style) in &state.content[line_idx] {
-                if col >= content_width {
-                    break;
+            // Determine if this line intersects the selection
+            let line_sel = sel_range.and_then(|(start, end)| {
+                if line_idx < start.line || line_idx > end.line {
+                    return None;
                 }
-                let remaining = (content_width - col) as usize;
-                let mut char_end = 0;
-                let mut width_used = 0;
-                for ch in text.chars() {
-                    let w = UnicodeWidthChar::width(ch).unwrap_or(0);
-                    if width_used + w > remaining {
+                let col_start = if line_idx == start.line { start.col } else { 0 };
+                let col_end = if line_idx == end.line {
+                    end.col
+                } else {
+                    usize::MAX
+                };
+                Some((col_start, col_end))
+            });
+
+            if let Some((sel_col_start, sel_col_end)) = line_sel {
+                // Character-by-character rendering for lines with selection
+                let mut col: usize = 0;
+                for (text, style) in &state.content[line_idx] {
+                    if col >= content_width as usize {
                         break;
                     }
-                    width_used += w;
-                    char_end += ch.len_utf8();
+                    for ch in text.chars() {
+                        if col >= content_width as usize {
+                            break;
+                        }
+                        let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+                        if w == 0 {
+                            continue;
+                        }
+                        let s = if col >= sel_col_start && col < sel_col_end {
+                            highlight_style
+                        } else {
+                            *style
+                        };
+                        let mut char_buf = [0u8; 4];
+                        let char_str = ch.encode_utf8(&mut char_buf);
+                        buf.set_string(x + col as u16, y, char_str, s);
+                        col += w;
+                    }
                 }
-                let display = &text[..char_end];
-                buf.set_string(x + col, y, display, *style);
-                col += width_used as u16;
+            } else {
+                // Fast path: no selection on this line
+                let mut col: u16 = 0;
+                for (text, style) in &state.content[line_idx] {
+                    if col >= content_width {
+                        break;
+                    }
+                    let remaining = (content_width - col) as usize;
+                    let mut char_end = 0;
+                    let mut width_used = 0;
+                    for ch in text.chars() {
+                        let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+                        if width_used + w > remaining {
+                            break;
+                        }
+                        width_used += w;
+                        char_end += ch.len_utf8();
+                    }
+                    let display = &text[..char_end];
+                    buf.set_string(x + col, y, display, *style);
+                    col += width_used as u16;
+                }
             }
         }
     }

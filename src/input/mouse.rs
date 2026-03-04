@@ -13,12 +13,19 @@ pub fn handle_mouse(
     match event.kind {
         MouseEventKind::Down(MouseButton::Left) => {
             if preview_x.is_some_and(|px| event.column >= px) {
-                return Action::FocusPreview;
+                return Action::SelectionStart(event.column, event.row);
             }
             let row = event.row;
             if row >= tree_area_y && row < tree_area_y + tree_area_height {
                 let relative_row = row - tree_area_y;
                 Action::ClickRow(relative_row)
+            } else {
+                Action::None
+            }
+        }
+        MouseEventKind::Drag(MouseButton::Left) => {
+            if preview_x.is_some_and(|px| event.column >= px) {
+                Action::SelectionUpdate(event.column, event.row)
             } else {
                 Action::None
             }

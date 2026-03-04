@@ -20,13 +20,24 @@ use crate::input::handler::{handle_key, Action};
 use crate::input::mouse::handle_mouse;
 use crate::preview::dispatcher::preview_command;
 use crate::preview::loader::{load_preview, LoadedPreview};
-use crate::preview::state::{FocusPane, PreviewKind, PreviewState};
+use crate::preview::state::{ContentPos, FocusPane, PreviewKind, PreviewState};
 use crate::render::preview_view::PreviewView;
 use crate::render::status_bar::StatusBar;
 use crate::render::theme::Theme;
 use crate::render::tree_view::TreeView;
 use crate::tree::forest::FileTree;
 use crate::tree::node::NodeKind;
+
+/// Cached layout coordinates of the preview content area (set during draw).
+#[derive(Debug, Clone, Copy)]
+struct PreviewLayout {
+    /// Screen x where content text starts (after gutter).
+    x: u16,
+    /// Screen y where content starts (after header).
+    y: u16,
+    /// Height of the content area (excluding header).
+    height: u16,
+}
 
 pub struct App {
     pub tree: FileTree,
@@ -44,6 +55,7 @@ pub struct App {
     pub focus: FocusPane,
     preview_debounce_handle: Option<JoinHandle<()>>,
     preview_area_x: Option<u16>,
+    preview_layout: Option<PreviewLayout>,
 }
 
 impl App {
@@ -84,6 +96,7 @@ impl App {
             focus: FocusPane::Tree,
             preview_debounce_handle: None,
             preview_area_x: None,
+            preview_layout: None,
         })
     }
 
@@ -113,7 +126,8 @@ impl App {
                 event = reader.next() => {
                     match event {
                         Some(Ok(Event::Key(key))) => {
-                            let action = handle_key(key, self.preview_visible);
+                            let has_selection = self.preview_state.selection.is_active();
+                            let action = handle_key(key, self.preview_visible, has_selection);
                             // Keyboard scroll should target whichever pane has focus.
                             // The mouse handler already routes by position, so we only
                             // transform here (at the keyboard entry point).
@@ -226,6 +240,26 @@ impl App {
 
             self.preview_area_x = Some(preview_area.x);
 
+            // Compute and cache preview layout for coordinate mapping
+            let content_area_y = preview_area.y + 1; // skip header
+            let content_area_height = preview_area.height.saturating_sub(1);
+            let gutter_width =
+                if self.config.preview.show_line_numbers && self.preview_state.kind == PreviewKind::Text {
+                    let digits = if self.preview_state.total_lines == 0 {
+                        1
+                    } else {
+                        (self.preview_state.total_lines as f64).log10().floor() as u16 + 1
+                    };
+                    digits + 1
+                } else {
+                    0
+                };
+            self.preview_layout = Some(PreviewLayout {
+                x: preview_area.x + gutter_width,
+                y: content_area_y,
+                height: content_area_height,
+            });
+
             // Render preview
             PreviewView {
                 theme: &self.theme,
@@ -236,6 +270,7 @@ impl App {
         } else {
             // No preview — full width tree
             self.preview_area_x = None;
+            self.preview_layout = None;
             self.tree_area_height = main_area.height;
 
             TreeView {
@@ -359,8 +394,36 @@ impl App {
                     cursor_moved = true;
                 }
             }
+            Action::SelectionStart(col, row) => {
+                self.focus = FocusPane::Preview;
+                if let Some(pos) = self.screen_to_content(col, row) {
+                    self.preview_state.selection.anchor = Some(pos);
+                    self.preview_state.selection.cursor = Some(pos);
+                } else {
+                    self.preview_state.selection.clear();
+                }
+            }
+            Action::SelectionUpdate(col, row) => {
+                if self.preview_state.selection.anchor.is_some() {
+                    if let Some(pos) = self.screen_to_content(col, row) {
+                        self.preview_state.selection.cursor = Some(pos);
+                    }
+                }
+            }
+            Action::CopySelection => {
+                if let Some(text) = self.preview_state.extract_selected_text() {
+                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                        let _ = clipboard.set_text(text);
+                    }
+                }
+                self.preview_state.selection.clear();
+            }
+            Action::ClearSelection => {
+                self.preview_state.selection.clear();
+            }
             Action::ClickRow(row) => {
                 self.focus = FocusPane::Tree;
+                self.preview_state.selection.clear();
                 let row_idx = row as usize;
                 let idx = if row_idx < self.tree.rendered_indices.len() {
                     self.tree.rendered_indices[row_idx]
@@ -390,9 +453,6 @@ impl App {
                     FocusPane::Tree => FocusPane::Preview,
                     FocusPane::Preview => FocusPane::Tree,
                 };
-            }
-            Action::FocusPreview => {
-                self.focus = FocusPane::Preview;
             }
             Action::PreviewScrollUp(n) => {
                 self.preview_state.scroll_up(n as usize);
@@ -476,6 +536,25 @@ impl App {
         if let Some(ref mut cmux) = self.cmux {
             let _ = cmux.send_to_preview(&cmd).await;
         }
+    }
+
+    /// Map screen coordinates to content-space coordinates using the cached preview layout.
+    fn screen_to_content(&self, screen_col: u16, screen_row: u16) -> Option<ContentPos> {
+        let layout = self.preview_layout?;
+
+        // Check bounds
+        if screen_row < layout.y
+            || screen_row >= layout.y + layout.height
+            || screen_col < layout.x
+        {
+            return None;
+        }
+
+        let row_in_content = (screen_row - layout.y) as usize;
+        let line = self.preview_state.scroll_offset + row_in_content;
+        let col = (screen_col - layout.x) as usize;
+
+        Some(ContentPos { line, col })
     }
 
     fn reapply_git(&mut self) {

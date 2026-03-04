@@ -18,9 +18,16 @@ pub enum Action {
     ClickRow(u16),
     TogglePreview,
     SwitchFocus,
-    FocusPreview,
     PreviewScrollUp(u16),
     PreviewScrollDown(u16),
+    /// Begin a text selection at screen (col, row).
+    SelectionStart(u16, u16),
+    /// Extend a text selection to screen (col, row).
+    SelectionUpdate(u16, u16),
+    /// Copy the current selection to the system clipboard.
+    CopySelection,
+    /// Clear the current selection.
+    ClearSelection,
     None,
 }
 
@@ -28,11 +35,29 @@ pub enum Action {
 ///
 /// `preview_visible`: whether the preview panel is currently shown.
 /// When preview is hidden, Tab still acts as Toggle for backward compat.
-pub fn handle_key(key: KeyEvent, preview_visible: bool) -> Action {
+/// `preview_has_selection`: whether there is an active text selection in the preview.
+pub fn handle_key(key: KeyEvent, preview_visible: bool, preview_has_selection: bool) -> Action {
     match key.code {
+        // Ctrl+C or Super+C (Command+C via Kitty keyboard protocol): copy or quit
+        KeyCode::Char('c')
+            if key.modifiers.contains(KeyModifiers::CONTROL)
+                || key.modifiers.contains(KeyModifiers::SUPER) =>
+        {
+            if preview_has_selection {
+                Action::CopySelection
+            } else {
+                Action::Quit
+            }
+        }
+
+        // y: copy selection if one exists (vim-style yank)
+        KeyCode::Char('y') if preview_has_selection => Action::CopySelection,
+
+        // Esc: clear selection if one exists
+        KeyCode::Esc if preview_has_selection => Action::ClearSelection,
+
         // Quit
         KeyCode::Char('q') => Action::Quit,
-        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Action::Quit,
 
         // Navigation
         KeyCode::Char('k') | KeyCode::Up => Action::CursorUp,
