@@ -1,6 +1,6 @@
 use ratatui::style::Color;
 
-use super::colors;
+use super::theme::Theme;
 
 pub struct IconInfo {
     pub icon: &'static str,
@@ -8,11 +8,11 @@ pub struct IconInfo {
 }
 
 /// Get Nerd Font icon and color for a file extension.
-pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
+pub fn icon_for_file(name: &str, is_dir: bool, theme: &Theme) -> IconInfo {
     if is_dir {
         return IconInfo {
             icon: "",
-            color: colors::DIR_COLOR,
+            color: theme.dir_color,
         };
     }
 
@@ -81,11 +81,11 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
         "sql" => IconInfo { icon: "", color: Color::Rgb(0xDA, 0xD8, 0xD8) },
         "graphql" | "gql" => IconInfo { icon: "", color: Color::Rgb(0xE1, 0x00, 0x98) },
         "wasm" => IconInfo { icon: "", color: Color::Rgb(0x65, 0x4F, 0xF0) },
-        _ => default_icon(name),
+        _ => default_icon(name, theme),
     }
 }
 
-fn default_icon(name: &str) -> IconInfo {
+fn default_icon(name: &str, theme: &Theme) -> IconInfo {
     // Special file names
     let lower = name.to_ascii_lowercase();
     match lower.as_str() {
@@ -93,7 +93,7 @@ fn default_icon(name: &str) -> IconInfo {
         "makefile" | "justfile" => IconInfo { icon: "", color: Color::Rgb(0x6D, 0x8A, 0x88) },
         "cargo.toml" | "cargo.lock" => IconInfo { icon: "", color: Color::Rgb(0xDE, 0xA5, 0x84) },
         "license" | "licence" => IconInfo { icon: "󰿃", color: Color::Rgb(0xD0, 0xBF, 0x41) },
-        _ => IconInfo { icon: "", color: colors::DEFAULT_FG },
+        _ => IconInfo { icon: "", color: theme.default_fg },
     }
 }
 

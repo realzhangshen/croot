@@ -6,7 +6,7 @@ use ratatui::{
     widgets::Widget,
 };
 
-use super::colors;
+use super::theme::Theme;
 
 pub struct StatusBar<'a> {
     pub branch: Option<&'a str>,
@@ -14,13 +14,14 @@ pub struct StatusBar<'a> {
     pub dir_count: usize,
     pub root_name: &'a str,
     pub cmux_status: Option<&'a str>,
+    pub theme: &'a Theme,
 }
 
 impl<'a> Widget for StatusBar<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let style = Style::default()
-            .fg(colors::STATUS_BAR_FG)
-            .bg(colors::STATUS_BAR_BG);
+            .fg(self.theme.status_bar_fg)
+            .bg(self.theme.status_bar_bg);
 
         // Fill background
         for x in area.x..area.x + area.width {
@@ -53,8 +54,8 @@ impl<'a> Widget for StatusBar<'a> {
             spans.push(Span::styled(
                 format!(" {} ", status),
                 Style::default()
-                    .fg(colors::GIT_ADDED)
-                    .bg(colors::STATUS_BAR_BG),
+                    .fg(self.theme.git_added)
+                    .bg(self.theme.status_bar_bg),
             ));
         }
 

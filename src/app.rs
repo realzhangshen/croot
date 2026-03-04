@@ -18,6 +18,7 @@ use crate::input::handler::{handle_key, Action};
 use crate::input::mouse::handle_mouse;
 use crate::preview::dispatcher::preview_command;
 use crate::render::status_bar::StatusBar;
+use crate::render::theme::Theme;
 use crate::render::tree_view::TreeView;
 use crate::tree::forest::FileTree;
 use crate::tree::node::NodeKind;
@@ -28,6 +29,7 @@ pub struct App {
     pub cmux: Option<CmuxBridge>,
     #[allow(dead_code)] // preview/cmux config not yet consumed
     pub config: Config,
+    pub theme: Theme,
     pub root: PathBuf,
     pub should_quit: bool,
     tree_area_y: u16,
@@ -46,6 +48,7 @@ impl App {
         );
         let git = GitState::load(&root);
         let cmux = CmuxBridge::detect();
+        let theme = Theme::detect();
 
         if let Some(ref git) = git {
             apply_git_statuses(&mut tree, git);
@@ -56,6 +59,7 @@ impl App {
             git,
             cmux,
             config,
+            theme,
             root,
             should_quit: false,
             tree_area_y: 0,
@@ -131,7 +135,7 @@ impl App {
         self.tree_area_y = tree_area.y;
         self.tree_area_height = tree_area.height;
 
-        TreeView.render(tree_area, frame.buffer_mut(), &mut self.tree);
+        TreeView { theme: &self.theme }.render(tree_area, frame.buffer_mut(), &mut self.tree);
 
         let root_name = self
             .root
@@ -149,6 +153,7 @@ impl App {
             dir_count,
             root_name: &root_name,
             cmux_status: cmux_indicator,
+            theme: &self.theme,
         };
         status_bar.render(status_area, frame.buffer_mut());
     }
