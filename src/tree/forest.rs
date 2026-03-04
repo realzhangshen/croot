@@ -34,8 +34,14 @@ impl FileTree {
         show_modified: bool,
     ) -> Self {
         let children = load_children_with_meta(
-            &root, 0, show_hidden, dirs_first, &exclude, show_ignored,
-            show_size, show_modified,
+            &root,
+            0,
+            show_hidden,
+            dirs_first,
+            &exclude,
+            show_ignored,
+            show_size,
+            show_modified,
         );
         Self {
             nodes: children,
@@ -575,10 +581,7 @@ mod tests {
         ]);
         // src has one child (utils), utils has one child (helpers) → chain of 2
         assert_eq!(tree.compact_chain_len(0), 2);
-        assert_eq!(
-            tree.compact_display_name(0, 2),
-            "src/utils/helpers/"
-        );
+        assert_eq!(tree.compact_display_name(0, 2), "src/utils/helpers/");
     }
 
     #[test]

@@ -30,7 +30,7 @@ use app::App;
     version,
     about = "A lightweight terminal file tree sidebar",
     args_conflicts_with_subcommands = true,
-    subcommand_negates_reqs = true,
+    subcommand_negates_reqs = true
 )]
 struct Cli {
     /// Directory to browse (defaults to current directory)
@@ -68,8 +68,7 @@ async fn main() -> anyhow::Result<()> {
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 
     // Enable Kitty keyboard protocol so we can receive Super (Command) modifier
-    let enhanced_keyboard = crossterm::terminal::supports_keyboard_enhancement()
-        .unwrap_or(false);
+    let enhanced_keyboard = crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false);
     if enhanced_keyboard {
         execute!(
             stdout,
@@ -118,8 +117,6 @@ fn self_update() -> anyhow::Result<()> {
             eprintln!("error: 'brew' not found in PATH. Install Homebrew via https://brew.sh");
             process::exit(1);
         }
-        Err(e) => {
-            Err(e.into())
-        }
+        Err(e) => Err(e.into()),
     }
 }

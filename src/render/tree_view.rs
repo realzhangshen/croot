@@ -327,8 +327,7 @@ fn format_epoch_date(epoch_secs: u64) -> String {
     let (y, m, d) = days_to_civil(total_days as i64 + 719_468);
 
     let months = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
 
     let month_str = months.get(m as usize - 1).unwrap_or(&"???");

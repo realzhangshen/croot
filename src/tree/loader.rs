@@ -17,7 +17,16 @@ pub fn load_children(
     exclude: &[String],
     show_ignored: bool,
 ) -> Vec<TreeNode> {
-    load_children_with_meta(dir, depth, show_hidden, dirs_first, exclude, show_ignored, false, false)
+    load_children_with_meta(
+        dir,
+        depth,
+        show_hidden,
+        dirs_first,
+        exclude,
+        show_ignored,
+        false,
+        false,
+    )
 }
 
 /// Like `load_children` but optionally populates size and modified metadata.

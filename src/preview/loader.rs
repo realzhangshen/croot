@@ -180,9 +180,10 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
         ]);
     }
 
-    let dir_name = path
-        .file_name()
-        .map_or_else(|| path.to_string_lossy().into_owned(), |n| n.to_string_lossy().into_owned());
+    let dir_name = path.file_name().map_or_else(
+        || path.to_string_lossy().into_owned(),
+        |n| n.to_string_lossy().into_owned(),
+    );
 
     LoadedPreview {
         kind: PreviewKind::Directory,
@@ -229,7 +230,13 @@ pub fn generate_hex_dump(data: &[u8]) -> Vec<Vec<StyledSpan>> {
         spans.push((" |".to_string(), separator_style));
         let ascii: String = chunk
             .iter()
-            .map(|&b| if (0x20..=0x7E).contains(&b) { b as char } else { '.' })
+            .map(|&b| {
+                if (0x20..=0x7E).contains(&b) {
+                    b as char
+                } else {
+                    '.'
+                }
+            })
             .collect();
         spans.push((ascii, ascii_style));
         spans.push(("|".to_string(), separator_style));
@@ -250,10 +257,7 @@ fn read_prefix(path: &Path, max_bytes: usize) -> std::io::Result<Vec<u8>> {
 }
 
 fn format_file_info(path: &Path, size: u64) -> String {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
     let size_str = format_size(size);
     if ext.is_empty() {
         size_str

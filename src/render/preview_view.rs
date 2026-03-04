@@ -81,7 +81,10 @@ impl PreviewView {
             .current_path
             .as_ref()
             .and_then(|p| p.file_name())
-            .map_or_else(|| "Preview".to_string(), |n| n.to_string_lossy().into_owned());
+            .map_or_else(
+                || "Preview".to_string(),
+                |n| n.to_string_lossy().into_owned(),
+            );
 
         let mut spans = vec![
             Span::styled(" ", Style::default().bg(bg)),
@@ -100,11 +103,7 @@ impl PreviewView {
 
         // Scroll indicator on the right
         if state.total_lines > 0 {
-            let indicator = format!(
-                " {}/{} ",
-                state.scroll_offset + 1,
-                state.total_lines
-            );
+            let indicator = format!(" {}/{} ", state.scroll_offset + 1, state.total_lines);
             let indicator_width = indicator.len() as u16;
             let left_content = Line::from(spans);
             let left_width = left_content.width() as u16;
@@ -141,9 +140,7 @@ impl PreviewView {
 
         // Pre-compute normalized selection range
         let sel_range = state.selection.normalized();
-        let highlight_style = Style::default()
-            .bg(colors::SELECTED_BG)
-            .fg(Color::White);
+        let highlight_style = Style::default().bg(colors::SELECTED_BG).fg(Color::White);
 
         for row in 0..height {
             let line_idx = state.scroll_offset + row;
@@ -157,7 +154,11 @@ impl PreviewView {
 
             // Line number gutter
             if gutter_width > 0 {
-                let line_num = format!("{:>width$} ", line_idx + 1, width = (gutter_width - 1) as usize);
+                let line_num = format!(
+                    "{:>width$} ",
+                    line_idx + 1,
+                    width = (gutter_width - 1) as usize
+                );
                 let gutter_style = Style::default().fg(Color::DarkGray);
                 buf.set_string(x, y, &line_num, gutter_style);
                 x += gutter_width;

@@ -109,8 +109,7 @@ impl App {
         let mut watcher_active = true;
 
         // Channel for receiving loaded preview results
-        let (preview_tx, mut preview_rx) =
-            mpsc::channel::<(PathBuf, LoadedPreview)>(4);
+        let (preview_tx, mut preview_rx) = mpsc::channel::<(PathBuf, LoadedPreview)>(4);
 
         // Trigger initial preview load if auto_preview is on
         if self.preview_visible {
@@ -239,7 +238,9 @@ impl App {
             // Render separator
             let sep_style = Style::default().fg(colors::TREE_LINE);
             for y in separator_area.y..separator_area.y + separator_area.height {
-                frame.buffer_mut().set_string(separator_area.x, y, "│", sep_style);
+                frame
+                    .buffer_mut()
+                    .set_string(separator_area.x, y, "│", sep_style);
             }
 
             self.preview_area_x = Some(preview_area.x);
@@ -247,17 +248,18 @@ impl App {
             // Compute and cache preview layout for coordinate mapping
             let content_area_y = preview_area.y + 1; // skip header
             let content_area_height = preview_area.height.saturating_sub(1);
-            let gutter_width =
-                if self.config.preview.show_line_numbers && self.preview_state.kind == PreviewKind::Text {
-                    let digits = if self.preview_state.total_lines == 0 {
-                        1
-                    } else {
-                        (self.preview_state.total_lines as f64).log10().floor() as u16 + 1
-                    };
-                    digits + 1
+            let gutter_width = if self.config.preview.show_line_numbers
+                && self.preview_state.kind == PreviewKind::Text
+            {
+                let digits = if self.preview_state.total_lines == 0 {
+                    1
                 } else {
-                    0
+                    (self.preview_state.total_lines as f64).log10().floor() as u16 + 1
                 };
+                digits + 1
+            } else {
+                0
+            };
             self.preview_layout = Some(PreviewLayout {
                 x: preview_area.x + gutter_width,
                 y: content_area_y,
@@ -470,10 +472,7 @@ impl App {
     }
 
     /// Schedule a debounced preview load for the currently selected file.
-    fn trigger_preview_load(
-        &mut self,
-        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
-    ) {
+    fn trigger_preview_load(&mut self, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
         let Some(node) = self.tree.selected() else {
             return;
         };
@@ -546,9 +545,7 @@ impl App {
         let layout = self.preview_layout?;
 
         // Check bounds
-        if screen_row < layout.y
-            || screen_row >= layout.y + layout.height
-            || screen_col < layout.x
+        if screen_row < layout.y || screen_row >= layout.y + layout.height || screen_col < layout.x
         {
             return None;
         }

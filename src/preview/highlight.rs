@@ -59,7 +59,11 @@ pub fn highlight_file(
     is_light: bool,
 ) -> Vec<Vec<StyledSpan>> {
     let ss = syntax_set();
-    let theme = if is_light { theme_light() } else { theme_dark() };
+    let theme = if is_light {
+        theme_light()
+    } else {
+        theme_dark()
+    };
 
     // Find syntax by extension, then by first line
     let syntax = ss

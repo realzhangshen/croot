@@ -126,7 +126,13 @@ impl PreviewState {
     }
 
     /// Apply a loaded preview result.
-    pub fn apply(&mut self, path: PathBuf, kind: PreviewKind, content: Vec<Vec<StyledSpan>>, file_info: String) {
+    pub fn apply(
+        &mut self,
+        path: PathBuf,
+        kind: PreviewKind,
+        content: Vec<Vec<StyledSpan>>,
+        file_info: String,
+    ) {
         self.total_lines = content.len();
         self.content = content;
         self.kind = kind;
