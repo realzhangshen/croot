@@ -307,17 +307,16 @@ impl FileTree {
             if child.depth != self.nodes[cur].depth + 1 {
                 break;
             }
-            // Check this dir has exactly one child (the next node after child_start
-            // must either not exist or have depth <= child's parent's depth + 1)
-            let second_child = child_start + 1;
-            let has_single_child = if second_child >= self.nodes.len() {
-                true
-            } else {
-                // If the second node is at same depth as child, there are multiple children
-                self.nodes[second_child].depth <= self.nodes[cur].depth
-                    || (child.is_dir()
-                        && child.is_expanded
-                        && self.nodes[second_child].depth > child.depth)
+            // Check this dir has exactly one direct child by scanning past
+            // the first child's entire subtree to see if a sibling exists.
+            let target_depth = self.nodes[cur].depth + 1;
+            let has_single_child = {
+                let mut j = child_start + 1;
+                while j < self.nodes.len() && self.nodes[j].depth > target_depth {
+                    j += 1;
+                }
+                // Single child if we hit end-of-list or a node shallower than target
+                j >= self.nodes.len() || self.nodes[j].depth < target_depth
             };
 
             if !has_single_child || !child.is_dir() || !child.is_expanded {
@@ -617,6 +616,21 @@ mod tests {
     #[test]
     fn compact_chain_on_file_returns_zero() {
         let tree = tree_from_compact(&[("a.txt", NodeKind::File, 0, false)]);
+        assert_eq!(tree.compact_chain_len(0), 0);
+    }
+
+    #[test]
+    fn compact_chain_stops_when_sibling_after_subtree() {
+        // src/ (expanded) → utils/ (expanded, has children) + other/ (sibling)
+        let tree = tree_from_compact(&[
+            ("src", NodeKind::Directory, 0, true),
+            ("utils", NodeKind::Directory, 1, true),
+            ("helpers", NodeKind::Directory, 2, true),
+            ("format.rs", NodeKind::File, 3, false),
+            ("other", NodeKind::Directory, 1, true),
+            ("stuff.rs", NodeKind::File, 2, false),
+        ]);
+        // src has two children (utils and other), so no compaction
         assert_eq!(tree.compact_chain_len(0), 0);
     }
 }
