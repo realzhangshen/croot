@@ -102,8 +102,8 @@ async fn main() -> anyhow::Result<()> {
 fn self_update() -> anyhow::Result<()> {
     println!("Updating croot...");
 
-    let status = process::Command::new("cargo")
-        .args(["install", "croot", "--force"])
+    let status = process::Command::new("brew")
+        .args(["upgrade", "croot"])
         .status();
 
     match status {
@@ -115,7 +115,7 @@ fn self_update() -> anyhow::Result<()> {
             process::exit(s.code().unwrap_or(1));
         }
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            eprintln!("error: 'cargo' not found in PATH. Install Rust via https://rustup.rs");
+            eprintln!("error: 'brew' not found in PATH. Install Homebrew via https://brew.sh");
             process::exit(1);
         }
         Err(e) => {
