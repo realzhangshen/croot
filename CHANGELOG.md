@@ -7,14 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-04
+
 ### Added
+- Built-in file preview panel with syntax highlighting (replaces external `bat`/`cat` dispatch)
+- Mouse text selection and Command+C copy support in preview panel
+- Compact folder display for single-child directory chains
+- Info columns (file size, modification date) in tree view
+- Staged file git status colors
+- Ghostty terminal theme detection
+- Git ignored file display with status visualization
 - Project quality tooling: `rustfmt.toml`, `cargo-deny` config, Dependabot
 - CI security audit job and MSRV (1.75) check job
 - Linux x86_64 and aarch64 release targets
 
 ### Changed
+- Refactored keyboard scroll routing to dispatch by focus at entry point
 - Enabled clippy pedantic lints across the codebase
 - Applied code quality fixes: `format!` captures, `f64::from()` casts, `map_or_else`, lifetime elision, `unwrap_or_default()`, module ordering
+
+### Fixed
+- Compact chain detection to correctly skip subtrees when checking for siblings
+- All files appearing grey (DIM) in clean git repos
+- rustfmt formatting in git status tests
 
 ## [0.1.0] - 2025-01-18
 
@@ -35,5 +50,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Git ignored file display: removed redundant status marker, fixed directory lookup
 - macOS x86_64 CI build using correct runner (macos-14)
 
-[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/realzhangshen/croot/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/realzhangshen/croot/releases/tag/v0.1.0
