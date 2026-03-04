@@ -16,7 +16,7 @@ pub struct TreeView<'a> {
     pub theme: &'a Theme,
 }
 
-impl<'a> StatefulWidget for TreeView<'a> {
+impl StatefulWidget for TreeView<'_> {
     type State = FileTree;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut FileTree) {
@@ -77,30 +77,44 @@ impl<'a> StatefulWidget for TreeView<'a> {
                 icons::icon_for_file(&node.name, false, self.theme)
             };
 
-            spans.push(Span::styled(
-                format!("{} ", icon_info.icon),
-                Style::default().fg(icon_info.color).bg(bg),
-            ));
+            let is_ignored = node.git_status == GitStatus::Ignored;
+
+            let mut icon_style = Style::default().fg(icon_info.color).bg(bg);
+            if is_ignored {
+                icon_style = icon_style.add_modifier(Modifier::DIM);
+            }
+            spans.push(Span::styled(format!("{} ", icon_info.icon), icon_style));
 
             // File name
             let name_color = git_status_color(node.git_status, self.theme);
             let name_style = if node.is_dir() {
-                Style::default()
+                let mut s = Style::default()
                     .fg(name_color)
                     .bg(bg)
-                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::BOLD);
+                if is_ignored {
+                    s = s.add_modifier(Modifier::DIM);
+                }
+                s
             } else {
-                Style::default().fg(name_color).bg(bg)
+                let mut s = Style::default().fg(name_color).bg(bg);
+                if is_ignored {
+                    s = s.add_modifier(Modifier::DIM);
+                }
+                s
             };
             spans.push(Span::styled(&node.name, name_style));
 
             // Git status marker (right-aligned later; for now, append)
             let git_marker = git_status_marker(node.git_status);
             if !git_marker.is_empty() {
-                spans.push(Span::styled(
-                    format!(" {}", git_marker),
-                    Style::default().fg(git_status_color(node.git_status, self.theme)).bg(bg),
-                ));
+                let mut marker_style = Style::default()
+                    .fg(git_status_color(node.git_status, self.theme))
+                    .bg(bg);
+                if is_ignored {
+                    marker_style = marker_style.add_modifier(Modifier::DIM);
+                }
+                spans.push(Span::styled(format!(" {git_marker}"), marker_style));
             }
 
             // Fill remaining width with background color for selected row
@@ -108,14 +122,11 @@ impl<'a> StatefulWidget for TreeView<'a> {
             let line_width = line.width() as u16;
 
             // Render the line content
-            line.render(
-                Rect::new(area.x, y, area.width.min(line_width + 1), 1),
-                buf,
-            );
+            line.render(Rect::new(area.x, y, area.width.min(line_width + 1), 1), buf);
 
             // Fill rest of the row with bg color for selected highlight
             if is_selected && line_width < area.width {
-                for x in (area.x + line_width)..=(area.x + area.width - 1) {
+                for x in (area.x + line_width)..(area.x + area.width) {
                     if let Some(cell) = buf.cell_mut((x, y)) {
                         cell.set_style(Style::default().bg(bg));
                     }

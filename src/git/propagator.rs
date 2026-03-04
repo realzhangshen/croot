@@ -26,7 +26,9 @@ pub fn propagate_to_dirs(
                 break;
             }
 
-            let entry = dir_statuses.entry(dir.to_path_buf()).or_insert(GitStatus::Clean);
+            let entry = dir_statuses
+                .entry(dir.to_path_buf())
+                .or_insert(GitStatus::Clean);
             if status > *entry {
                 *entry = status;
             }
@@ -72,7 +74,10 @@ mod tests {
 
         let dirs = propagate_to_dirs(&files, Path::new("/repo"));
         // Conflicted > Added, so src/ should be Conflicted
-        assert_eq!(dirs.get(Path::new("/repo/src")), Some(&GitStatus::Conflicted));
+        assert_eq!(
+            dirs.get(Path::new("/repo/src")),
+            Some(&GitStatus::Conflicted)
+        );
     }
 
     #[test]
@@ -83,5 +88,25 @@ mod tests {
         let dirs = propagate_to_dirs(&files, Path::new("/repo"));
         assert_eq!(dirs.get(Path::new("/repo")), Some(&GitStatus::Modified));
         assert!(dirs.get(Path::new("/")).is_none());
+    }
+
+    #[test]
+    fn ignored_propagates_upward() {
+        let mut files = HashMap::new();
+        files.insert(PathBuf::from("/repo/node_modules"), GitStatus::Ignored);
+
+        let dirs = propagate_to_dirs(&files, Path::new("/repo"));
+        assert_eq!(dirs.get(Path::new("/repo")), Some(&GitStatus::Ignored));
+    }
+
+    #[test]
+    fn higher_severity_overrides_ignored() {
+        let mut files = HashMap::new();
+        files.insert(PathBuf::from("/repo/node_modules"), GitStatus::Ignored);
+        files.insert(PathBuf::from("/repo/src/main.rs"), GitStatus::Modified);
+
+        let dirs = propagate_to_dirs(&files, Path::new("/repo"));
+        // Modified > Ignored, so repo root should be Modified
+        assert_eq!(dirs.get(Path::new("/repo")), Some(&GitStatus::Modified));
     }
 }
