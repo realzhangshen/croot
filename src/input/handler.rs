@@ -19,9 +19,7 @@ pub enum Action {
     TogglePreview,
     SwitchFocus,
     FocusPreview,
-    #[allow(dead_code)]
     PreviewScrollUp(u16),
-    #[allow(dead_code)]
     PreviewScrollDown(u16),
     None,
 }

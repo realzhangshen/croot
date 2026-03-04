@@ -114,6 +114,18 @@ impl App {
                     match event {
                         Some(Ok(Event::Key(key))) => {
                             let action = handle_key(key, self.preview_visible);
+                            // Keyboard scroll should target whichever pane has focus.
+                            // The mouse handler already routes by position, so we only
+                            // transform here (at the keyboard entry point).
+                            let action = if self.focus == FocusPane::Preview {
+                                match action {
+                                    Action::ScrollUp(n) => Action::PreviewScrollUp(n),
+                                    Action::ScrollDown(n) => Action::PreviewScrollDown(n),
+                                    a => a,
+                                }
+                            } else {
+                                action
+                            };
                             self.handle_action(action, &preview_tx).await;
                         }
                         Some(Ok(Event::Mouse(mouse))) => {
@@ -319,24 +331,16 @@ impl App {
                 cursor_moved = true;
             }
             Action::ScrollUp(n) => {
-                if self.focus == FocusPane::Preview {
-                    self.preview_state.scroll_up(n as usize);
-                } else {
-                    for _ in 0..n {
-                        self.tree.cursor_up();
-                    }
-                    cursor_moved = true;
+                for _ in 0..n {
+                    self.tree.cursor_up();
                 }
+                cursor_moved = true;
             }
             Action::ScrollDown(n) => {
-                if self.focus == FocusPane::Preview {
-                    self.preview_state.scroll_down(n as usize);
-                } else {
-                    for _ in 0..n {
-                        self.tree.cursor_down();
-                    }
-                    cursor_moved = true;
+                for _ in 0..n {
+                    self.tree.cursor_down();
                 }
+                cursor_moved = true;
             }
             Action::GotoTop => {
                 if self.focus == FocusPane::Preview {
@@ -356,6 +360,7 @@ impl App {
                 }
             }
             Action::ClickRow(row) => {
+                self.focus = FocusPane::Tree;
                 let row_idx = row as usize;
                 let idx = if row_idx < self.tree.rendered_indices.len() {
                     self.tree.rendered_indices[row_idx]
