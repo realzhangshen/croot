@@ -97,7 +97,8 @@ impl App {
                     }
                 }
                 _ = fs_rx.recv() => {
-                    // File system change detected — refresh git and expanded dirs
+                    // File system change detected — refresh tree structure and git status
+                    self.tree.refresh();
                     if let Some(ref mut git) = self.git {
                         git.refresh();
                     }
