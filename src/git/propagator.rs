@@ -14,7 +14,7 @@ pub fn propagate_to_dirs(
     let mut dir_statuses: HashMap<PathBuf, GitStatus> = HashMap::new();
 
     for (file_path, &status) in file_statuses {
-        if status == GitStatus::Clean {
+        if status == GitStatus::Clean || status == GitStatus::Ignored {
             continue;
         }
 
@@ -91,22 +91,23 @@ mod tests {
     }
 
     #[test]
-    fn ignored_propagates_upward() {
+    fn ignored_does_not_propagate_upward() {
         let mut files = HashMap::new();
         files.insert(PathBuf::from("/repo/node_modules"), GitStatus::Ignored);
 
         let dirs = propagate_to_dirs(&files, Path::new("/repo"));
-        assert_eq!(dirs.get(Path::new("/repo")), Some(&GitStatus::Ignored));
+        assert!(dirs.is_empty());
     }
 
     #[test]
-    fn higher_severity_overrides_ignored() {
+    fn modified_propagates_when_ignored_also_present() {
         let mut files = HashMap::new();
         files.insert(PathBuf::from("/repo/node_modules"), GitStatus::Ignored);
         files.insert(PathBuf::from("/repo/src/main.rs"), GitStatus::Modified);
 
         let dirs = propagate_to_dirs(&files, Path::new("/repo"));
-        // Modified > Ignored, so repo root should be Modified
+        // Ignored is skipped; only Modified propagates
+        assert_eq!(dirs.get(Path::new("/repo/src")), Some(&GitStatus::Modified));
         assert_eq!(dirs.get(Path::new("/repo")), Some(&GitStatus::Modified));
     }
 }

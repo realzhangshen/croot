@@ -74,9 +74,6 @@ impl GitState {
             if self.file_statuses.get(dir) == Some(&GitStatus::Ignored) {
                 return true;
             }
-            if self.dir_statuses.get(dir) == Some(&GitStatus::Ignored) {
-                return true;
-            }
             if dir == self.repo_root {
                 break;
             }
@@ -269,15 +266,6 @@ mod tests {
         );
         assert_eq!(
             state.status_for(Path::new("/repo/node_modules/express/index.js"), false),
-            GitStatus::Ignored
-        );
-    }
-
-    #[test]
-    fn status_for_file_inside_ignored_dir_via_dir_statuses() {
-        let state = make_state("/repo", vec![], vec![("/repo/target", GitStatus::Ignored)]);
-        assert_eq!(
-            state.status_for(Path::new("/repo/target/debug/build/foo.o"), false),
             GitStatus::Ignored
         );
     }
