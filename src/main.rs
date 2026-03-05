@@ -103,6 +103,11 @@ async fn main() -> anyhow::Result<()> {
 fn self_update() -> anyhow::Result<()> {
     println!("Updating croot...");
 
+    // Refresh tap to get latest formula
+    let _ = process::Command::new("brew")
+        .args(["update"])
+        .status();
+
     let status = process::Command::new("brew")
         .args(["upgrade", "croot"])
         .status();
