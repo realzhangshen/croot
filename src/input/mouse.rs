@@ -12,6 +12,13 @@ pub fn handle_mouse(
 ) -> Action {
     match event.kind {
         MouseEventKind::Down(MouseButton::Left) => {
+            // Check for separator hit (2-column zone around the separator)
+            if let Some(px) = preview_x {
+                let sep_x = px.saturating_sub(1);
+                if event.column >= sep_x.saturating_sub(1) && event.column <= sep_x {
+                    return Action::SeparatorDragStart;
+                }
+            }
             if preview_x.is_some_and(|px| event.column >= px) {
                 return Action::SelectionStart(event.column, event.row);
             }
@@ -24,11 +31,7 @@ pub fn handle_mouse(
             }
         }
         MouseEventKind::Drag(MouseButton::Left) => {
-            if preview_x.is_some_and(|px| event.column >= px) {
-                Action::SelectionUpdate(event.column, event.row)
-            } else {
-                Action::None
-            }
+            Action::DragUpdate(event.column, event.row)
         }
         MouseEventKind::ScrollUp => {
             if preview_x.is_some_and(|px| event.column >= px) {

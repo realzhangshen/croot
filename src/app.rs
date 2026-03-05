@@ -44,6 +44,8 @@ pub struct App {
     preview_area_x: Option<u16>,
     preview_layout: Option<PreviewLayout>,
     preview_content_width: u16,
+    dragging_separator: bool,
+    main_area_width: u16,
 }
 
 impl App {
@@ -80,6 +82,8 @@ impl App {
             preview_area_x: None,
             preview_layout: None,
             preview_content_width: 80,
+            dragging_separator: false,
+            main_area_width: 0,
         })
     }
 
@@ -129,7 +133,11 @@ impl App {
                             let action = handle_mouse(mouse, self.tree_area_y, self.tree_area_height, self.preview_area_x);
                             self.handle_action(action, &preview_tx).await;
                         }
-                        Some(Ok(Event::Resize(_, _))) => {}
+                        Some(Ok(Event::Resize(_, _))) => {
+                            if self.preview_visible {
+                                self.trigger_preview_load(&preview_tx);
+                            }
+                        }
                         Some(Err(_)) | None => break,
                         _ => {}
                     }
@@ -185,6 +193,7 @@ impl App {
         let status_area = chunks[1];
 
         self.tree_area_y = main_area.y;
+        self.main_area_width = main_area.width;
 
         if self.preview_visible && main_area.width > 20 {
             // Split horizontally: tree | separator | preview
@@ -344,16 +353,35 @@ impl App {
                 }
             }
 
+            // Separator drag
+            Action::SeparatorDragStart => {
+                self.dragging_separator = true;
+            }
+            Action::DragUpdate(col, row) => {
+                if self.dragging_separator {
+                    if self.main_area_width > 0 {
+                        let ratio = 1.0 - (col as f32 / self.main_area_width as f32);
+                        self.config.preview.split_ratio = ratio.clamp(0.2, 0.8);
+                    }
+                } else if self.preview_area_x.is_some_and(|px| col >= px) {
+                    self.handle_selection_action(&Action::SelectionUpdate(col, row));
+                }
+            }
+
             // Selection actions
             Action::SelectionStart(_, _)
             | Action::SelectionUpdate(_, _)
             | Action::CopySelection
             | Action::ClearSelection => {
+                self.dragging_separator = false;
                 self.handle_selection_action(&action);
             }
 
             // Click routing
-            Action::ClickRow(row) => self.handle_click_row(row, preview_tx),
+            Action::ClickRow(row) => {
+                self.dragging_separator = false;
+                self.handle_click_row(row, preview_tx);
+            }
 
             Action::None => {}
         }

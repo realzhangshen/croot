@@ -30,6 +30,10 @@ pub enum Action {
     ClearSelection,
     /// Toggle rendered/raw preview for Markdown files.
     ToggleRender,
+    /// Begin dragging the separator between tree and preview panes.
+    SeparatorDragStart,
+    /// Mouse drag update at screen (col, row) — app routes based on drag state.
+    DragUpdate(u16, u16),
     None,
 }
 
