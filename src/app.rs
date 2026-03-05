@@ -43,6 +43,7 @@ pub struct App {
     preview_debounce_handle: Option<JoinHandle<()>>,
     preview_area_x: Option<u16>,
     preview_layout: Option<PreviewLayout>,
+    preview_content_width: u16,
 }
 
 impl App {
@@ -57,6 +58,7 @@ impl App {
         }
 
         let preview_visible = config.preview.auto_preview;
+        let render_markdown = config.preview.render_markdown;
 
         Ok(Self {
             tree,
@@ -67,12 +69,17 @@ impl App {
             should_quit: false,
             tree_area_y: 0,
             tree_area_height: 0,
-            preview_state: PreviewState::new(),
+            preview_state: {
+                let mut ps = PreviewState::new();
+                ps.render_markdown = render_markdown;
+                ps
+            },
             preview_visible,
             focus: FocusPane::Tree,
             preview_debounce_handle: None,
             preview_area_x: None,
             preview_layout: None,
+            preview_content_width: 80,
         })
     }
 
@@ -221,6 +228,7 @@ impl App {
                     .set_string(separator_area.x, y, "│", sep_style);
             }
 
+            self.preview_content_width = preview_width;
             self.preview_area_x = Some(preview_area.x);
 
             // Compute and cache preview layout for coordinate mapping
@@ -325,6 +333,14 @@ impl App {
                     self.trigger_preview_load(preview_tx);
                 } else {
                     self.focus = FocusPane::Tree;
+                }
+            }
+            Action::ToggleRender => {
+                self.preview_state.render_markdown = !self.preview_state.render_markdown;
+                // Force reload by clearing cached mtime
+                self.preview_state.cached_mtime = None;
+                if self.preview_visible {
+                    self.trigger_preview_load(preview_tx);
                 }
             }
 
@@ -517,13 +533,15 @@ impl App {
         let max_file_size_kb = self.config.preview.max_file_size_kb;
         let syntax_highlight = self.config.preview.syntax_highlight;
         let is_light = colors::is_light();
+        let render_markdown = self.preview_state.render_markdown;
+        let preview_width = self.preview_content_width as usize;
 
         self.preview_debounce_handle = Some(tokio::spawn(async move {
             tokio::time::sleep(delay).await;
 
             let path_for_send = path.clone();
             let loaded = tokio::task::spawn_blocking(move || {
-                load_preview(&path, max_file_size_kb, syntax_highlight, is_light)
+                load_preview(&path, max_file_size_kb, syntax_highlight, is_light, render_markdown, preview_width)
             })
             .await;
 

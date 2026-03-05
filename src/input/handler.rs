@@ -28,6 +28,8 @@ pub enum Action {
     CopySelection,
     /// Clear the current selection.
     ClearSelection,
+    /// Toggle rendered/raw preview for Markdown files.
+    ToggleRender,
     None,
 }
 
@@ -80,6 +82,9 @@ pub fn handle_key(key: KeyEvent, preview_visible: bool, preview_has_selection: b
 
         // Preview toggle
         KeyCode::Char('p') => Action::TogglePreview,
+
+        // Toggle Markdown render mode
+        KeyCode::Char('m') => Action::ToggleRender,
 
         // Refresh
         KeyCode::Char('r') => Action::Refresh,

@@ -50,6 +50,8 @@ pub struct PreviewConfig {
     pub syntax_highlight: bool,
     #[serde(default = "default_split_ratio")]
     pub split_ratio: f32,
+    #[serde(default = "default_true")]
+    pub render_markdown: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,6 +109,7 @@ impl Default for PreviewConfig {
             max_file_size_kb: 1024,
             syntax_highlight: true,
             split_ratio: 0.5,
+            render_markdown: true,
         }
     }
 }

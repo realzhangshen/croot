@@ -56,6 +56,7 @@ impl Selection {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PreviewKind {
     Text,
+    Rendered,
     Binary,
     Directory,
     Empty,
@@ -85,6 +86,8 @@ pub struct PreviewState {
     pub selection: Selection,
     /// Cached mtime of the currently displayed file (to skip redundant reloads).
     pub cached_mtime: Option<std::time::SystemTime>,
+    /// Whether to render Markdown files (user preference, not reset on clear).
+    pub render_markdown: bool,
 }
 
 impl PreviewState {
@@ -98,6 +101,7 @@ impl PreviewState {
             file_info: String::new(),
             selection: Selection::new(),
             cached_mtime: None,
+            render_markdown: true,
         }
     }
 

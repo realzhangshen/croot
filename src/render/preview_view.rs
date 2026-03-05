@@ -53,7 +53,10 @@ impl StatefulWidget for PreviewView<'_> {
             PreviewKind::TooLarge => {
                 self.render_content(content_area, buf, state);
             }
-            PreviewKind::Text | PreviewKind::Binary | PreviewKind::Directory => {
+            PreviewKind::Text
+            | PreviewKind::Rendered
+            | PreviewKind::Binary
+            | PreviewKind::Directory => {
                 self.render_content(content_area, buf, state);
             }
         }
@@ -94,6 +97,13 @@ impl PreviewView<'_> {
                 Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
             ),
         ];
+
+        if state.kind == PreviewKind::Rendered {
+            spans.push(Span::styled(
+                " [MD]",
+                Style::default().fg(Color::Cyan).bg(bg).add_modifier(Modifier::BOLD),
+            ));
+        }
 
         if !state.file_info.is_empty() {
             spans.push(Span::styled(

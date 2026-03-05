@@ -5,6 +5,7 @@ use std::path::Path;
 use ratatui::style::{Color, Modifier, Style};
 
 use super::highlight;
+use super::render_md;
 use super::state::{PreviewKind, StyledSpan};
 
 /// Result of loading a file for preview.
@@ -25,6 +26,8 @@ pub fn load_preview(
     max_file_size_kb: u64,
     syntax_highlight: bool,
     is_light: bool,
+    render_markdown: bool,
+    preview_width: usize,
 ) -> LoadedPreview {
     // Directories
     if path.is_dir() {
@@ -76,7 +79,13 @@ pub fn load_preview(
     }
 
     // Text file — read full content
-    load_text_preview(path, &file_info, syntax_highlight, is_light)
+    load_text_preview(path, &file_info, syntax_highlight, is_light, render_markdown, preview_width)
+}
+
+fn is_markdown_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|ext| matches!(ext, "md" | "mdx" | "markdown"))
 }
 
 fn load_text_preview(
@@ -84,6 +93,8 @@ fn load_text_preview(
     file_info: &str,
     syntax_highlight: bool,
     is_light: bool,
+    render_markdown: bool,
+    preview_width: usize,
 ) -> LoadedPreview {
     let content = match fs::read_to_string(path) {
         Ok(c) => c,
@@ -95,6 +106,16 @@ fn load_text_preview(
             };
         }
     };
+
+    // Markdown rendering path
+    if render_markdown && is_markdown_file(path) {
+        let lines = render_md::render_markdown(&content, preview_width, is_light);
+        return LoadedPreview {
+            kind: PreviewKind::Rendered,
+            content: lines,
+            file_info: file_info.to_string(),
+        };
+    }
 
     let max_lines = 10_000; // Cap for rendering performance
     let lines = if syntax_highlight {

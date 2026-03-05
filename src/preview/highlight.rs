@@ -104,6 +104,50 @@ pub fn highlight_file(
     result
 }
 
+/// Highlight a code snippet by language name (for use in Markdown fenced code blocks).
+///
+/// Falls back to plain text if the language is not recognized.
+pub fn highlight_code(
+    lang: &str,
+    code: &str,
+    max_lines: usize,
+    is_light: bool,
+) -> Vec<Vec<StyledSpan>> {
+    let ss = syntax_set();
+    let theme = if is_light {
+        theme_light()
+    } else {
+        theme_dark()
+    };
+
+    let syntax = ss
+        .find_syntax_by_token(lang)
+        .unwrap_or_else(|| ss.find_syntax_plain_text());
+
+    let mut highlighter = syntect::easy::HighlightLines::new(syntax, theme);
+    let mut result = Vec::with_capacity(max_lines.min(code.lines().count()));
+
+    for (i, line) in code.lines().enumerate() {
+        if i >= max_lines {
+            break;
+        }
+        match highlighter.highlight_line(line, ss) {
+            Ok(ranges) => {
+                let spans: Vec<StyledSpan> = ranges
+                    .into_iter()
+                    .map(|(style, text)| (text.to_string(), syntect_style_to_ratatui(style)))
+                    .collect();
+                result.push(spans);
+            }
+            Err(_) => {
+                result.push(vec![(line.to_string(), Style::default())]);
+            }
+        }
+    }
+
+    result
+}
+
 /// Render plain text without syntax highlighting.
 pub fn plain_lines(content: &str, max_lines: usize) -> Vec<Vec<StyledSpan>> {
     content
