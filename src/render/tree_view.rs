@@ -105,18 +105,15 @@ impl StatefulWidget for TreeView<'_> {
                 node.name.clone()
             };
 
-            let name_color = git_status_color(node.git_status);
+            let git_style = git_status_style(node.git_status);
             let name_style = if node.is_dir() {
-                let mut s = Style::default()
-                    .fg(name_color)
-                    .bg(bg)
-                    .add_modifier(Modifier::BOLD);
+                let mut s = git_style.bg(bg).add_modifier(Modifier::BOLD);
                 if is_ignored {
                     s = s.add_modifier(Modifier::DIM);
                 }
                 s
             } else {
-                let mut s = Style::default().fg(name_color).bg(bg);
+                let mut s = git_style.bg(bg);
                 if is_ignored {
                     s = s.add_modifier(Modifier::DIM);
                 }
@@ -127,9 +124,7 @@ impl StatefulWidget for TreeView<'_> {
             // Git status marker
             let git_marker = git_status_marker(node.git_status);
             if !git_marker.is_empty() {
-                let mut marker_style = Style::default()
-                    .fg(git_status_color(node.git_status))
-                    .bg(bg);
+                let mut marker_style = git_status_style(node.git_status).bg(bg);
                 if is_ignored {
                     marker_style = marker_style.add_modifier(Modifier::DIM);
                 }
@@ -209,17 +204,17 @@ fn build_visible_indices(state: &mut FileTree, viewport_height: usize) -> Vec<us
     all_visible[start..end].to_vec()
 }
 
-fn git_status_color(status: GitStatus) -> ratatui::style::Color {
+fn git_status_style(status: GitStatus) -> Style {
     match status {
-        GitStatus::Modified => colors::GIT_MODIFIED,
-        GitStatus::Added | GitStatus::Untracked => colors::GIT_ADDED,
-        GitStatus::Deleted => colors::GIT_DELETED,
-        GitStatus::Ignored => colors::GIT_IGNORED,
-        GitStatus::Conflicted => colors::GIT_CONFLICTED,
-        GitStatus::StagedModified => colors::GIT_STAGED_MODIFIED,
-        GitStatus::StagedAdded => colors::GIT_STAGED_ADDED,
-        GitStatus::StagedDeleted => colors::GIT_STAGED_DELETED,
-        GitStatus::Clean => colors::DEFAULT_FG,
+        GitStatus::Modified => Style::default().fg(colors::GIT_MODIFIED),
+        GitStatus::Added | GitStatus::Untracked => Style::default().fg(colors::GIT_ADDED),
+        GitStatus::Deleted => Style::default().fg(colors::GIT_DELETED),
+        GitStatus::Ignored => Style::default().fg(colors::GIT_IGNORED),
+        GitStatus::Conflicted => Style::default().fg(colors::GIT_CONFLICTED).add_modifier(Modifier::BOLD),
+        GitStatus::StagedModified => Style::default().fg(colors::GIT_STAGED_MODIFIED).add_modifier(Modifier::DIM),
+        GitStatus::StagedAdded => Style::default().fg(colors::GIT_STAGED_ADDED).add_modifier(Modifier::DIM),
+        GitStatus::StagedDeleted => Style::default().fg(colors::GIT_STAGED_DELETED).add_modifier(Modifier::DIM),
+        GitStatus::Clean => Style::default().fg(colors::DEFAULT_FG),
     }
 }
 

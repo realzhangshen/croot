@@ -1,6 +1,8 @@
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use ratatui::style::{Color, Modifier, Style};
 
+use crate::render::colors;
+
 use super::highlight;
 use super::state::StyledSpan;
 
@@ -312,7 +314,7 @@ impl MdRenderer {
             self.current_cell_text.push('`');
             return;
         }
-        let style = Style::default().fg(Color::Rgb(0xE0, 0x8A, 0x20)); // orange
+        let style = Style::default().fg(colors::INLINE_CODE);
         self.current_line
             .push((format!("`{code}`"), style));
     }

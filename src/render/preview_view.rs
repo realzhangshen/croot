@@ -68,12 +68,12 @@ impl PreviewView<'_> {
         let bg = if self.focused {
             colors::STATUS_BAR_BG
         } else {
-            Color::Rgb(0x3C, 0x3C, 0x3C)
+            colors::UNFOCUSED_HEADER_BG
         };
         let fg = if self.focused {
             colors::STATUS_BAR_FG
         } else {
-            Color::Rgb(0xBB, 0xBB, 0xBB)
+            colors::UNFOCUSED_HEADER_FG
         };
 
         // Fill header background

@@ -1,16 +1,24 @@
 use ratatui::style::Color;
 
-// VS Code exact true colors for git status (unstaged / working tree)
-pub const GIT_MODIFIED: Color = Color::Rgb(0xE2, 0xC0, 0x6A); // #E2C06A yellow/orange
-pub const GIT_ADDED: Color = Color::Rgb(0x73, 0xC9, 0x90); // #73C990 green
-pub const GIT_DELETED: Color = Color::Rgb(0xE8, 0x59, 0x50); // #E85950 red
-pub const GIT_IGNORED: Color = Color::Rgb(0x80, 0x80, 0x80); // #808080 gray
-pub const GIT_CONFLICTED: Color = Color::Rgb(0xE8, 0x59, 0x50); // #E85950 red
+// Git status colors — ANSI 16 so they adapt to any terminal theme
+pub const GIT_MODIFIED: Color = Color::Yellow;
+pub const GIT_ADDED: Color = Color::Green;
+pub const GIT_DELETED: Color = Color::Red;
+pub const GIT_IGNORED: Color = Color::DarkGray;
+pub const GIT_CONFLICTED: Color = Color::Red;
 
-// Staged (index) variants — slightly muted/darker shades
-pub const GIT_STAGED_MODIFIED: Color = Color::Rgb(0xB8, 0x9A, 0x50); // #B89A50 darker yellow
-pub const GIT_STAGED_ADDED: Color = Color::Rgb(0x5A, 0xA0, 0x72); // #5AA072 darker green
-pub const GIT_STAGED_DELETED: Color = Color::Rgb(0xB8, 0x48, 0x40); // #B84840 darker red
+// Staged variants — same ANSI color, distinguished via DIM modifier in tree_view
+pub const GIT_STAGED_MODIFIED: Color = Color::Yellow;
+pub const GIT_STAGED_ADDED: Color = Color::Green;
+pub const GIT_STAGED_DELETED: Color = Color::Red;
+
+// Preview / UI accent colors
+pub const UNFOCUSED_HEADER_BG: Color = Color::DarkGray;
+pub const UNFOCUSED_HEADER_FG: Color = Color::Gray;
+pub const HEX_VALUES: Color = Color::LightBlue;
+pub const HEX_ASCII: Color = Color::Gray;
+pub const PREVIEW_DIR_NAME: Color = Color::LightYellow;
+pub const INLINE_CODE: Color = Color::Yellow;
 
 // UI colors — ANSI / terminal-default so they adapt to any theme
 pub const SELECTED_BG: Color = Color::DarkGray;

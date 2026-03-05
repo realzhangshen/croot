@@ -4,6 +4,8 @@ use std::path::Path;
 
 use ratatui::style::{Color, Modifier, Style};
 
+use crate::render::colors;
+
 use super::highlight;
 use super::render_md;
 use super::state::{PreviewKind, StyledSpan};
@@ -172,7 +174,7 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
 
     let dim = Style::default().fg(Color::DarkGray);
     let dir_style = Style::default()
-        .fg(Color::Rgb(0xDC, 0xDC, 0xAA))
+        .fg(colors::PREVIEW_DIR_NAME)
         .add_modifier(Modifier::BOLD);
     let file_style = Style::default();
 
@@ -218,8 +220,8 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
 /// Format: `00000000  48 65 6c 6c 6f 20 57 6f  72 6c 64 21 0a ...  |Hello World!.|`
 pub fn generate_hex_dump(data: &[u8]) -> Vec<Vec<StyledSpan>> {
     let offset_style = Style::default().fg(Color::DarkGray);
-    let hex_style = Style::default().fg(Color::Rgb(0x80, 0xB0, 0xD0));
-    let ascii_style = Style::default().fg(Color::Rgb(0xA0, 0xA0, 0xA0));
+    let hex_style = Style::default().fg(colors::HEX_VALUES);
+    let ascii_style = Style::default().fg(colors::HEX_ASCII);
     let separator_style = Style::default().fg(Color::DarkGray);
 
     let mut lines = Vec::new();

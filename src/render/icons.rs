@@ -22,169 +22,169 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
         // Rust
         "rs" => IconInfo {
             icon: "\u{e7a8}",
-            color: Color::Rgb(0xDE, 0xA5, 0x84),
+            color: Color::Red,
         },
         // JavaScript / TypeScript
         "js" | "mjs" | "cjs" => IconInfo {
             icon: "\u{e74e}",
-            color: Color::Rgb(0xF1, 0xE0, 0x5A),
+            color: Color::Yellow,
         },
         "ts" | "mts" | "cts" => IconInfo {
             icon: "\u{e628}",
-            color: Color::Rgb(0x31, 0x78, 0xC6),
+            color: Color::Blue,
         },
         "jsx" => IconInfo {
             icon: "\u{e7ba}",
-            color: Color::Rgb(0x61, 0xDA, 0xFB),
+            color: Color::Cyan,
         },
         "tsx" => IconInfo {
             icon: "\u{e7ba}",
-            color: Color::Rgb(0x31, 0x78, 0xC6),
+            color: Color::Blue,
         },
         // Web
         "html" | "htm" => IconInfo {
             icon: "\u{e736}",
-            color: Color::Rgb(0xE4, 0x4D, 0x26),
+            color: Color::LightRed,
         },
         "css" => IconInfo {
             icon: "\u{e749}",
-            color: Color::Rgb(0x56, 0x3D, 0x7C),
+            color: Color::Blue,
         },
         "scss" | "sass" => IconInfo {
             icon: "\u{e603}",
-            color: Color::Rgb(0xCD, 0x67, 0x99),
+            color: Color::LightMagenta,
         },
         "vue" => IconInfo {
             icon: "\u{f0844}",
-            color: Color::Rgb(0x41, 0xB8, 0x83),
+            color: Color::Cyan,
         },
         "svelte" => IconInfo {
             icon: "\u{e697}",
-            color: Color::Rgb(0xFF, 0x3E, 0x00),
+            color: Color::LightRed,
         },
         // Config / Data
         "json" => IconInfo {
             icon: "\u{e60b}",
-            color: Color::Rgb(0xF1, 0xE0, 0x5A),
+            color: Color::Yellow,
         },
         "yaml" | "yml" => IconInfo {
             icon: "\u{e6a8}",
-            color: Color::Rgb(0xCB, 0x17, 0x1E),
+            color: Color::LightYellow,
         },
         "toml" => IconInfo {
             icon: "\u{e6b2}",
-            color: Color::Rgb(0x9C, 0x40, 0x21),
+            color: Color::LightYellow,
         },
         "xml" => IconInfo {
             icon: "\u{f05c0}",
-            color: Color::Rgb(0xE4, 0x4D, 0x26),
+            color: Color::LightRed,
         },
         "csv" => IconInfo {
             icon: "\u{f0219}",
-            color: Color::Rgb(0x89, 0xA0, 0x2C),
+            color: Color::Green,
         },
         // Python
         "py" | "pyi" => IconInfo {
             icon: "\u{e73c}",
-            color: Color::Rgb(0x35, 0x72, 0xA5),
+            color: Color::Blue,
         },
         "ipynb" => IconInfo {
             icon: "\u{e678}",
-            color: Color::Rgb(0xF3, 0x76, 0x26),
+            color: Color::LightBlue,
         },
         // Go
         "go" => IconInfo {
             icon: "\u{e724}",
-            color: Color::Rgb(0x00, 0xAD, 0xD8),
+            color: Color::Cyan,
         },
         // C / C++
         "c" | "h" => IconInfo {
             icon: "\u{e61e}",
-            color: Color::Rgb(0x55, 0x9B, 0xD4),
+            color: Color::LightBlue,
         },
         "cpp" | "cxx" | "cc" | "hpp" => IconInfo {
             icon: "\u{e61d}",
-            color: Color::Rgb(0x55, 0x9B, 0xD4),
+            color: Color::LightBlue,
         },
         // Java / Kotlin
         "java" => IconInfo {
             icon: "\u{e738}",
-            color: Color::Rgb(0xB0, 0x72, 0x19),
+            color: Color::LightRed,
         },
         "kt" | "kts" => IconInfo {
             icon: "\u{e634}",
-            color: Color::Rgb(0x7F, 0x52, 0xFF),
+            color: Color::Magenta,
         },
         // Shell
         "sh" | "bash" | "zsh" | "fish" => IconInfo {
             icon: "\u{e795}",
-            color: Color::Rgb(0x89, 0xE0, 0x51),
+            color: Color::Green,
         },
         // Lua
         "lua" => IconInfo {
             icon: "\u{e620}",
-            color: Color::Rgb(0x00, 0x00, 0x80),
+            color: Color::Blue,
         },
         // Ruby
         "rb" => IconInfo {
             icon: "\u{e739}",
-            color: Color::Rgb(0xCC, 0x34, 0x2D),
+            color: Color::Red,
         },
         // Markdown / Docs
         "md" | "mdx" => IconInfo {
             icon: "\u{e73e}",
-            color: Color::Rgb(0x51, 0x9A, 0xBA),
+            color: Color::LightCyan,
         },
         "txt" => IconInfo {
             icon: "\u{f0219}",
-            color: Color::Rgb(0x89, 0xA0, 0x2C),
+            color: Color::White,
         },
         "pdf" => IconInfo {
             icon: "\u{f0722}",
-            color: Color::Rgb(0xBD, 0x00, 0x00),
+            color: Color::Red,
         },
         // Images
         "png" | "jpg" | "jpeg" | "gif" | "bmp" | "ico" | "webp" | "svg" => IconInfo {
             icon: "\u{f021f}",
-            color: Color::Rgb(0xA0, 0x74, 0xC4),
+            color: Color::Magenta,
         },
         // Git
         "gitignore" | "gitmodules" | "gitattributes" => IconInfo {
             icon: "\u{e702}",
-            color: Color::Rgb(0xF0, 0x50, 0x33),
+            color: Color::LightRed,
         },
         // Docker
         "dockerfile" => IconInfo {
             icon: "\u{f0868}",
-            color: Color::Rgb(0x38, 0x4D, 0x54),
+            color: Color::LightBlue,
         },
         // Lock files
         "lock" => IconInfo {
             icon: "\u{f023a}",
-            color: Color::Rgb(0x80, 0x80, 0x80),
+            color: Color::DarkGray,
         },
         // Env
         "env" => IconInfo {
             icon: "\u{f0614}",
-            color: Color::Rgb(0xFA, 0xF7, 0x43),
+            color: Color::Yellow,
         },
         // Zip / Archive
         "zip" | "tar" | "gz" | "bz2" | "xz" | "7z" | "rar" => IconInfo {
             icon: "\u{f0187}",
-            color: Color::Rgb(0xDA, 0xA5, 0x20),
+            color: Color::Yellow,
         },
         // Misc
         "sql" => IconInfo {
             icon: "\u{f01bc}",
-            color: Color::Rgb(0xDA, 0xD8, 0xD8),
+            color: Color::White,
         },
         "graphql" | "gql" => IconInfo {
             icon: "\u{e662}",
-            color: Color::Rgb(0xE1, 0x00, 0x98),
+            color: Color::Magenta,
         },
         "wasm" => IconInfo {
             icon: "\u{e6a1}",
-            color: Color::Rgb(0x65, 0x4F, 0xF0),
+            color: Color::LightMagenta,
         },
         _ => default_icon(name),
     }
@@ -196,19 +196,19 @@ fn default_icon(name: &str) -> IconInfo {
     match lower.as_str() {
         "dockerfile" => IconInfo {
             icon: "\u{f0868}",
-            color: Color::Rgb(0x38, 0x4D, 0x54),
+            color: Color::LightBlue,
         },
         "makefile" | "justfile" => IconInfo {
             icon: "\u{e779}",
-            color: Color::Rgb(0x6D, 0x8A, 0x88),
+            color: Color::Green,
         },
         "cargo.toml" | "cargo.lock" => IconInfo {
             icon: "\u{e7a8}",
-            color: Color::Rgb(0xDE, 0xA5, 0x84),
+            color: Color::Red,
         },
         "license" | "licence" => IconInfo {
             icon: "\u{f0fc3}",
-            color: Color::Rgb(0xD0, 0xBF, 0x41),
+            color: Color::LightYellow,
         },
         _ => IconInfo {
             icon: "\u{f0214}",
