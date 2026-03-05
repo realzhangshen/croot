@@ -28,7 +28,7 @@ use crate::render::context_menu::{ContextMenuState, ContextMenuWidget, MenuActio
 use crate::render::input_dialog::{DialogKind, InputDialogState, InputDialogWidget};
 use crate::render::preview_view::PreviewView;
 use crate::render::search_bar::{fuzzy_match, SearchBar, SearchState};
-use crate::render::status_bar::StatusBar;
+use crate::render::status_bar::{HyperlinkRegion, StatusBar};
 use crate::render::tree_view::TreeView;
 use crate::tree::forest::FileTree;
 
@@ -60,6 +60,8 @@ pub struct App {
     search_state: SearchState,
     /// Filtered node indices when search is active. Empty = no filter.
     search_filtered: Vec<usize>,
+    // Hyperlink regions for post-render OSC 8 emission
+    hyperlink_regions: Vec<HyperlinkRegion>,
 }
 
 impl App {
@@ -104,6 +106,7 @@ impl App {
             input_dialog: None,
             search_state: SearchState::new(),
             search_filtered: Vec::new(),
+            hyperlink_regions: Vec::new(),
         })
     }
 
@@ -128,6 +131,7 @@ impl App {
 
         loop {
             terminal.draw(|frame| self.draw(frame))?;
+            self.emit_osc8_hyperlinks()?;
 
             tokio::select! {
                 event = reader.next() => {
@@ -205,6 +209,29 @@ impl App {
             }
         }
 
+        Ok(())
+    }
+
+    fn emit_osc8_hyperlinks(&self) -> anyhow::Result<()> {
+        use std::io::Write;
+        let mut stdout = std::io::stdout();
+        for region in &self.hyperlink_regions {
+            crossterm::queue!(stdout, crossterm::cursor::MoveTo(region.x, region.y))?;
+            crossterm::queue!(
+                stdout,
+                crossterm::style::SetAttribute(crossterm::style::Attribute::Reverse)
+            )?;
+            write!(
+                stdout,
+                "\x1b]8;;{}\x07{}\x1b]8;;\x07",
+                region.url, region.text
+            )?;
+            crossterm::queue!(
+                stdout,
+                crossterm::style::SetAttribute(crossterm::style::Attribute::Reset)
+            )?;
+        }
+        stdout.flush()?;
         Ok(())
     }
 
@@ -363,6 +390,7 @@ impl App {
             selected_path: selected_rel.as_deref(),
             selected_abs_path: selected_abs.as_deref(),
         };
+        self.hyperlink_regions = status_bar.hyperlink_regions(status_area);
         status_bar.render(status_area, frame.buffer_mut());
 
         // Search bar (shown when in search mode or filter is active)
