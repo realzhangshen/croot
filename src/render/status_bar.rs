@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::Widget,
 };
+use unicode_width::UnicodeWidthStr;
 
 use super::colors;
 
@@ -38,7 +39,7 @@ impl Widget for StatusBar<'_> {
         // Branch info
         if let Some(branch) = self.branch {
             let s = format!("  {branch} ");
-            col += s.len() as u16;
+            col += s.width() as u16;
             spans.push(Span::styled(s, style));
             col += 2;
             spans.push(Span::styled("│ ", style));
@@ -47,8 +48,8 @@ impl Widget for StatusBar<'_> {
         // Root name — track position for hyperlink
         let root_span = format!(" {} ", self.root_name);
         let root_start = col + 1; // after the leading space
-        let root_end = root_start + self.root_name.len() as u16;
-        col += root_span.len() as u16;
+        let root_end = root_start + self.root_name.width() as u16;
+        col += root_span.width() as u16;
         spans.push(Span::styled(root_span, style));
         col += 2;
         spans.push(Span::styled("│ ", style));
@@ -59,8 +60,8 @@ impl Widget for StatusBar<'_> {
         if let Some(sel_path) = self.selected_path {
             let sel_span = format!(" {sel_path} ");
             sel_start = col + 1;
-            sel_end = sel_start + sel_path.len() as u16;
-            col += sel_span.len() as u16;
+            sel_end = sel_start + sel_path.width() as u16;
+            col += sel_span.width() as u16;
             spans.push(Span::styled(sel_span, style));
             spans.push(Span::styled("│ ", style));
         }

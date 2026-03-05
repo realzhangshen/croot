@@ -22,11 +22,13 @@ pub const INLINE_CODE: Color = Color::Yellow;
 
 // UI colors — ANSI / terminal-default so they adapt to any theme
 pub const SELECTED_BG: Color = Color::DarkGray;
-pub const HOVER_BG: Color = Color::Indexed(238);
+pub const HOVER_BG: Color = Color::Indexed(240);
 pub const TREE_LINE: Color = Color::DarkGray;
 pub const STATUS_BAR_BG: Color = Color::DarkGray;
-pub const STATUS_BAR_FG: Color = Color::Reset;
+pub const STATUS_BAR_FG: Color = Color::White;
 pub const DIR_COLOR: Color = Color::Yellow;
+pub const MENU_BORDER: Color = Color::Gray;
+pub const MENU_SELECTED_BG: Color = Color::Indexed(244);
 pub const DEFAULT_FG: Color = Color::Reset;
 
 /// Whether the terminal is currently using a light colour scheme.
