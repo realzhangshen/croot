@@ -7,8 +7,8 @@ use super::highlight;
 use super::state::StyledSpan;
 
 /// Render Markdown source into pre-styled lines.
-pub fn render_markdown(source: &str, width: usize, is_light: bool) -> Vec<Vec<StyledSpan>> {
-    let mut renderer = MdRenderer::new(width, is_light);
+pub fn render_markdown(source: &str, width: usize) -> Vec<Vec<StyledSpan>> {
+    let mut renderer = MdRenderer::new(width);
     let opts = Options::ENABLE_TABLES
         | Options::ENABLE_STRIKETHROUGH
         | Options::ENABLE_TASKLISTS
@@ -41,11 +41,10 @@ struct MdRenderer {
     current_cell_text: String,
     link_url: Option<String>,
     width: usize,
-    is_light: bool,
 }
 
 impl MdRenderer {
-    fn new(width: usize, is_light: bool) -> Self {
+    fn new(width: usize) -> Self {
         Self {
             lines: Vec::new(),
             current_line: Vec::new(),
@@ -64,7 +63,6 @@ impl MdRenderer {
             current_cell_text: String::new(),
             link_url: None,
             width: width.max(20),
-            is_light,
         }
     }
 
@@ -326,7 +324,7 @@ impl MdRenderer {
 
         let border_style = Style::default().fg(Color::DarkGray);
         let highlighted = match lang.as_deref() {
-            Some(l) if !l.is_empty() => highlight::highlight_code(l, &code, 10_000, self.is_light),
+            Some(l) if !l.is_empty() => highlight::highlight_code(l, &code, 10_000),
             _ => code
                 .lines()
                 .map(|line| vec![(line.to_string(), Style::default())])

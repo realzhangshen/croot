@@ -760,7 +760,6 @@ impl App {
         let delay = Duration::from_millis(self.config.preview.preview_delay_ms);
         let max_file_size_kb = self.config.preview.max_file_size_kb;
         let syntax_highlight = self.config.preview.syntax_highlight;
-        let is_light = colors::is_light();
         let render_markdown = self.preview_state.render_markdown;
         let preview_width = self.preview_content_width as usize;
 
@@ -773,7 +772,6 @@ impl App {
                     &path,
                     max_file_size_kb,
                     syntax_highlight,
-                    is_light,
                     render_markdown,
                     preview_width,
                 )

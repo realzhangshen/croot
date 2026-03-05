@@ -22,21 +22,11 @@ pub const INLINE_CODE: Color = Color::Yellow;
 
 // UI colors — ANSI / terminal-default so they adapt to any theme
 pub const SELECTED_BG: Color = Color::DarkGray;
-pub const HOVER_BG: Color = Color::Indexed(240);
+pub const HOVER_BG: Color = Color::DarkGray;
 pub const TREE_LINE: Color = Color::DarkGray;
 pub const STATUS_BAR_BG: Color = Color::DarkGray;
 pub const STATUS_BAR_FG: Color = Color::White;
 pub const DIR_COLOR: Color = Color::Yellow;
 pub const MENU_BORDER: Color = Color::Gray;
-pub const MENU_SELECTED_BG: Color = Color::Indexed(244);
+pub const MENU_SELECTED_BG: Color = Color::Blue;
 pub const DEFAULT_FG: Color = Color::Reset;
-
-/// Whether the terminal is currently using a light colour scheme.
-/// Uses macOS `defaults` to check `AppleInterfaceStyle`; defaults to dark.
-pub fn is_light() -> bool {
-    !std::process::Command::new("defaults")
-        .args(["read", "-g", "AppleInterfaceStyle"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "Dark")
-        .unwrap_or(true)
-}

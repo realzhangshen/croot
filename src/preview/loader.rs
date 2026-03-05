@@ -22,12 +22,10 @@ pub struct LoadedPreview {
 /// Classifies the file type, reads content, and produces pre-styled lines.
 /// `max_file_size_kb`: skip text preview for files larger than this (in KB).
 /// `syntax_highlight`: whether to apply syntax highlighting.
-/// `is_light`: terminal light/dark mode for theme selection.
 pub fn load_preview(
     path: &Path,
     max_file_size_kb: u64,
     syntax_highlight: bool,
-    is_light: bool,
     render_markdown: bool,
     preview_width: usize,
 ) -> LoadedPreview {
@@ -81,7 +79,7 @@ pub fn load_preview(
     }
 
     // Text file — read full content
-    load_text_preview(path, &file_info, syntax_highlight, is_light, render_markdown, preview_width)
+    load_text_preview(path, &file_info, syntax_highlight, render_markdown, preview_width)
 }
 
 fn is_markdown_file(path: &Path) -> bool {
@@ -94,7 +92,6 @@ fn load_text_preview(
     path: &Path,
     file_info: &str,
     syntax_highlight: bool,
-    is_light: bool,
     render_markdown: bool,
     preview_width: usize,
 ) -> LoadedPreview {
@@ -111,7 +108,7 @@ fn load_text_preview(
 
     // Markdown rendering path
     if render_markdown && is_markdown_file(path) {
-        let lines = render_md::render_markdown(&content, preview_width, is_light);
+        let lines = render_md::render_markdown(&content, preview_width);
         return LoadedPreview {
             kind: PreviewKind::Rendered,
             content: lines,
@@ -121,7 +118,7 @@ fn load_text_preview(
 
     let max_lines = 10_000; // Cap for rendering performance
     let lines = if syntax_highlight {
-        highlight::highlight_file(path, &content, max_lines, is_light)
+        highlight::highlight_file(path, &content, max_lines)
     } else {
         highlight::plain_lines(&content, max_lines)
     };

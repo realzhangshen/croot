@@ -9,7 +9,6 @@ use super::state::StyledSpan;
 
 static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
 static THEME_DARK: OnceLock<Theme> = OnceLock::new();
-static THEME_LIGHT: OnceLock<Theme> = OnceLock::new();
 
 fn syntax_set() -> &'static SyntaxSet {
     SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines)
@@ -19,13 +18,6 @@ fn theme_dark() -> &'static Theme {
     THEME_DARK.get_or_init(|| {
         let ts = ThemeSet::load_defaults();
         ts.themes["base16-ocean.dark"].clone()
-    })
-}
-
-fn theme_light() -> &'static Theme {
-    THEME_LIGHT.get_or_init(|| {
-        let ts = ThemeSet::load_defaults();
-        ts.themes["base16-ocean.light"].clone()
     })
 }
 
@@ -56,14 +48,9 @@ pub fn highlight_file(
     path: &Path,
     content: &str,
     max_lines: usize,
-    is_light: bool,
 ) -> Vec<Vec<StyledSpan>> {
     let ss = syntax_set();
-    let theme = if is_light {
-        theme_light()
-    } else {
-        theme_dark()
-    };
+    let theme = theme_dark();
 
     // Find syntax by extension, then by first line
     let syntax = ss
@@ -111,14 +98,9 @@ pub fn highlight_code(
     lang: &str,
     code: &str,
     max_lines: usize,
-    is_light: bool,
 ) -> Vec<Vec<StyledSpan>> {
     let ss = syntax_set();
-    let theme = if is_light {
-        theme_light()
-    } else {
-        theme_dark()
-    };
+    let theme = theme_dark();
 
     let syntax = ss
         .find_syntax_by_token(lang)
