@@ -1,5 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use crate::render::context_menu::MenuAction;
+
 /// Actions that can be triggered by user input.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
@@ -34,7 +36,72 @@ pub enum Action {
     SeparatorDragStart,
     /// Mouse drag update at screen (col, row) — app routes based on drag state.
     DragUpdate(u16, u16),
+    /// Mouse hover at screen (col, row) for tree row highlighting.
+    Hover(u16, u16),
+    /// Open the selected file in $EDITOR via cmux.
+    OpenEditor,
+    /// Right-click context menu at screen (col, row).
+    RightClick(u16, u16),
+    /// Execute a context menu action.
+    MenuSelect(MenuAction),
+    /// Close the context menu.
+    MenuClose,
+    /// Navigate context menu up.
+    MenuUp,
+    /// Navigate context menu down.
+    MenuDown,
+    /// File operation: new file in current dir.
+    NewFile,
+    /// File operation: new directory in current dir.
+    NewDir,
+    /// File operation: rename current node.
+    RenameNode,
+    /// File operation: delete current node.
+    DeleteNode,
+    /// Dialog input: user typed a character.
+    DialogChar(char),
+    /// Dialog input: backspace.
+    DialogBackspace,
+    /// Dialog input: confirm.
+    DialogConfirm,
+    /// Dialog input: cancel.
+    DialogCancel,
+    /// Dialog input: move cursor left.
+    DialogLeft,
+    /// Dialog input: move cursor right.
+    DialogRight,
+    /// Toggle multi-select on current node.
+    ToggleSelect,
+    /// Clear multi-selection.
+    ClearSelect,
+    /// Delete all selected nodes.
+    DeleteSelected,
+    /// Start search mode.
+    StartSearch,
+    /// Search input: typed a character.
+    SearchChar(char),
+    /// Search input: backspace.
+    SearchBackspace,
+    /// Search input: confirm search (keep filter, return to normal).
+    SearchConfirm,
+    /// Search input: cancel search (clear filter).
+    SearchCancel,
+    /// Search input: move cursor.
+    SearchLeft,
+    SearchRight,
+    /// Navigate to next/prev match in search results.
+    SearchNext,
+    SearchPrev,
     None,
+}
+
+/// App input mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InputMode {
+    Normal,
+    ContextMenu,
+    Dialog,
+    Search,
 }
 
 /// Map a keyboard event to an Action.
@@ -84,11 +151,28 @@ pub fn handle_key(key: KeyEvent, preview_visible: bool, preview_has_selection: b
             }
         }
 
+        // Open in editor
+        KeyCode::Char('o') => Action::OpenEditor,
+
         // Preview toggle
         KeyCode::Char('p') => Action::TogglePreview,
 
         // Toggle Markdown render mode
         KeyCode::Char('m') => Action::ToggleRender,
+
+        // File operations
+        KeyCode::Char('a') => Action::NewFile,
+        KeyCode::Char('A') => Action::NewDir,
+        KeyCode::Char('R') => Action::RenameNode,
+        KeyCode::Char('D') => Action::DeleteNode,
+
+        // Multi-select
+        KeyCode::Char('v') => Action::ToggleSelect,
+        KeyCode::Char('V') => Action::ClearSelect,
+        KeyCode::Char('X') => Action::DeleteSelected,
+
+        // Search
+        KeyCode::Char('/') => Action::StartSearch,
 
         // Refresh
         KeyCode::Char('r') => Action::Refresh,
@@ -99,6 +183,45 @@ pub fn handle_key(key: KeyEvent, preview_visible: bool, preview_has_selection: b
         KeyCode::Char('g') => Action::GotoTop,
         KeyCode::Char('G') => Action::GotoBottom,
 
+        _ => Action::None,
+    }
+}
+
+/// Map a keyboard event in context menu mode.
+pub fn handle_key_menu(key: KeyEvent) -> Action {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => Action::MenuClose,
+        KeyCode::Up | KeyCode::Char('k') => Action::MenuUp,
+        KeyCode::Down | KeyCode::Char('j') => Action::MenuDown,
+        KeyCode::Enter => Action::MenuSelect(MenuAction::OpenEditor), // placeholder, app resolves
+        _ => Action::None,
+    }
+}
+
+/// Map a keyboard event in search mode.
+pub fn handle_key_search(key: KeyEvent) -> Action {
+    match key.code {
+        KeyCode::Esc => Action::SearchCancel,
+        KeyCode::Enter => Action::SearchConfirm,
+        KeyCode::Backspace => Action::SearchBackspace,
+        KeyCode::Left => Action::SearchLeft,
+        KeyCode::Right => Action::SearchRight,
+        KeyCode::Tab | KeyCode::Down => Action::SearchNext,
+        KeyCode::BackTab | KeyCode::Up => Action::SearchPrev,
+        KeyCode::Char(c) => Action::SearchChar(c),
+        _ => Action::None,
+    }
+}
+
+/// Map a keyboard event in dialog mode.
+pub fn handle_key_dialog(key: KeyEvent) -> Action {
+    match key.code {
+        KeyCode::Esc => Action::DialogCancel,
+        KeyCode::Enter => Action::DialogConfirm,
+        KeyCode::Backspace => Action::DialogBackspace,
+        KeyCode::Left => Action::DialogLeft,
+        KeyCode::Right => Action::DialogRight,
+        KeyCode::Char(c) => Action::DialogChar(c),
         _ => Action::None,
     }
 }

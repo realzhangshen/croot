@@ -17,6 +17,9 @@ use super::icons;
 
 pub struct TreeView<'a> {
     pub config: &'a TreeConfig,
+    pub hover_row: Option<usize>,
+    /// When non-empty, only show nodes at these indices (search filter).
+    pub filter_indices: &'a [usize],
 }
 
 impl StatefulWidget for TreeView<'_> {
@@ -27,8 +30,12 @@ impl StatefulWidget for TreeView<'_> {
         let height = area.height as usize;
 
         // Build a list of visible node indices, skipping compacted intermediate dirs.
-        // This also handles scroll adjustment internally.
-        let visible_indices = build_visible_indices(state, height);
+        // When filter is active, use filtered indices instead.
+        let visible_indices = if self.filter_indices.is_empty() {
+            build_visible_indices(state, height)
+        } else {
+            build_filtered_visible(state, self.filter_indices, height)
+        };
 
         // Store for mouse click resolution
         state.rendered_indices.clone_from(&visible_indices);
@@ -43,14 +50,18 @@ impl StatefulWidget for TreeView<'_> {
             }
 
             let node = &state.nodes[absolute_idx];
-            let is_selected = absolute_idx == state.cursor;
+            let is_cursor = absolute_idx == state.cursor;
+            let is_multi_selected = state.selected_set.contains(&absolute_idx);
+            let is_hovered = self.hover_row == Some(row);
 
             // Check if this node starts a compact chain
             let chain_len = state.compact_chain_len(absolute_idx);
 
             let mut spans = Vec::new();
-            let bg = if is_selected {
+            let bg = if is_cursor || is_multi_selected {
                 colors::SELECTED_BG
+            } else if is_hovered {
+                colors::HOVER_BG
             } else {
                 ratatui::style::Color::Reset
             };
@@ -89,6 +100,14 @@ impl StatefulWidget for TreeView<'_> {
             } else {
                 icons::icon_for_file(&node.name, false)
             };
+
+            // Multi-select marker
+            if is_multi_selected {
+                spans.push(Span::styled(
+                    "● ",
+                    Style::default().fg(ratatui::style::Color::Cyan).bg(bg),
+                ));
+            }
 
             let is_ignored = node.git_status == GitStatus::Ignored;
 
@@ -134,8 +153,8 @@ impl StatefulWidget for TreeView<'_> {
             // Build info columns (size + modified) for right-aligned display
             let info_text = build_info_text(node, self.config.show_size, self.config.show_modified);
 
-            // Fill entire row with bg first for selected highlight
-            if is_selected {
+            // Fill entire row with bg first for cursor/selected/hover highlight
+            if is_cursor || is_multi_selected || is_hovered {
                 for x in area.x..(area.x + area.width) {
                     if let Some(cell) = buf.cell_mut((x, y)) {
                         cell.set_style(Style::default().bg(bg));
@@ -202,6 +221,41 @@ fn build_visible_indices(state: &mut FileTree, viewport_height: usize) -> Vec<us
     let start = state.scroll_offset;
     let end = (start + viewport_height).min(all_visible.len());
     all_visible[start..end].to_vec()
+}
+
+/// Build visible indices from a pre-filtered set. Uses the same scroll logic.
+fn build_filtered_visible(
+    state: &mut FileTree,
+    filter_indices: &[usize],
+    viewport_height: usize,
+) -> Vec<usize> {
+    if filter_indices.is_empty() {
+        return Vec::new();
+    }
+
+    // Ensure cursor snaps to a filtered index
+    if !filter_indices.contains(&state.cursor) {
+        // Find the nearest filtered index
+        if let Some(&nearest) = filter_indices.first() {
+            state.cursor = nearest;
+        }
+    }
+
+    let cursor_pos = filter_indices
+        .iter()
+        .position(|&idx| idx == state.cursor)
+        .unwrap_or(0);
+
+    if cursor_pos < state.scroll_offset {
+        state.scroll_offset = cursor_pos;
+    }
+    if cursor_pos >= state.scroll_offset + viewport_height {
+        state.scroll_offset = cursor_pos - viewport_height + 1;
+    }
+
+    let start = state.scroll_offset;
+    let end = (start + viewport_height).min(filter_indices.len());
+    filter_indices[start..end].to_vec()
 }
 
 fn git_status_style(status: GitStatus) -> Style {

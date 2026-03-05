@@ -28,6 +28,13 @@ pub fn preview_command(path: &Path) -> String {
     }
 }
 
+/// Build the command to open a file in $EDITOR.
+pub fn editor_command(path: &Path) -> String {
+    let path_str = shell_escape(path);
+    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".into());
+    format!("{editor} {path_str}")
+}
+
 /// Escape a path for shell use.
 fn shell_escape(path: &Path) -> String {
     let s = path.to_string_lossy();

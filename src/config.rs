@@ -54,12 +54,23 @@ pub struct PreviewConfig {
     pub render_markdown: bool,
 }
 
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenAction {
+    Preview,
+    Editor,
+    #[default]
+    CmuxPreview,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CmuxConfig {
     #[serde(default = "default_split_direction")]
     pub split_direction: String,
     #[serde(default = "default_split_ratio")]
     pub split_ratio: f32,
+    #[serde(default)]
+    pub open_action: OpenAction,
 }
 
 fn default_true() -> bool {
@@ -119,6 +130,7 @@ impl Default for CmuxConfig {
         Self {
             split_direction: "right".into(),
             split_ratio: 0.5,
+            open_action: OpenAction::default(),
         }
     }
 }

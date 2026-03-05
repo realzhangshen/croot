@@ -19,6 +19,8 @@ pub struct FileTree {
     pub file_count: usize,
     /// Cached count of visible directory nodes.
     pub dir_count: usize,
+    /// Multi-selected node indices.
+    pub selected_set: HashSet<usize>,
 }
 
 impl FileTree {
@@ -38,6 +40,7 @@ impl FileTree {
             rendered_indices: Vec::new(),
             file_count,
             dir_count,
+            selected_set: HashSet::new(),
         }
     }
 
@@ -268,6 +271,51 @@ impl FileTree {
         self.cursor = self.cursor.min(self.nodes.len().saturating_sub(1));
     }
 
+    /// Toggle multi-select on the current cursor node.
+    pub fn toggle_select(&mut self) {
+        let idx = self.cursor;
+        if idx < self.nodes.len() {
+            if self.selected_set.contains(&idx) {
+                self.selected_set.remove(&idx);
+            } else {
+                self.selected_set.insert(idx);
+            }
+        }
+    }
+
+    /// Select a range of nodes from `anchor` to `target` (inclusive).
+    #[allow(dead_code)]
+    pub fn select_range(&mut self, anchor: usize, target: usize) {
+        let (start, end) = if anchor <= target {
+            (anchor, target)
+        } else {
+            (target, anchor)
+        };
+        for i in start..=end.min(self.nodes.len().saturating_sub(1)) {
+            self.selected_set.insert(i);
+        }
+    }
+
+    /// Clear multi-selection.
+    pub fn clear_selection(&mut self) {
+        self.selected_set.clear();
+    }
+
+    /// Get paths of all selected nodes (or just the cursor if none selected).
+    pub fn selected_paths(&self) -> Vec<PathBuf> {
+        if self.selected_set.is_empty() {
+            if let Some(node) = self.nodes.get(self.cursor) {
+                return vec![node.path.clone()];
+            }
+            return Vec::new();
+        }
+        self.selected_set
+            .iter()
+            .filter_map(|&idx| self.nodes.get(idx))
+            .map(|node| node.path.clone())
+            .collect()
+    }
+
     /// Check if a node at `index` is the last child of its parent.
     pub fn is_last_sibling(&self, index: usize) -> bool {
         let depth = self.nodes[index].depth;
@@ -432,6 +480,7 @@ mod tests {
             rendered_indices: Vec::new(),
             file_count,
             dir_count,
+            selected_set: HashSet::new(),
         }
     }
 
@@ -608,6 +657,7 @@ mod tests {
             rendered_indices: Vec::new(),
             file_count,
             dir_count,
+            selected_set: HashSet::new(),
         }
     }
 

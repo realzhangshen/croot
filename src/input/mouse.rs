@@ -30,6 +30,9 @@ pub fn handle_mouse(
                 Action::None
             }
         }
+        MouseEventKind::Down(MouseButton::Right) => {
+            Action::RightClick(event.column, event.row)
+        }
         MouseEventKind::Drag(MouseButton::Left) => {
             Action::DragUpdate(event.column, event.row)
         }
@@ -47,6 +50,7 @@ pub fn handle_mouse(
                 Action::ScrollDown(3)
             }
         }
+        MouseEventKind::Moved => Action::Hover(event.column, event.row),
         _ => Action::None,
     }
 }
