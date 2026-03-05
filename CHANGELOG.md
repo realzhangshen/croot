@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-03-05
+
+### Added
+- Draggable separator between tree and preview panes (ratio clamped 20%-80%)
+- Markdown rendering preview with pulldown-cmark
+- Preview re-renders on terminal resize to re-wrap content at new width
+
 ## [0.2.3] - 2026-03-05
 
 ### Changed
@@ -65,7 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Git ignored file display: removed redundant status marker, fixed directory lookup
 - macOS x86_64 CI build using correct runner (macos-14)
 
-[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/realzhangshen/croot/compare/v0.2.4...v0.2.5
 [0.2.3]: https://github.com/realzhangshen/croot/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/realzhangshen/croot/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/realzhangshen/croot/compare/v0.2.0...v0.2.1
