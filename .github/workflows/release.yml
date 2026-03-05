@@ -3,14 +3,31 @@ name: Release
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v*.*.*"
 
 permissions:
   contents: write
 
 jobs:
+  validate-tag:
+    name: Validate tag format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate semantic version tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "error: invalid release tag '$TAG'"
+            echo "expected format: vMAJOR.MINOR.PATCH (example: v0.2.4)"
+            exit 1
+          fi
+
+          echo "tag '$TAG' is valid."
+
   build:
     name: Build ${{ matrix.target }}
+    needs: validate-tag
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -80,6 +97,16 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
+      - name: Validate Homebrew tap token
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [[ -z "${HOMEBREW_TAP_TOKEN:-}" ]]; then
+            echo "error: HOMEBREW_TAP_TOKEN is not set."
+            echo "Add this repository secret with contents:write access to realzhangshen/homebrew-croot."
+            exit 1
+          fi
+
       - name: Download release assets and compute SHA256
         env:
           TAG: ${{ github.ref_name }}
@@ -105,7 +132,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          cat > formula.rb <<EOF
+          cat > formula.rb <<EOF2
           class Croot < Formula
             desc "Lightweight terminal file tree sidebar with vim-style navigation"
             homepage "https://github.com/realzhangshen/croot"
@@ -130,7 +157,7 @@ jobs:
               assert_match version.to_s, shell_output("#{bin}/croot --version")
             end
           end
-          EOF
+          EOF2
 
           CONTENT=$(base64 -w 0 < formula.rb)
 
