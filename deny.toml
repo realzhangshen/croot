@@ -1,6 +1,11 @@
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
+ignore = [
+    "RUSTSEC-2025-0141", # bincode unmaintained (transitive dep via syntect)
+    "RUSTSEC-2024-0384", # instant unmaintained (transitive dep via notify)
+    "RUSTSEC-2024-0436", # paste unmaintained (transitive dep via ratatui)
+]
 
 [licenses]
 allow = [
@@ -13,6 +18,8 @@ allow = [
     "Unicode-DFS-2016",
     "OpenSSL",
     "Zlib",
+    "BSL-1.0",
+    "CC0-1.0",
 ]
 
 [bans]
