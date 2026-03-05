@@ -3,9 +3,11 @@ mod cmux;
 mod config;
 mod git;
 mod input;
+mod layout;
 mod preview;
 mod render;
 mod tree;
+mod watcher;
 
 use std::io;
 use std::path::PathBuf;

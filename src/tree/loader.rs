@@ -3,44 +3,20 @@ use std::path::Path;
 
 use ignore::WalkBuilder;
 
+use crate::config::TreeConfig;
+
 use super::node::{NodeKind, TreeNode};
 use super::sorter::sort_nodes;
 
 /// Read one level of a directory, respecting .gitignore rules and exclude list.
 /// Returns sorted children (directories first, then natural sort).
-#[allow(dead_code)]
-pub fn load_children(
-    dir: &Path,
-    depth: usize,
-    show_hidden: bool,
-    dirs_first: bool,
-    exclude: &[String],
-    show_ignored: bool,
-) -> Vec<TreeNode> {
-    load_children_with_meta(
-        dir,
-        depth,
-        show_hidden,
-        dirs_first,
-        exclude,
-        show_ignored,
-        false,
-        false,
-    )
-}
-
-/// Like `load_children` but optionally populates size and modified metadata.
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-pub fn load_children_with_meta(
-    dir: &Path,
-    depth: usize,
-    show_hidden: bool,
-    dirs_first: bool,
-    exclude: &[String],
-    show_ignored: bool,
-    show_size: bool,
-    show_modified: bool,
-) -> Vec<TreeNode> {
+pub fn load_children_with_meta(dir: &Path, depth: usize, config: &TreeConfig) -> Vec<TreeNode> {
+    let show_hidden = config.show_hidden;
+    let dirs_first = config.dirs_first;
+    let exclude = &config.exclude;
+    let show_ignored = config.show_ignored;
+    let show_size = config.show_size;
+    let show_modified = config.show_modified;
     let mut nodes = Vec::new();
     let exclude_set: HashSet<&str> = exclude.iter().map(std::string::String::as_str).collect();
     let need_meta = show_size || show_modified;

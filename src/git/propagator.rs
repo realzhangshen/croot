@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::tree::node::GitStatus;
+use super::types::GitStatus;
 
 /// Propagate file statuses upward to parent directories.
 /// Each directory gets the most severe status among its descendants.

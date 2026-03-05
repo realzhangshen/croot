@@ -3,13 +3,6 @@ use std::path::PathBuf;
 use ratatui::style::Style;
 use unicode_width::UnicodeWidthChar;
 
-/// Which pane has keyboard focus.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FocusPane {
-    Tree,
-    Preview,
-}
-
 /// A position in content space (line index + display column).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ContentPos {
@@ -90,6 +83,8 @@ pub struct PreviewState {
     pub file_info: String,
     /// Current mouse text selection.
     pub selection: Selection,
+    /// Cached mtime of the currently displayed file (to skip redundant reloads).
+    pub cached_mtime: Option<std::time::SystemTime>,
 }
 
 impl PreviewState {
@@ -102,6 +97,7 @@ impl PreviewState {
             total_lines: 0,
             file_info: String::new(),
             selection: Selection::new(),
+            cached_mtime: None,
         }
     }
 
@@ -123,6 +119,7 @@ impl PreviewState {
         self.total_lines = 0;
         self.file_info.clear();
         self.selection.clear();
+        self.cached_mtime = None;
     }
 
     /// Apply a loaded preview result.
@@ -133,6 +130,9 @@ impl PreviewState {
         content: Vec<Vec<StyledSpan>>,
         file_info: String,
     ) {
+        self.cached_mtime = std::fs::metadata(&path)
+            .ok()
+            .and_then(|m| m.modified().ok());
         self.total_lines = content.len();
         self.content = content;
         self.kind = kind;

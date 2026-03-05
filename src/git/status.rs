@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 
 use git2::{Repository, StatusOptions};
 
-use crate::tree::node::GitStatus;
+use crate::tree::node::TreeNode;
 
 use super::propagator::propagate_to_dirs;
+use super::types::GitStatus;
 
 pub struct GitState {
     repo_root: PathBuf,
@@ -80,6 +81,13 @@ impl GitState {
             current = dir.parent();
         }
         false
+    }
+
+    /// Apply git statuses to a slice of tree nodes.
+    pub fn apply_to_nodes(&self, nodes: &mut [TreeNode]) {
+        for node in nodes {
+            node.git_status = self.status_for(&node.path, node.is_dir());
+        }
     }
 
     pub fn branch(&self) -> Option<&str> {

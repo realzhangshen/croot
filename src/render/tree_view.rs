@@ -8,18 +8,18 @@ use ratatui::{
     widgets::{StatefulWidget, Widget},
 };
 
+use crate::config::TreeConfig;
 use crate::tree::forest::FileTree;
 use crate::tree::node::GitStatus;
 
 use super::colors;
 use super::icons;
 
-pub struct TreeView {
-    pub show_size: bool,
-    pub show_modified: bool,
+pub struct TreeView<'a> {
+    pub config: &'a TreeConfig,
 }
 
-impl StatefulWidget for TreeView {
+impl StatefulWidget for TreeView<'_> {
     type State = FileTree;
 
     #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
@@ -32,6 +32,9 @@ impl StatefulWidget for TreeView {
 
         // Store for mouse click resolution
         state.rendered_indices.clone_from(&visible_indices);
+
+        // Precompute all connector guides in O(N) instead of O(D×N) per node
+        let all_guides = state.precompute_all_guides();
 
         for (row, &absolute_idx) in visible_indices.iter().enumerate() {
             let y = area.y + row as u16;
@@ -52,8 +55,8 @@ impl StatefulWidget for TreeView {
                 ratatui::style::Color::Reset
             };
 
-            // Tree connectors
-            let guides = state.connector_guides(absolute_idx);
+            // Tree connectors (using precomputed guides)
+            let guides = &all_guides[absolute_idx];
             for (d, &has_continuation) in guides.iter().enumerate() {
                 if d == 0 && node.depth == 0 {
                     continue;
@@ -134,7 +137,7 @@ impl StatefulWidget for TreeView {
             }
 
             // Build info columns (size + modified) for right-aligned display
-            let info_text = build_info_text(node, self.show_size, self.show_modified);
+            let info_text = build_info_text(node, self.config.show_size, self.config.show_modified);
 
             // Fill entire row with bg first for selected highlight
             if is_selected {

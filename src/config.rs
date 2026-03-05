@@ -14,7 +14,7 @@ pub struct Config {
     pub cmux: CmuxConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct TreeConfig {
     #[serde(default = "default_true")]
@@ -33,7 +33,7 @@ pub struct TreeConfig {
     pub show_modified: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PreviewConfig {
     #[serde(default)]

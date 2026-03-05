@@ -1,61 +1,43 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
-use super::loader::load_children_with_meta;
-use super::node::TreeNode;
+use crate::config::TreeConfig;
 
-#[allow(clippy::struct_excessive_bools)]
+use super::loader::load_children_with_meta;
+use super::node::{NodeKind, TreeNode};
+
 pub struct FileTree {
     pub nodes: Vec<TreeNode>,
     pub cursor: usize,
     pub scroll_offset: usize,
     pub root: PathBuf,
-    pub show_hidden: bool,
-    pub dirs_first: bool,
-    pub exclude: Vec<String>,
-    pub show_ignored: bool,
-    pub compact_folders: bool,
-    pub show_size: bool,
-    pub show_modified: bool,
+    pub config: TreeConfig,
     /// Node indices currently rendered on screen, set by the renderer.
     /// Used to map mouse click rows to actual node indices.
     pub rendered_indices: Vec<usize>,
+    /// Cached count of visible file nodes.
+    pub file_count: usize,
+    /// Cached count of visible directory nodes.
+    pub dir_count: usize,
 }
 
 impl FileTree {
-    #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-    pub fn new(
-        root: PathBuf,
-        show_hidden: bool,
-        dirs_first: bool,
-        exclude: Vec<String>,
-        show_ignored: bool,
-        compact_folders: bool,
-        show_size: bool,
-        show_modified: bool,
-    ) -> Self {
-        let children = load_children_with_meta(
-            &root,
-            0,
-            show_hidden,
-            dirs_first,
-            &exclude,
-            show_ignored,
-            show_size,
-            show_modified,
-        );
+    pub fn new(root: PathBuf, config: TreeConfig) -> Self {
+        let children = load_children_with_meta(&root, 0, &config);
+        let file_count = children.iter().filter(|n| n.kind == NodeKind::File).count();
+        let dir_count = children
+            .iter()
+            .filter(|n| n.kind == NodeKind::Directory)
+            .count();
         Self {
             nodes: children,
             cursor: 0,
             scroll_offset: 0,
             root,
-            show_hidden,
-            dirs_first,
-            exclude,
-            show_ignored,
-            compact_folders,
-            show_size,
-            show_modified,
+            config,
             rendered_indices: Vec::new(),
+            file_count,
+            dir_count,
         }
     }
 
@@ -84,19 +66,19 @@ impl FileTree {
         let depth = node.depth + 1;
         let path = node.path.clone();
 
-        let children = load_children_with_meta(
-            &path,
-            depth,
-            self.show_hidden,
-            self.dirs_first,
-            &self.exclude,
-            self.show_ignored,
-            self.show_size,
-            self.show_modified,
-        );
+        let children = load_children_with_meta(&path, depth, &self.config);
 
         self.nodes[index].is_expanded = true;
         self.nodes[index].children_loaded = true;
+
+        // Update cached counts
+        for child in &children {
+            match child.kind {
+                NodeKind::File => self.file_count += 1,
+                NodeKind::Directory => self.dir_count += 1,
+                NodeKind::Symlink => self.file_count += 1,
+            }
+        }
 
         // Insert children right after the expanded node
         let insert_pos = index + 1;
@@ -120,6 +102,14 @@ impl FileTree {
         let mut end = start;
         while end < self.nodes.len() && self.nodes[end].depth > parent_depth {
             end += 1;
+        }
+
+        // Update cached counts before draining
+        for node in &self.nodes[start..end] {
+            match node.kind {
+                NodeKind::File | NodeKind::Symlink => self.file_count -= 1,
+                NodeKind::Directory => self.dir_count -= 1,
+            }
         }
 
         self.nodes.drain(start..end);
@@ -232,8 +222,8 @@ impl FileTree {
     /// Refresh expanded directories (re-read from filesystem).
     /// Preserves which directories were expanded by collecting their paths first.
     pub fn refresh(&mut self) {
-        // Collect paths of expanded directories before rebuilding
-        let expanded_paths: Vec<PathBuf> = self
+        // Collect paths of expanded directories before rebuilding (HashSet for O(1) lookup)
+        let expanded_paths: HashSet<PathBuf> = self
             .nodes
             .iter()
             .filter(|n| n.is_dir() && n.is_expanded)
@@ -244,16 +234,7 @@ impl FileTree {
         let cursor_path = self.nodes.get(self.cursor).map(|n| n.path.clone());
 
         // Re-read root from scratch
-        self.nodes = load_children_with_meta(
-            &self.root,
-            0,
-            self.show_hidden,
-            self.dirs_first,
-            &self.exclude,
-            self.show_ignored,
-            self.show_size,
-            self.show_modified,
-        );
+        self.nodes = load_children_with_meta(&self.root, 0, &self.config);
 
         // Re-expand previously expanded dirs (forward scan, expanding shifts indices)
         let mut i = 0;
@@ -263,6 +244,18 @@ impl FileTree {
             }
             i += 1;
         }
+
+        // Recompute cached counts after full rebuild
+        self.file_count = self
+            .nodes
+            .iter()
+            .filter(|n| n.kind == NodeKind::File || n.kind == NodeKind::Symlink)
+            .count();
+        self.dir_count = self
+            .nodes
+            .iter()
+            .filter(|n| n.kind == NodeKind::Directory)
+            .count();
 
         // Restore cursor position by path, or clamp to valid range
         if let Some(ref target) = cursor_path {
@@ -293,7 +286,7 @@ impl FileTree {
     /// Only applies to expanded directory nodes that have exactly one child which is also
     /// an expanded directory.
     pub fn compact_chain_len(&self, index: usize) -> usize {
-        if !self.compact_folders {
+        if !self.config.compact_folders {
             return 0;
         }
         let node = &self.nodes[index];
@@ -350,6 +343,8 @@ impl FileTree {
 
     /// For rendering tree connectors: determine which depths have a continuing vertical line.
     /// Returns a Vec of bools where index = depth, true = has more siblings below.
+    /// Note: This is O(D×N) per call. Prefer `precompute_all_guides` for batch rendering.
+    #[allow(dead_code)]
     pub fn connector_guides(&self, index: usize) -> Vec<bool> {
         let node = &self.nodes[index];
         let mut guides = vec![false; node.depth];
@@ -369,32 +364,74 @@ impl FileTree {
 
         guides
     }
+
+    /// Precompute connector guides for all nodes in O(N) total using a reverse scan.
+    /// Returns a Vec where entry[i] is the guides Vec for node i.
+    pub fn precompute_all_guides(&self) -> Vec<Vec<bool>> {
+        let n = self.nodes.len();
+        if n == 0 {
+            return Vec::new();
+        }
+
+        let max_depth = self.nodes.iter().map(|n| n.depth).max().unwrap_or(0);
+
+        // has_more[d] = true if there is a node at depth d somewhere after current position
+        let mut has_more = vec![false; max_depth + 1];
+
+        // Build guides in reverse, then reverse the whole thing
+        let mut rev_results: Vec<Vec<bool>> = Vec::with_capacity(n);
+
+        for i in (0..n).rev() {
+            let depth = self.nodes[i].depth;
+            let mut guides = vec![false; depth];
+            for (d, guide) in guides.iter_mut().enumerate() {
+                *guide = has_more[d];
+            }
+            rev_results.push(guides);
+
+            // Mark this depth as having a node (for nodes above this one)
+            has_more[depth] = true;
+            // Any depth deeper than this node resets (no continuation above a shallower node)
+            for item in &mut has_more[(depth + 1)..=max_depth] {
+                *item = false;
+            }
+        }
+
+        rev_results.reverse();
+        rev_results
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tree::node::{NodeKind, TreeNode};
+    use crate::tree::node::TreeNode;
 
     /// Build a FileTree from a list of (name, kind, depth) tuples — no filesystem needed.
     fn tree_from(entries: &[(&str, NodeKind, usize)]) -> FileTree {
-        let nodes = entries
+        let nodes: Vec<TreeNode> = entries
             .iter()
             .map(|(name, kind, depth)| TreeNode::new(PathBuf::from(name), *kind, *depth))
             .collect();
+        let file_count = nodes
+            .iter()
+            .filter(|n| n.kind == NodeKind::File || n.kind == NodeKind::Symlink)
+            .count();
+        let dir_count = nodes
+            .iter()
+            .filter(|n| n.kind == NodeKind::Directory)
+            .count();
+        let mut config = TreeConfig::default();
+        config.compact_folders = false;
         FileTree {
             nodes,
             cursor: 0,
             scroll_offset: 0,
             root: PathBuf::from("/tmp/test"),
-            show_hidden: true,
-            dirs_first: true,
-            exclude: vec![],
-            show_ignored: false,
-            compact_folders: false,
-            show_size: false,
-            show_modified: false,
+            config,
             rendered_indices: Vec::new(),
+            file_count,
+            dir_count,
         }
     }
 
@@ -545,7 +582,7 @@ mod tests {
     // ── Compact folders tests ───────────────────────────────────────────
 
     fn tree_from_compact(entries: &[(&str, NodeKind, usize, bool)]) -> FileTree {
-        let nodes = entries
+        let nodes: Vec<TreeNode> = entries
             .iter()
             .map(|(name, kind, depth, expanded)| {
                 let mut node = TreeNode::new(PathBuf::from(name), *kind, *depth);
@@ -554,19 +591,23 @@ mod tests {
                 node
             })
             .collect();
+        let file_count = nodes
+            .iter()
+            .filter(|n| n.kind == NodeKind::File || n.kind == NodeKind::Symlink)
+            .count();
+        let dir_count = nodes
+            .iter()
+            .filter(|n| n.kind == NodeKind::Directory)
+            .count();
         FileTree {
             nodes,
             cursor: 0,
             scroll_offset: 0,
             root: PathBuf::from("/tmp/test"),
-            show_hidden: true,
-            dirs_first: true,
-            exclude: vec![],
-            show_ignored: false,
-            compact_folders: true,
-            show_size: false,
-            show_modified: false,
+            config: TreeConfig::default(), // compact_folders defaults to true
             rendered_indices: Vec::new(),
+            file_count,
+            dir_count,
         }
     }
 
@@ -612,7 +653,7 @@ mod tests {
             ("utils", NodeKind::Directory, 1, true),
             ("format.rs", NodeKind::File, 2, false),
         ]);
-        tree.compact_folders = false;
+        tree.config.compact_folders = false;
         assert_eq!(tree.compact_chain_len(0), 0);
     }
 

@@ -7,15 +7,16 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthChar;
 
+use crate::config::PreviewConfig;
 use crate::preview::state::{PreviewKind, PreviewState};
 use crate::render::colors;
 
-pub struct PreviewView {
-    pub show_line_numbers: bool,
+pub struct PreviewView<'a> {
+    pub config: &'a PreviewConfig,
     pub focused: bool,
 }
 
-impl StatefulWidget for PreviewView {
+impl StatefulWidget for PreviewView<'_> {
     type State = PreviewState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut PreviewState) {
@@ -59,7 +60,7 @@ impl StatefulWidget for PreviewView {
     }
 }
 
-impl PreviewView {
+impl PreviewView<'_> {
     fn render_header(&self, area: Rect, buf: &mut Buffer, state: &PreviewState) {
         let bg = if self.focused {
             colors::STATUS_BAR_BG
@@ -127,7 +128,7 @@ impl PreviewView {
 
     fn render_content(&self, area: Rect, buf: &mut Buffer, state: &PreviewState) {
         let height = area.height as usize;
-        let gutter_width = if self.show_line_numbers && state.kind == PreviewKind::Text {
+        let gutter_width = if self.config.show_line_numbers && state.kind == PreviewKind::Text {
             let digits = if state.total_lines == 0 {
                 1
             } else {

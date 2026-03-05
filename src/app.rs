@@ -1,9 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use crossterm::event::{Event, EventStream};
 use futures::StreamExt;
-use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::Style,
@@ -18,26 +17,15 @@ use crate::config::Config;
 use crate::git::status::GitState;
 use crate::input::handler::{handle_key, Action};
 use crate::input::mouse::handle_mouse;
+use crate::layout::{self, FocusPane, PreviewLayout};
 use crate::preview::dispatcher::preview_command;
 use crate::preview::loader::{load_preview, LoadedPreview};
-use crate::preview::state::{ContentPos, FocusPane, PreviewKind, PreviewState};
+use crate::preview::state::{PreviewKind, PreviewState};
 use crate::render::colors;
 use crate::render::preview_view::PreviewView;
 use crate::render::status_bar::StatusBar;
 use crate::render::tree_view::TreeView;
 use crate::tree::forest::FileTree;
-use crate::tree::node::NodeKind;
-
-/// Cached layout coordinates of the preview content area (set during draw).
-#[derive(Debug, Clone, Copy)]
-struct PreviewLayout {
-    /// Screen x where content text starts (after gutter).
-    x: u16,
-    /// Screen y where content starts (after header).
-    y: u16,
-    /// Height of the content area (excluding header).
-    height: u16,
-}
 
 pub struct App {
     pub tree: FileTree,
@@ -60,21 +48,12 @@ pub struct App {
 impl App {
     pub fn new(root: PathBuf) -> anyhow::Result<Self> {
         let config = Config::load();
-        let mut tree = FileTree::new(
-            root.clone(),
-            config.tree.show_hidden,
-            config.tree.dirs_first,
-            config.tree.exclude.clone(),
-            config.tree.show_ignored,
-            config.tree.compact_folders,
-            config.tree.show_size,
-            config.tree.show_modified,
-        );
+        let mut tree = FileTree::new(root.clone(), config.tree.clone());
         let git = GitState::load(&root);
         let cmux = CmuxBridge::detect(config.cmux.split_direction.clone());
 
         if let Some(ref git) = git {
-            apply_git_statuses(&mut tree, git);
+            git.apply_to_nodes(&mut tree.nodes);
         }
 
         let preview_visible = config.preview.auto_preview;
@@ -105,7 +84,7 @@ impl App {
 
         // Set up file watcher with 100ms debounce
         let (fs_tx, mut fs_rx) = mpsc::channel::<()>(1);
-        let _watcher = setup_watcher(&self.root, fs_tx);
+        let _watcher = crate::watcher::setup_watcher(&self.root, fs_tx);
         let mut watcher_active = true;
 
         // Channel for receiving loaded preview results
@@ -230,8 +209,7 @@ impl App {
 
             // Render tree
             TreeView {
-                show_size: self.config.tree.show_size,
-                show_modified: self.config.tree.show_modified,
+                config: &self.config.tree,
             }
             .render(tree_area, frame.buffer_mut(), &mut self.tree);
 
@@ -268,7 +246,7 @@ impl App {
 
             // Render preview
             PreviewView {
-                show_line_numbers: self.config.preview.show_line_numbers,
+                config: &self.config.preview,
                 focused: self.focus == FocusPane::Preview,
             }
             .render(preview_area, frame.buffer_mut(), &mut self.preview_state);
@@ -279,8 +257,7 @@ impl App {
             self.tree_area_height = main_area.height;
 
             TreeView {
-                show_size: self.config.tree.show_size,
-                show_modified: self.config.tree.show_modified,
+                config: &self.config.tree,
             }
             .render(main_area, frame.buffer_mut(), &mut self.tree);
         }
@@ -290,7 +267,8 @@ impl App {
             |n| n.to_string_lossy().into_owned(),
         );
 
-        let (file_count, dir_count) = self.count_visible();
+        let file_count = self.tree.file_count;
+        let dir_count = self.tree.dir_count;
         let branch = self
             .git
             .as_ref()
@@ -317,16 +295,61 @@ impl App {
         action: Action,
         preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
     ) {
-        let mut cursor_moved = false;
-
         match action {
             Action::Quit => self.should_quit = true,
+
+            // Tree actions
+            Action::CursorUp
+            | Action::CursorDown
+            | Action::CursorLeft
+            | Action::CursorRight
+            | Action::Toggle
+            | Action::Refresh
+            | Action::ScrollUp(_)
+            | Action::ScrollDown(_)
+            | Action::GotoTop
+            | Action::GotoBottom => {
+                self.handle_tree_action(&action);
+            }
+
+            // Actions requiring async
+            Action::Open => self.open_selected().await,
+
+            // Preview actions
+            Action::PreviewScrollUp(_) | Action::PreviewScrollDown(_) | Action::SwitchFocus => {
+                self.handle_preview_action(&action);
+            }
+            Action::TogglePreview => {
+                self.preview_visible = !self.preview_visible;
+                if self.preview_visible {
+                    self.trigger_preview_load(preview_tx);
+                } else {
+                    self.focus = FocusPane::Tree;
+                }
+            }
+
+            // Selection actions
+            Action::SelectionStart(_, _)
+            | Action::SelectionUpdate(_, _)
+            | Action::CopySelection
+            | Action::ClearSelection => {
+                self.handle_selection_action(&action);
+            }
+
+            // Click routing
+            Action::ClickRow(row) => self.handle_click_row(row, preview_tx),
+
+            Action::None => {}
+        }
+    }
+
+    fn handle_tree_action(&mut self, action: &Action) {
+        match action {
             Action::CursorUp => {
                 if self.focus == FocusPane::Preview {
                     self.preview_state.scroll_up(1);
                 } else {
                     self.tree.cursor_up();
-                    cursor_moved = true;
                 }
             }
             Action::CursorDown => {
@@ -334,31 +357,23 @@ impl App {
                     self.preview_state.scroll_down(1);
                 } else {
                     self.tree.cursor_down();
-                    cursor_moved = true;
                 }
             }
             Action::CursorLeft => {
                 if self.focus == FocusPane::Tree {
                     self.tree.cursor_left();
-                    cursor_moved = true;
                 }
             }
             Action::CursorRight => {
                 if self.focus == FocusPane::Tree {
                     self.tree.cursor_right();
                     self.reapply_git();
-                    cursor_moved = true;
                 }
             }
             Action::Toggle => {
                 let idx = self.tree.cursor;
                 self.tree.toggle(idx);
                 self.reapply_git();
-                cursor_moved = true;
-            }
-            Action::Open => {
-                self.open_selected().await;
-                cursor_moved = true;
             }
             Action::Refresh => {
                 self.tree.refresh();
@@ -366,26 +381,22 @@ impl App {
                     git.refresh();
                 }
                 self.reapply_git();
-                cursor_moved = true;
             }
             Action::ScrollUp(n) => {
-                for _ in 0..n {
+                for _ in 0..*n {
                     self.tree.cursor_up();
                 }
-                cursor_moved = true;
             }
             Action::ScrollDown(n) => {
-                for _ in 0..n {
+                for _ in 0..*n {
                     self.tree.cursor_down();
                 }
-                cursor_moved = true;
             }
             Action::GotoTop => {
                 if self.focus == FocusPane::Preview {
                     self.preview_state.scroll_offset = 0;
                 } else {
                     self.tree.cursor = 0;
-                    cursor_moved = true;
                 }
             }
             Action::GotoBottom => {
@@ -394,12 +405,31 @@ impl App {
                         self.preview_state.total_lines.saturating_sub(1);
                 } else if !self.tree.is_empty() {
                     self.tree.cursor = self.tree.len() - 1;
-                    cursor_moved = true;
                 }
             }
+            _ => {}
+        }
+    }
+
+    fn handle_preview_action(&mut self, action: &Action) {
+        match action {
+            Action::PreviewScrollUp(n) => self.preview_state.scroll_up(*n as usize),
+            Action::PreviewScrollDown(n) => self.preview_state.scroll_down(*n as usize),
+            Action::SwitchFocus => {
+                self.focus = match self.focus {
+                    FocusPane::Tree => FocusPane::Preview,
+                    FocusPane::Preview => FocusPane::Tree,
+                };
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_selection_action(&mut self, action: &Action) {
+        match action {
             Action::SelectionStart(col, row) => {
                 self.focus = FocusPane::Preview;
-                if let Some(pos) = self.screen_to_content(col, row) {
+                if let Some(pos) = self.screen_to_content(*col, *row) {
                     self.preview_state.selection.anchor = Some(pos);
                     self.preview_state.selection.cursor = Some(pos);
                 } else {
@@ -408,7 +438,7 @@ impl App {
             }
             Action::SelectionUpdate(col, row) => {
                 if self.preview_state.selection.anchor.is_some() {
-                    if let Some(pos) = self.screen_to_content(col, row) {
+                    if let Some(pos) = self.screen_to_content(*col, *row) {
                         self.preview_state.selection.cursor = Some(pos);
                     }
                 }
@@ -424,51 +454,29 @@ impl App {
             Action::ClearSelection => {
                 self.preview_state.selection.clear();
             }
-            Action::ClickRow(row) => {
-                self.focus = FocusPane::Tree;
-                self.preview_state.selection.clear();
-                let row_idx = row as usize;
-                let idx = if row_idx < self.tree.rendered_indices.len() {
-                    self.tree.rendered_indices[row_idx]
-                } else {
-                    return;
-                };
-                if idx < self.tree.len() {
-                    self.tree.cursor = idx;
-                    if self.tree.nodes[idx].is_dir() {
-                        self.tree.toggle(idx);
-                        self.reapply_git();
-                    } else {
-                        // Clicked a file — open preview
-                        self.preview_visible = true;
-                        self.trigger_preview_load(preview_tx);
-                    }
-                }
-            }
-            Action::TogglePreview => {
-                self.preview_visible = !self.preview_visible;
-                if self.preview_visible {
-                    self.trigger_preview_load(preview_tx);
-                } else {
-                    self.focus = FocusPane::Tree;
-                }
-            }
-            Action::SwitchFocus => {
-                self.focus = match self.focus {
-                    FocusPane::Tree => FocusPane::Preview,
-                    FocusPane::Preview => FocusPane::Tree,
-                };
-            }
-            Action::PreviewScrollUp(n) => {
-                self.preview_state.scroll_up(n as usize);
-            }
-            Action::PreviewScrollDown(n) => {
-                self.preview_state.scroll_down(n as usize);
-            }
-            Action::None => {}
+            _ => {}
         }
+    }
 
-        let _ = cursor_moved; // cursor movement no longer triggers preview
+    fn handle_click_row(&mut self, row: u16, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
+        self.focus = FocusPane::Tree;
+        self.preview_state.selection.clear();
+        let row_idx = row as usize;
+        let idx = if row_idx < self.tree.rendered_indices.len() {
+            self.tree.rendered_indices[row_idx]
+        } else {
+            return;
+        };
+        if idx < self.tree.len() {
+            self.tree.cursor = idx;
+            if self.tree.nodes[idx].is_dir() {
+                self.tree.toggle(idx);
+                self.reapply_git();
+            } else {
+                self.preview_visible = true;
+                self.trigger_preview_load(preview_tx);
+            }
+        }
     }
 
     /// Schedule a debounced preview load for the currently selected file.
@@ -485,11 +493,16 @@ impl App {
 
         let path = node.path.clone();
 
-        // Skip if already showing this file
+        // Skip if already showing this file and it hasn't changed (mtime check)
         if self.preview_state.current_path.as_ref() == Some(&path)
             && self.preview_state.kind != PreviewKind::Loading
         {
-            return;
+            let current_mtime = std::fs::metadata(&path)
+                .ok()
+                .and_then(|m| m.modified().ok());
+            if current_mtime == self.preview_state.cached_mtime {
+                return;
+            }
         }
 
         // Cancel previous debounce
@@ -541,79 +554,18 @@ impl App {
     }
 
     /// Map screen coordinates to content-space coordinates using the cached preview layout.
-    fn screen_to_content(&self, screen_col: u16, screen_row: u16) -> Option<ContentPos> {
-        let layout = self.preview_layout?;
-
-        // Check bounds
-        if screen_row < layout.y || screen_row >= layout.y + layout.height || screen_col < layout.x
-        {
-            return None;
-        }
-
-        let row_in_content = (screen_row - layout.y) as usize;
-        let line = self.preview_state.scroll_offset + row_in_content;
-        let col = (screen_col - layout.x) as usize;
-
-        Some(ContentPos { line, col })
+    fn screen_to_content(
+        &self,
+        screen_col: u16,
+        screen_row: u16,
+    ) -> Option<crate::preview::state::ContentPos> {
+        let pl = self.preview_layout?;
+        layout::screen_to_content(pl, self.preview_state.scroll_offset, screen_col, screen_row)
     }
 
     fn reapply_git(&mut self) {
         if let Some(ref git) = self.git {
-            apply_git_statuses(&mut self.tree, git);
-        }
-    }
-
-    fn count_visible(&self) -> (usize, usize) {
-        let files = self
-            .tree
-            .nodes
-            .iter()
-            .filter(|n| n.kind == NodeKind::File)
-            .count();
-        let dirs = self
-            .tree
-            .nodes
-            .iter()
-            .filter(|n| n.kind == NodeKind::Directory)
-            .count();
-        (files, dirs)
-    }
-}
-
-fn apply_git_statuses(tree: &mut FileTree, git: &GitState) {
-    for node in &mut tree.nodes {
-        node.git_status = git.status_for(&node.path, node.is_dir());
-    }
-}
-
-/// Set up a file system watcher that sends a signal on changes (100ms debounce).
-fn setup_watcher(
-    root: &Path,
-    tx: mpsc::Sender<()>,
-) -> Option<notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>> {
-    let debouncer = new_debouncer(
-        Duration::from_millis(100),
-        move |events: Result<Vec<notify_debouncer_mini::DebouncedEvent>, notify::Error>| {
-            if let Ok(events) = events {
-                let has_real_change = events.iter().any(|e| e.kind == DebouncedEventKind::Any);
-                if has_real_change {
-                    let _ = tx.try_send(());
-                }
-            }
-        },
-    );
-
-    match debouncer {
-        Ok(mut d) => {
-            if let Err(e) = d.watcher().watch(root, notify::RecursiveMode::Recursive) {
-                eprintln!("croot: failed to watch {}: {e}", root.display());
-                return None;
-            }
-            Some(d)
-        }
-        Err(e) => {
-            eprintln!("croot: failed to initialize file watcher: {e}");
-            None
+            git.apply_to_nodes(&mut self.tree.nodes);
         }
     }
 }
