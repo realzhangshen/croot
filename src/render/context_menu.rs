@@ -62,6 +62,19 @@ impl ContextMenuState {
         }
     }
 
+    pub fn new_for_workspace(x: u16, y: u16, node_idx: usize) -> Self {
+        Self {
+            x,
+            y,
+            node_idx,
+            selected: 0,
+            items: vec![
+                MenuItem { label: "New File".into(), action: MenuAction::NewFile },
+                MenuItem { label: "New Directory".into(), action: MenuAction::NewDir },
+            ],
+        }
+    }
+
     pub fn new_for_dir(x: u16, y: u16, node_idx: usize) -> Self {
         Self {
             x,
@@ -305,6 +318,14 @@ mod tests {
             !cell.modifier.contains(Modifier::BOLD),
             "normal menu item should NOT have BOLD"
         );
+    }
+
+    #[test]
+    fn workspace_menu_has_new_file_and_dir() {
+        let state = ContextMenuState::new_for_workspace(0, 0, 999);
+        assert_eq!(state.items.len(), 2);
+        assert_eq!(state.items[0].action, MenuAction::NewFile);
+        assert_eq!(state.items[1].action, MenuAction::NewDir);
     }
 
     #[test]

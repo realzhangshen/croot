@@ -883,27 +883,28 @@ impl App {
     // ── Context menu ────────────────────────────────────────────────────
 
     fn open_context_menu(&mut self, col: u16, row: u16) {
-        // Determine which tree node was right-clicked
+        // Exclude preview pane and separator
+        if self.preview_area_x.is_some_and(|px| col >= px.saturating_sub(1)) {
+            return;
+        }
         if row < self.tree_area_y || row >= self.tree_area_y + self.tree_area_height {
             return;
         }
         let relative_row = (row - self.tree_area_y) as usize;
-        if relative_row >= self.tree.rendered_indices.len() {
-            return;
-        }
-        let node_idx = self.tree.rendered_indices[relative_row];
-        if node_idx >= self.tree.len() {
-            return;
-        }
-
-        // Move cursor to the right-clicked node
-        self.tree.cursor = node_idx;
-
-        let is_dir = self.tree.nodes[node_idx].is_dir();
-        let menu = if is_dir {
-            ContextMenuState::new_for_dir(col, row, node_idx)
+        let menu = if relative_row >= self.tree.rendered_indices.len() {
+            // Empty space below tree items → workspace root menu
+            ContextMenuState::new_for_workspace(col, row, self.tree.len())
         } else {
-            ContextMenuState::new_for_file(col, row, node_idx)
+            let node_idx = self.tree.rendered_indices[relative_row];
+            if node_idx >= self.tree.len() {
+                return;
+            }
+            self.tree.cursor = node_idx;
+            if self.tree.nodes[node_idx].is_dir() {
+                ContextMenuState::new_for_dir(col, row, node_idx)
+            } else {
+                ContextMenuState::new_for_file(col, row, node_idx)
+            }
         };
 
         self.context_menu = Some(menu);
