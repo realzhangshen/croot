@@ -11,7 +11,6 @@ pub enum Action {
     CursorLeft,
     CursorRight,
     Toggle,
-    Open,
     Refresh,
     ScrollUp(u16),
     ScrollDown(u16),
@@ -38,8 +37,6 @@ pub enum Action {
     DragUpdate(u16, u16),
     /// Mouse hover at screen (col, row) for tree row highlighting.
     Hover(u16, u16),
-    /// Open the selected file in $EDITOR via cmux.
-    OpenEditor,
     /// Right-click context menu at screen (col, row).
     RightClick(u16, u16),
     /// Execute a context menu action.
@@ -140,7 +137,7 @@ pub fn handle_key(key: KeyEvent, preview_visible: bool, preview_has_selection: b
 
         // Toggle expand/collapse
         KeyCode::Char(' ') => Action::Toggle,
-        KeyCode::Enter => Action::Open,
+        KeyCode::Enter => Action::Toggle,
 
         // Tab: switch focus when preview is visible, otherwise toggle
         KeyCode::Tab => {
@@ -150,9 +147,6 @@ pub fn handle_key(key: KeyEvent, preview_visible: bool, preview_has_selection: b
                 Action::Toggle
             }
         }
-
-        // Open in editor
-        KeyCode::Char('o') => Action::OpenEditor,
 
         // Preview toggle
         KeyCode::Char('p') => Action::TogglePreview,
@@ -193,7 +187,7 @@ pub fn handle_key_menu(key: KeyEvent) -> Action {
         KeyCode::Esc | KeyCode::Char('q') => Action::MenuClose,
         KeyCode::Up | KeyCode::Char('k') => Action::MenuUp,
         KeyCode::Down | KeyCode::Char('j') => Action::MenuDown,
-        KeyCode::Enter => Action::MenuSelect(MenuAction::OpenEditor), // placeholder, app resolves
+        KeyCode::Enter => Action::MenuSelect(MenuAction::CopyPath), // placeholder, app resolves
         _ => Action::None,
     }
 }

@@ -13,14 +13,13 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::cmux::bridge::CmuxBridge;
-use crate::config::{Config, OpenAction};
+use crate::config::Config;
 use crate::git::status::GitState;
 use crate::input::handler::{
     handle_key, handle_key_dialog, handle_key_menu, handle_key_search, Action, InputMode,
 };
 use crate::input::mouse::handle_mouse;
 use crate::layout::{self, FocusPane, PreviewLayout};
-use crate::preview::dispatcher::{editor_command, preview_command};
 use crate::preview::loader::{load_preview, LoadedPreview};
 use crate::preview::state::{PreviewKind, PreviewState};
 use crate::render::colors;
@@ -444,10 +443,6 @@ impl App {
                 self.handle_tree_action(&action);
             }
 
-            // Actions requiring async
-            Action::Open => self.open_selected().await,
-            Action::OpenEditor => self.open_in_editor().await,
-
             // Preview actions
             Action::PreviewScrollUp(_) | Action::PreviewScrollDown(_) | Action::SwitchFocus => {
                 self.handle_preview_action(&action);
@@ -812,57 +807,6 @@ impl App {
         }));
     }
 
-    async fn open_selected(&mut self) {
-        let Some(node) = self.tree.selected() else {
-            return;
-        };
-
-        if node.is_dir() {
-            let idx = self.tree.cursor;
-            self.tree.toggle(idx);
-            self.reapply_git();
-            return;
-        }
-
-        let path = node.path.clone();
-        let action = self.config.cmux.open_action;
-
-        match action {
-            OpenAction::Editor => {
-                let cmd = editor_command(&path);
-                if let Some(ref mut cmux) = self.cmux {
-                    let _ = cmux.send_to_preview(&cmd).await;
-                }
-            }
-            OpenAction::CmuxPreview | OpenAction::Preview => {
-                let cmd = preview_command(&path);
-                if let Some(ref mut cmux) = self.cmux {
-                    let _ = cmux.send_to_preview(&cmd).await;
-                }
-            }
-        }
-    }
-
-    async fn open_in_editor(&mut self) {
-        let Some(node) = self.tree.selected() else {
-            return;
-        };
-
-        if node.is_dir() {
-            let idx = self.tree.cursor;
-            self.tree.toggle(idx);
-            self.reapply_git();
-            return;
-        }
-
-        let path = node.path.clone();
-        let cmd = editor_command(&path);
-
-        if let Some(ref mut cmux) = self.cmux {
-            let _ = cmux.send_to_preview(&cmd).await;
-        }
-    }
-
     fn update_hover(&mut self, col: u16, row: u16) {
         if self.preview_area_x.is_some_and(|px| col >= px) {
             self.hover_row = None;
@@ -961,22 +905,6 @@ impl App {
         preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
     ) {
         match action {
-            MenuAction::OpenEditor => {
-                self.tree.cursor = node_idx;
-                self.open_in_editor().await;
-            }
-            MenuAction::CmuxPreview => {
-                self.tree.cursor = node_idx;
-                if let Some(node) = self.tree.nodes.get(node_idx) {
-                    if !node.is_dir() {
-                        let path = node.path.clone();
-                        let cmd = preview_command(&path);
-                        if let Some(ref mut cmux) = self.cmux {
-                            let _ = cmux.send_to_preview(&cmd).await;
-                        }
-                    }
-                }
-            }
             MenuAction::CopyPath => {
                 if let Some(node) = self.tree.nodes.get(node_idx) {
                     let rel = node
@@ -1056,8 +984,6 @@ impl App {
             MenuAction::NewDir => self.start_new_dir_at(node_idx),
             MenuAction::Rename => self.start_rename_at(node_idx),
             MenuAction::Delete => self.start_delete_at(node_idx),
-            // Async actions can't run from sync context; ignore
-            MenuAction::OpenEditor | MenuAction::CmuxPreview => {}
         }
     }
 

@@ -2,13 +2,12 @@
 
 A lightweight terminal file tree sidebar, built with Rust and [Ratatui](https://ratatui.rs).
 
-`croot` gives you a vim-style navigable file tree in your terminal, with git status integration, file preview via tmux, and real-time filesystem watching.
+`croot` gives you a vim-style navigable file tree in your terminal, with git status integration and real-time filesystem watching.
 
 ## Features
 
 - Vim-style navigation (`hjkl`)
 - Git status indicators (modified, staged, untracked, etc.)
-- Auto file preview in a tmux split pane
 - Real-time filesystem watching (auto-refresh on changes)
 - Respects `.gitignore` rules
 - Configurable via TOML
@@ -46,7 +45,7 @@ croot ~/projects # Browse a specific directory
 | `h` / `Left` | Collapse directory |
 | `l` / `Right` | Expand directory |
 | `Space` / `Tab` | Toggle expand/collapse |
-| `Enter` | Open file (preview in tmux pane) |
+| `Enter` | Toggle expand/collapse |
 | `g` | Jump to top |
 | `G` | Jump to bottom |
 | `PageUp` / `PageDown` | Scroll by 10 lines |
@@ -84,14 +83,14 @@ split_ratio = 0.5
 - `dirs_first` — Sort directories before files (default: `true`)
 - `exclude` — Glob patterns to always exclude
 
-**`[preview]`** — File preview (requires tmux)
+**`[preview]`** — File preview
 - `auto_preview` — Automatically preview selected file (default: `false`)
 - `preview_delay_ms` — Delay before previewing in ms (default: `150`)
 - `close_on_exit` — Close preview pane on exit (default: `true`)
 
-**`[cmux]`** — Tmux split settings
+**`[cmux]`** — Cmux bridge settings
 - `split_direction` — Split direction: `"right"` or `"below"` (default: `"right"`)
-- `split_ratio` — Ratio of the split pane (default: `0.5`)
+- `split_ratio` — Split pane ratio (default: `0.5`)
 
 ## License
 
