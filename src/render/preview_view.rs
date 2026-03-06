@@ -151,7 +151,7 @@ impl PreviewView<'_> {
 
         // Pre-compute normalized selection range
         let sel_range = state.selection.normalized();
-        let highlight_style = Style::default().bg(colors::SELECTED_BG).fg(Color::White);
+        let highlight_style = Style::default().add_modifier(Modifier::REVERSED);
 
         for row in 0..height {
             let line_idx = state.scroll_offset + row;

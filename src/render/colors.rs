@@ -1,4 +1,4 @@
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier, Style};
 
 // Git status colors — ANSI 16 so they adapt to any terminal theme
 pub const GIT_MODIFIED: Color = Color::Yellow;
@@ -23,10 +23,30 @@ pub const INLINE_CODE: Color = Color::Yellow;
 // UI colors — ANSI / terminal-default so they adapt to any theme
 // Cursor row uses Modifier::REVERSED (no explicit bg) for maximum contrast
 pub const MULTI_SELECTED_BG: Color = Color::DarkGray;
-pub const HOVER_BG: Color = Color::Gray;
 pub const TREE_LINE: Color = Color::DarkGray;
 pub const STATUS_BAR_BG: Color = Color::DarkGray;
 pub const STATUS_BAR_FG: Color = Color::White;
 pub const DIR_COLOR: Color = Color::Yellow;
-pub const MENU_SELECTED_BG: Color = Color::Blue;
 pub const DEFAULT_FG: Color = Color::Reset;
+
+// ── Adaptive style helpers (REVERSED-based, no hardcoded bg) ──────────
+
+/// Tree-view hover row: subtle reverse + dim
+pub fn hover_style() -> Style {
+    Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
+}
+
+/// Popup / menu base: reversed foreground ↔ background
+pub fn popup_base() -> Style {
+    Style::default().add_modifier(Modifier::REVERSED)
+}
+
+/// Popup selected item: bold (on top of the reversed base fill)
+pub fn popup_selected() -> Style {
+    Style::default().add_modifier(Modifier::BOLD)
+}
+
+/// Popup dim text (separators, hints): reversed + dim
+pub fn popup_dim() -> Style {
+    Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
+}

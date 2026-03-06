@@ -1,7 +1,6 @@
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color, Modifier, Style},
     widgets::Widget,
 };
 
@@ -155,21 +154,18 @@ impl Widget for ContextMenuWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let menu_rect = self.state.menu_rect(area.x + area.width, area.y + area.height);
 
-        let border_style = Style::default().fg(Color::DarkGray);
-        let bg = Color::Gray;
-        let normal_style = Style::default().fg(Color::Black).bg(bg);
-        let selected_style = Style::default()
-            .fg(Color::White)
-            .bg(colors::MENU_SELECTED_BG)
-            .add_modifier(Modifier::BOLD);
-        let separator_style = Style::default().fg(Color::DarkGray).bg(bg);
-        let delete_style = Style::default().fg(Color::Red).bg(bg);
+        let base = colors::popup_base();
+        let border_style = colors::popup_dim();
+        let normal_style = base;
+        let selected_style = colors::popup_selected();
+        let separator_style = colors::popup_dim();
+        let delete_style = base.fg(ratatui::style::Color::Red);
 
-        // Fill background
+        // Fill background with REVERSED base
         for y in menu_rect.y..menu_rect.y + menu_rect.height {
             for x in menu_rect.x..menu_rect.x + menu_rect.width {
                 if let Some(cell) = buf.cell_mut((x, y)) {
-                    cell.set_style(Style::default().bg(bg));
+                    cell.set_style(base);
                     cell.set_symbol(" ");
                 }
             }
@@ -178,18 +174,18 @@ impl Widget for ContextMenuWidget<'_> {
         // Top border
         if let Some(cell) = buf.cell_mut((menu_rect.x, menu_rect.y)) {
             cell.set_symbol("┌");
-            cell.set_style(border_style.bg(bg));
+            cell.set_style(border_style);
         }
         for x in (menu_rect.x + 1)..(menu_rect.x + menu_rect.width - 1) {
             if let Some(cell) = buf.cell_mut((x, menu_rect.y)) {
                 cell.set_symbol("─");
-                cell.set_style(border_style.bg(bg));
+                cell.set_style(border_style);
             }
         }
         if menu_rect.width > 1 {
             if let Some(cell) = buf.cell_mut((menu_rect.x + menu_rect.width - 1, menu_rect.y)) {
                 cell.set_symbol("┐");
-                cell.set_style(border_style.bg(bg));
+                cell.set_style(border_style);
             }
         }
 
@@ -197,18 +193,18 @@ impl Widget for ContextMenuWidget<'_> {
         let bottom_y = menu_rect.y + menu_rect.height - 1;
         if let Some(cell) = buf.cell_mut((menu_rect.x, bottom_y)) {
             cell.set_symbol("└");
-            cell.set_style(border_style.bg(bg));
+            cell.set_style(border_style);
         }
         for x in (menu_rect.x + 1)..(menu_rect.x + menu_rect.width - 1) {
             if let Some(cell) = buf.cell_mut((x, bottom_y)) {
                 cell.set_symbol("─");
-                cell.set_style(border_style.bg(bg));
+                cell.set_style(border_style);
             }
         }
         if menu_rect.width > 1 {
             if let Some(cell) = buf.cell_mut((menu_rect.x + menu_rect.width - 1, bottom_y)) {
                 cell.set_symbol("┘");
-                cell.set_style(border_style.bg(bg));
+                cell.set_style(border_style);
             }
         }
 
@@ -222,12 +218,12 @@ impl Widget for ContextMenuWidget<'_> {
             // Left border
             if let Some(cell) = buf.cell_mut((menu_rect.x, y)) {
                 cell.set_symbol("│");
-                cell.set_style(border_style.bg(bg));
+                cell.set_style(border_style);
             }
             // Right border
             if let Some(cell) = buf.cell_mut((menu_rect.x + menu_rect.width - 1, y)) {
                 cell.set_symbol("│");
-                cell.set_style(border_style.bg(bg));
+                cell.set_style(border_style);
             }
 
             let is_separator = item.label.starts_with('─');
@@ -256,12 +252,67 @@ impl Widget for ContextMenuWidget<'_> {
             // Render item text
             let text = format!(" {} ", item.label);
             let content_width = (menu_rect.width - 2) as usize;
-            let display = if text.len() > content_width {
-                &text[..content_width]
+            let display = if text.chars().count() > content_width {
+                let byte_end = text
+                    .char_indices()
+                    .nth(content_width)
+                    .map_or(text.len(), |(i, _)| i);
+                &text[..byte_end]
             } else {
                 &text
             };
             buf.set_string(menu_rect.x + 1, y, display, style);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::style::Modifier;
+
+    /// Render a context menu into a buffer and return it for inspection.
+    fn render_menu(state: &ContextMenuState) -> ratatui::buffer::Buffer {
+        let area = ratatui::layout::Rect::new(0, 0, 40, 20);
+        let mut buf = ratatui::buffer::Buffer::empty(area);
+        let widget = ContextMenuWidget { state };
+        widget.render(area, &mut buf);
+        buf
+    }
+
+    #[test]
+    fn normal_item_has_reversed() {
+        let state = ContextMenuState::new_for_file(0, 0, 0);
+        let buf = render_menu(&state);
+        let rect = state.menu_rect(40, 20);
+        // Item at index 1 (not selected when selected==0) — check a cell in that row
+        let y = rect.y + 2; // second item row (index 1)
+        let x = rect.x + 2;
+        let cell = buf.cell((x, y)).unwrap();
+        assert!(
+            cell.modifier.contains(Modifier::REVERSED),
+            "normal menu item at ({x},{y}) should have REVERSED, got {:?}",
+            cell.modifier
+        );
+        assert!(
+            !cell.modifier.contains(Modifier::BOLD),
+            "normal menu item should NOT have BOLD"
+        );
+    }
+
+    #[test]
+    fn selected_item_has_bold() {
+        let state = ContextMenuState::new_for_file(0, 0, 0);
+        let buf = render_menu(&state);
+        let rect = state.menu_rect(40, 20);
+        // Item at index 0 is selected — check a cell in that row
+        let y = rect.y + 1;
+        let x = rect.x + 2;
+        let cell = buf.cell((x, y)).unwrap();
+        assert!(
+            cell.modifier.contains(Modifier::BOLD),
+            "selected menu item at ({x},{y}) should have BOLD, got {:?}",
+            cell.modifier
+        );
     }
 }

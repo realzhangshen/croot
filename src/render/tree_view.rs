@@ -58,12 +58,38 @@ impl StatefulWidget for TreeView<'_> {
             let chain_len = state.compact_chain_len(absolute_idx);
 
             let mut spans = Vec::new();
-            let bg = if is_cursor || is_multi_selected {
-                colors::SELECTED_BG
+
+            // Determine row highlight mode:
+            //   Cursor  → REVERSED (strips fg for clean bar)
+            //   Hover   → REVERSED | DIM (subtler than cursor)
+            //   Multi   → explicit bg color
+            //   None    → transparent
+            #[derive(PartialEq)]
+            enum RowMode { Cursor, Hover, MultiBg(ratatui::style::Color), None }
+            let row_mode = if is_cursor {
+                RowMode::Cursor
+            } else if is_multi_selected {
+                RowMode::MultiBg(colors::MULTI_SELECTED_BG)
             } else if is_hovered {
-                colors::HOVER_BG
+                RowMode::Hover
             } else {
-                ratatui::style::Color::Reset
+                RowMode::None
+            };
+
+            // Build a row style: REVERSED variants strip fg for a clean bar.
+            let row_style = |base: Style| -> Style {
+                match &row_mode {
+                    RowMode::Cursor => {
+                        Style::default()
+                            .add_modifier(Modifier::REVERSED | (base.add_modifier & (Modifier::BOLD | Modifier::DIM)))
+                    }
+                    RowMode::Hover => {
+                        Style::default()
+                            .add_modifier(Modifier::REVERSED | Modifier::DIM | (base.add_modifier & Modifier::BOLD))
+                    }
+                    RowMode::MultiBg(bg) => base.bg(*bg),
+                    RowMode::None => base,
+                }
             };
 
             // Tree connectors (using precomputed guides)
@@ -75,7 +101,7 @@ impl StatefulWidget for TreeView<'_> {
                 let connector = if has_continuation { "│ " } else { "  " };
                 spans.push(Span::styled(
                     connector,
-                    Style::default().fg(colors::TREE_LINE).bg(bg),
+                    row_style(Style::default().fg(colors::TREE_LINE)),
                 ));
             }
 
@@ -85,7 +111,7 @@ impl StatefulWidget for TreeView<'_> {
                 let branch = if is_last { "└─" } else { "├─" };
                 spans.push(Span::styled(
                     branch,
-                    Style::default().fg(colors::TREE_LINE).bg(bg),
+                    row_style(Style::default().fg(colors::TREE_LINE)),
                 ));
             }
 
@@ -105,16 +131,17 @@ impl StatefulWidget for TreeView<'_> {
             if is_multi_selected {
                 spans.push(Span::styled(
                     "● ",
-                    Style::default().fg(ratatui::style::Color::Cyan).bg(bg),
+                    row_style(Style::default().fg(ratatui::style::Color::Cyan)),
                 ));
             }
 
             let is_ignored = node.git_status == GitStatus::Ignored;
 
-            let mut icon_style = Style::default().fg(icon_info.color).bg(bg);
+            let mut icon_base = Style::default().fg(icon_info.color);
             if is_ignored {
-                icon_style = icon_style.add_modifier(Modifier::DIM);
+                icon_base = icon_base.add_modifier(Modifier::DIM);
             }
+            let icon_style = row_style(icon_base);
             spans.push(Span::styled(format!("{} ", icon_info.icon), icon_style));
 
             // File/dir name — use compacted display name if applicable
@@ -125,39 +152,42 @@ impl StatefulWidget for TreeView<'_> {
             };
 
             let git_style = git_status_style(node.git_status);
-            let name_style = if node.is_dir() {
-                let mut s = git_style.bg(bg).add_modifier(Modifier::BOLD);
+            let name_style = {
+                let mut s = git_style;
+                if node.is_dir() {
+                    s = s.add_modifier(Modifier::BOLD);
+                }
                 if is_ignored {
                     s = s.add_modifier(Modifier::DIM);
                 }
-                s
-            } else {
-                let mut s = git_style.bg(bg);
-                if is_ignored {
-                    s = s.add_modifier(Modifier::DIM);
-                }
-                s
+                row_style(s)
             };
             spans.push(Span::styled(display_name, name_style));
 
             // Git status marker
             let git_marker = git_status_marker(node.git_status);
             if !git_marker.is_empty() {
-                let mut marker_style = git_status_style(node.git_status).bg(bg);
+                let mut marker_base = git_status_style(node.git_status);
                 if is_ignored {
-                    marker_style = marker_style.add_modifier(Modifier::DIM);
+                    marker_base = marker_base.add_modifier(Modifier::DIM);
                 }
-                spans.push(Span::styled(format!(" {git_marker}"), marker_style));
+                spans.push(Span::styled(format!(" {git_marker}"), row_style(marker_base)));
             }
 
             // Build info columns (size + modified) for right-aligned display
             let info_text = build_info_text(node, self.config.show_size, self.config.show_modified);
 
-            // Fill entire row with bg first for cursor/selected/hover highlight
-            if is_cursor || is_multi_selected || is_hovered {
+            // Fill entire row with highlight style
+            if row_mode != RowMode::None {
+                let fill_style = match &row_mode {
+                    RowMode::Cursor => Style::default().add_modifier(Modifier::REVERSED),
+                    RowMode::Hover => colors::hover_style(),
+                    RowMode::MultiBg(bg) => Style::default().bg(*bg),
+                    RowMode::None => unreachable!(),
+                };
                 for x in area.x..(area.x + area.width) {
                     if let Some(cell) = buf.cell_mut((x, y)) {
-                        cell.set_style(Style::default().bg(bg));
+                        cell.set_style(fill_style);
                     }
                 }
             }
@@ -173,9 +203,11 @@ impl StatefulWidget for TreeView<'_> {
                 let min_gap = 2;
                 if line_width + min_gap + info_width < area.width {
                     let info_x = area.x + area.width - info_width;
-                    let info_style = Style::default()
-                        .fg(colors::GIT_IGNORED) // dim gray
-                        .bg(bg);
+                    let info_style = row_style(
+                        Style::default()
+                            .fg(colors::GIT_IGNORED)
+                            .add_modifier(if row_mode == RowMode::Cursor { Modifier::DIM } else { Modifier::empty() }),
+                    );
                     let info_span = Line::from(Span::styled(info_text, info_style));
                     info_span.render(Rect::new(info_x, y, info_width, 1), buf);
                 }
@@ -418,6 +450,79 @@ fn days_to_civil(days: i64) -> (i64, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tree::node::{NodeKind, TreeNode};
+    use std::collections::HashSet;
+    use std::path::PathBuf;
+
+    /// Build a minimal FileTree with two file nodes for rendering tests.
+    fn make_test_tree() -> FileTree {
+        let config = crate::config::TreeConfig {
+            show_hidden: true,
+            show_ignored: true,
+            dirs_first: true,
+            exclude: vec![],
+            compact_folders: false,
+            show_size: false,
+            show_modified: false,
+        };
+        FileTree {
+            nodes: vec![
+                TreeNode::new(PathBuf::from("/tmp/a.txt"), NodeKind::File, 0),
+                TreeNode::new(PathBuf::from("/tmp/b.txt"), NodeKind::File, 0),
+            ],
+            cursor: 0,
+            scroll_offset: 0,
+            root: PathBuf::from("/tmp"),
+            config,
+            rendered_indices: vec![],
+            file_count: 2,
+            dir_count: 0,
+            selected_set: HashSet::new(),
+        }
+    }
+
+    fn render_tree(tree: &mut FileTree, hover_row: Option<usize>) -> Buffer {
+        let config = tree.config.clone();
+        let area = ratatui::layout::Rect::new(0, 0, 40, 10);
+        let mut buf = Buffer::empty(area);
+        let widget = TreeView {
+            config: &config,
+            hover_row,
+            filter_indices: &[],
+        };
+        widget.render(area, &mut buf, tree);
+        buf
+    }
+
+    #[test]
+    fn hover_row_has_reversed_and_dim() {
+        let mut tree = make_test_tree();
+        tree.cursor = 0; // cursor on row 0
+        let buf = render_tree(&mut tree, Some(1)); // hover on row 1
+        let cell = buf.cell((5, 1)).unwrap();
+        assert!(
+            cell.modifier.contains(Modifier::REVERSED) && cell.modifier.contains(Modifier::DIM),
+            "hover row should have REVERSED | DIM, got {:?}",
+            cell.modifier
+        );
+    }
+
+    #[test]
+    fn cursor_overrides_hover() {
+        let mut tree = make_test_tree();
+        tree.cursor = 0;
+        let buf = render_tree(&mut tree, Some(0)); // hover AND cursor on row 0
+        let cell = buf.cell((5, 0)).unwrap();
+        assert!(
+            cell.modifier.contains(Modifier::REVERSED),
+            "cursor+hover row should have REVERSED, got {:?}",
+            cell.modifier
+        );
+        assert!(
+            !cell.modifier.contains(Modifier::DIM),
+            "cursor+hover row should NOT have DIM (cursor priority)"
+        );
+    }
 
     #[test]
     fn format_size_bytes() {

@@ -1,9 +1,11 @@
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     widgets::Widget,
 };
+
+use super::colors;
 
 /// The kind of dialog being shown.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,26 +111,23 @@ impl Widget for InputDialogWidget<'_> {
 
         let dialog_rect = Rect::new(x, y, dialog_width, dialog_height);
 
-        let border_style = Style::default().fg(Color::Cyan);
-        let bg = Color::Gray;
-        let text_style = Style::default().fg(Color::Black).bg(bg);
-        let title_style = Style::default()
-            .fg(Color::Cyan)
-            .bg(bg)
-            .add_modifier(Modifier::BOLD);
+        let base = colors::popup_base();
+        let border_style = base;
+        let text_style = base;
+        let title_style = base.add_modifier(Modifier::BOLD);
 
-        // Fill background
+        // Fill background with REVERSED base
         for dy in 0..dialog_rect.height {
             for dx in 0..dialog_rect.width {
                 if let Some(cell) = buf.cell_mut((dialog_rect.x + dx, dialog_rect.y + dy)) {
-                    cell.set_style(Style::default().bg(bg));
+                    cell.set_style(base);
                     cell.set_symbol(" ");
                 }
             }
         }
 
         // Draw border
-        draw_border(buf, dialog_rect, border_style.bg(bg));
+        draw_border(buf, dialog_rect, border_style);
 
         // Title
         let title = self.state.kind.title();
@@ -147,7 +146,7 @@ impl Widget for InputDialogWidget<'_> {
                 hint_x,
                 dialog_rect.y + 3,
                 hint,
-                Style::default().fg(Color::DarkGray).bg(bg),
+                colors::popup_dim(),
             );
         } else {
             // Input field
@@ -155,11 +154,10 @@ impl Widget for InputDialogWidget<'_> {
             let input_x = dialog_rect.x + 2;
             let input_width = dialog_rect.width.saturating_sub(4) as usize;
 
-            // Draw input background
+            // Draw input background (reset clears REVERSED from the popup fill)
             for dx in 0..input_width {
                 if let Some(cell) = buf.cell_mut((input_x + dx as u16, input_y)) {
-                    cell.set_style(Style::default().bg(Color::Black));
-                    cell.set_symbol(" ");
+                    cell.reset();
                 }
             }
 
@@ -173,7 +171,7 @@ impl Widget for InputDialogWidget<'_> {
                 input_x,
                 input_y,
                 display_text,
-                Style::default().fg(Color::White).bg(Color::Black),
+                Style::default(),
             );
 
             // Draw cursor
@@ -185,8 +183,7 @@ impl Widget for InputDialogWidget<'_> {
             if let Some(cell) = buf.cell_mut((input_x + cursor_display_pos as u16, input_y)) {
                 cell.set_style(
                     Style::default()
-                        .fg(Color::Black)
-                        .bg(Color::White),
+                        .add_modifier(Modifier::BOLD | Modifier::REVERSED),
                 );
             }
 
@@ -196,7 +193,7 @@ impl Widget for InputDialogWidget<'_> {
                 dialog_rect.x + 2,
                 dialog_rect.y + 3,
                 hint,
-                Style::default().fg(Color::DarkGray).bg(bg),
+                colors::popup_dim(),
             );
         }
     }
@@ -243,5 +240,81 @@ fn draw_border(buf: &mut Buffer, rect: Rect, style: Style) {
             cell.set_symbol("│");
             cell.set_style(style);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::style::Modifier;
+
+    fn render_dialog(state: &InputDialogState) -> ratatui::buffer::Buffer {
+        let area = ratatui::layout::Rect::new(0, 0, 60, 20);
+        let mut buf = ratatui::buffer::Buffer::empty(area);
+        let widget = InputDialogWidget { state };
+        widget.render(area, &mut buf);
+        buf
+    }
+
+    #[test]
+    fn dialog_container_has_reversed() {
+        let state = InputDialogState::new(
+            DialogKind::NewFile,
+            std::path::PathBuf::from("/tmp"),
+            String::new(),
+        );
+        let buf = render_dialog(&state);
+        // Check a cell inside the dialog fill (row between title and input)
+        // Dialog at (5, 7, 50, 5): y=8 is the blank row below the title
+        let mid_x = 30u16;
+        let mid_y = 8u16;
+        let cell = buf.cell((mid_x, mid_y)).unwrap();
+        assert!(
+            cell.modifier.contains(Modifier::REVERSED),
+            "dialog container should have REVERSED, got {:?}",
+            cell.modifier
+        );
+    }
+
+    #[test]
+    fn input_area_not_reversed() {
+        let state = InputDialogState::new(
+            DialogKind::NewFile,
+            std::path::PathBuf::from("/tmp"),
+            String::new(),
+        );
+        let buf = render_dialog(&state);
+        // Input field is at dialog_rect.y + 2, dialog_rect.x + 2
+        // Dialog is centered: x = (60 - 50) / 2 = 5, y = (20 - 5) / 2 = 7
+        // input_x = 7, input_y = 9; skip pos 0 (cursor) and check pos 1+
+        let input_x = 8u16; // 5 + 2 + 1 (skip cursor at offset 0)
+        let input_y = 9u16; // 7 + 2
+        let cell = buf.cell((input_x, input_y)).unwrap();
+        assert!(
+            !cell.modifier.contains(Modifier::REVERSED),
+            "input area should NOT have REVERSED, got {:?}",
+            cell.modifier
+        );
+    }
+
+    #[test]
+    fn title_has_reversed_and_bold() {
+        let state = InputDialogState::new(
+            DialogKind::Rename,
+            std::path::PathBuf::from("/tmp"),
+            "test.txt".to_string(),
+        );
+        let buf = render_dialog(&state);
+        // Title is centered on the top border row
+        // Dialog x = 5, y = 7, title "Rename" is 6 chars, padded to " Rename "
+        // title_x = 5 + (50 - 8) / 2 = 5 + 21 = 26
+        let title_x = 26u16;
+        let title_y = 7u16;
+        let cell = buf.cell((title_x + 1, title_y)).unwrap();
+        assert!(
+            cell.modifier.contains(Modifier::REVERSED) && cell.modifier.contains(Modifier::BOLD),
+            "title should have REVERSED | BOLD, got {:?}",
+            cell.modifier
+        );
     }
 }
