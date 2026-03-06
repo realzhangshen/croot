@@ -155,14 +155,14 @@ impl Widget for ContextMenuWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let menu_rect = self.state.menu_rect(area.x + area.width, area.y + area.height);
 
-        let border_style = Style::default().fg(colors::MENU_BORDER);
-        let bg = colors::STATUS_BAR_BG;
-        let normal_style = Style::default().fg(Color::Reset).bg(bg);
+        let border_style = Style::default().fg(Color::DarkGray);
+        let bg = Color::Gray;
+        let normal_style = Style::default().fg(Color::Black).bg(bg);
         let selected_style = Style::default()
             .fg(Color::White)
             .bg(colors::MENU_SELECTED_BG)
             .add_modifier(Modifier::BOLD);
-        let separator_style = Style::default().fg(colors::TREE_LINE).bg(bg);
+        let separator_style = Style::default().fg(Color::DarkGray).bg(bg);
         let delete_style = Style::default().fg(Color::Red).bg(bg);
 
         // Fill background

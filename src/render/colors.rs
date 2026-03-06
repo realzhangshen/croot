@@ -21,12 +21,12 @@ pub const PREVIEW_DIR_NAME: Color = Color::LightYellow;
 pub const INLINE_CODE: Color = Color::Yellow;
 
 // UI colors — ANSI / terminal-default so they adapt to any theme
-pub const SELECTED_BG: Color = Color::DarkGray;
-pub const HOVER_BG: Color = Color::DarkGray;
+// Cursor row uses Modifier::REVERSED (no explicit bg) for maximum contrast
+pub const MULTI_SELECTED_BG: Color = Color::DarkGray;
+pub const HOVER_BG: Color = Color::Gray;
 pub const TREE_LINE: Color = Color::DarkGray;
 pub const STATUS_BAR_BG: Color = Color::DarkGray;
 pub const STATUS_BAR_FG: Color = Color::White;
 pub const DIR_COLOR: Color = Color::Yellow;
-pub const MENU_BORDER: Color = Color::Gray;
 pub const MENU_SELECTED_BG: Color = Color::Blue;
 pub const DEFAULT_FG: Color = Color::Reset;

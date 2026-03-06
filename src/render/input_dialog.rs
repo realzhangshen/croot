@@ -5,8 +5,6 @@ use ratatui::{
     widgets::Widget,
 };
 
-use super::colors;
-
 /// The kind of dialog being shown.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DialogKind {
@@ -112,8 +110,8 @@ impl Widget for InputDialogWidget<'_> {
         let dialog_rect = Rect::new(x, y, dialog_width, dialog_height);
 
         let border_style = Style::default().fg(Color::Cyan);
-        let bg = colors::STATUS_BAR_BG;
-        let text_style = Style::default().fg(Color::Reset).bg(bg);
+        let bg = Color::Gray;
+        let text_style = Style::default().fg(Color::Black).bg(bg);
         let title_style = Style::default()
             .fg(Color::Cyan)
             .bg(bg)
