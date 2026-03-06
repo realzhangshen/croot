@@ -65,6 +65,11 @@ pub fn highlight_file(
         })
         .unwrap_or_else(|| ss.find_syntax_plain_text());
 
+    // If no real syntax was found, use terminal-native colors instead of theme's muted fg
+    if syntax.name == "Plain Text" {
+        return plain_lines(content, max_lines);
+    }
+
     let mut highlighter = syntect::easy::HighlightLines::new(syntax, theme);
     let mut result = Vec::with_capacity(max_lines.min(content.lines().count()));
 
