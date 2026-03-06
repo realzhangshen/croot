@@ -3,6 +3,7 @@ use ratatui::{
     layout::Rect,
     widgets::Widget,
 };
+use unicode_width::UnicodeWidthStr;
 
 use super::colors;
 
@@ -54,7 +55,7 @@ impl ContextMenuState {
                 MenuItem { label: "Copy Path".into(), action: MenuAction::CopyPath },
                 MenuItem { label: "Copy Absolute Path".into(), action: MenuAction::CopyAbsPath },
                 MenuItem { label: "Reveal in Finder".into(), action: MenuAction::RevealInFinder },
-                MenuItem { label: "────────────────".into(), action: MenuAction::CopyPath }, // separator (inert)
+                MenuItem { label: "─".into(), action: MenuAction::CopyPath }, // separator (inert)
                 MenuItem { label: "Rename".into(), action: MenuAction::Rename },
                 MenuItem { label: "Delete".into(), action: MenuAction::Delete },
             ],
@@ -73,7 +74,7 @@ impl ContextMenuState {
                 MenuItem { label: "Copy Path".into(), action: MenuAction::CopyPath },
                 MenuItem { label: "Copy Absolute Path".into(), action: MenuAction::CopyAbsPath },
                 MenuItem { label: "Reveal in Finder".into(), action: MenuAction::RevealInFinder },
-                MenuItem { label: "────────────────".into(), action: MenuAction::CopyPath }, // separator
+                MenuItem { label: "─".into(), action: MenuAction::CopyPath }, // separator
                 MenuItem { label: "Rename".into(), action: MenuAction::Rename },
                 MenuItem { label: "Delete".into(), action: MenuAction::Delete },
             ],
@@ -108,7 +109,7 @@ impl ContextMenuState {
 
     /// Return the menu rect, clamped to fit within the terminal area.
     pub fn menu_rect(&self, terminal_width: u16, terminal_height: u16) -> Rect {
-        let width = self.items.iter().map(|i| i.label.len()).max().unwrap_or(10) as u16 + 4;
+        let width = self.items.iter().map(|i| i.label.width()).max().unwrap_or(10) as u16 + 4;
         let height = self.items.len() as u16 + 2; // +2 for border
 
         let x = if self.x + width > terminal_width {
@@ -250,18 +251,24 @@ impl Widget for ContextMenuWidget<'_> {
             }
 
             // Render item text
-            let text = format!(" {} ", item.label);
-            let content_width = (menu_rect.width - 2) as usize;
-            let display = if text.chars().count() > content_width {
-                let byte_end = text
-                    .char_indices()
-                    .nth(content_width)
-                    .map_or(text.len(), |(i, _)| i);
-                &text[..byte_end]
+            if is_separator {
+                let content_width = (menu_rect.width - 2) as usize;
+                let separator_line: String = "─".repeat(content_width);
+                buf.set_string(menu_rect.x + 1, y, &separator_line, style);
             } else {
-                &text
-            };
-            buf.set_string(menu_rect.x + 1, y, display, style);
+                let text = format!(" {} ", item.label);
+                let content_width = (menu_rect.width - 2) as usize;
+                let display = if text.width() > content_width {
+                    let byte_end = text
+                        .char_indices()
+                        .nth(content_width)
+                        .map_or(text.len(), |(i, _)| i);
+                    &text[..byte_end]
+                } else {
+                    &text
+                };
+                buf.set_string(menu_rect.x + 1, y, display, style);
+            }
         }
     }
 }
