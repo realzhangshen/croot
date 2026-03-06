@@ -41,9 +41,20 @@ pub fn popup_base() -> Style {
     Style::default().add_modifier(Modifier::REVERSED)
 }
 
-/// Popup selected item: bold (on top of the reversed base fill)
+/// Popup selected item: blue background with bold white text
 pub fn popup_selected() -> Style {
-    Style::default().add_modifier(Modifier::BOLD)
+    Style::reset()
+        .bg(Color::Blue)
+        .fg(Color::White)
+        .add_modifier(Modifier::BOLD)
+}
+
+/// Popup selected danger item (e.g. Delete): red background with bold white text
+pub fn popup_selected_danger() -> Style {
+    Style::reset()
+        .bg(Color::Red)
+        .fg(Color::White)
+        .add_modifier(Modifier::BOLD)
 }
 
 /// Popup dim text (separators, hints): reversed + dim

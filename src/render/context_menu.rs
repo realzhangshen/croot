@@ -172,8 +172,8 @@ impl Widget for ContextMenuWidget<'_> {
         let border_style = colors::popup_dim();
         let normal_style = base;
         let selected_style = colors::popup_selected();
+        let selected_danger_style = colors::popup_selected_danger();
         let separator_style = colors::popup_dim();
-        let delete_style = base.fg(ratatui::style::Color::Red);
 
         // Fill background with REVERSED base
         for y in menu_rect.y..menu_rect.y + menu_rect.height {
@@ -246,10 +246,10 @@ impl Widget for ContextMenuWidget<'_> {
 
             let style = if is_separator {
                 separator_style
+            } else if is_selected && is_delete {
+                selected_danger_style
             } else if is_selected {
                 selected_style
-            } else if is_delete {
-                delete_style
             } else {
                 normal_style
             };
@@ -258,7 +258,7 @@ impl Widget for ContextMenuWidget<'_> {
             if is_selected {
                 for x in (menu_rect.x + 1)..(menu_rect.x + menu_rect.width - 1) {
                     if let Some(cell) = buf.cell_mut((x, y)) {
-                        cell.set_style(selected_style);
+                        cell.set_style(style);
                     }
                 }
             }
@@ -329,7 +329,7 @@ mod tests {
     }
 
     #[test]
-    fn selected_item_has_bold() {
+    fn selected_item_has_blue_bg_white_fg_bold() {
         let state = ContextMenuState::new_for_file(0, 0, 0);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
@@ -339,8 +339,52 @@ mod tests {
         let cell = buf.cell((x, y)).unwrap();
         assert!(
             cell.modifier.contains(Modifier::BOLD),
-            "selected menu item at ({x},{y}) should have BOLD, got {:?}",
+            "selected menu item should have BOLD, got {:?}",
             cell.modifier
+        );
+        assert!(
+            !cell.modifier.contains(Modifier::REVERSED),
+            "selected menu item should NOT have REVERSED"
+        );
+        assert_eq!(cell.bg, ratatui::style::Color::Blue, "selected item should have Blue bg");
+        assert_eq!(cell.fg, ratatui::style::Color::White, "selected item should have White fg");
+    }
+
+    #[test]
+    fn unselected_delete_has_no_red() {
+        let state = ContextMenuState::new_for_file(0, 0, 0);
+        let buf = render_menu(&state);
+        let rect = state.menu_rect(40, 20);
+        // Find the Delete item index
+        let delete_idx = state.items.iter().position(|i| i.action == MenuAction::Delete).unwrap();
+        // selected==0, so Delete is not selected
+        assert_ne!(state.selected, delete_idx);
+        let y = rect.y + 1 + delete_idx as u16;
+        let x = rect.x + 2;
+        let cell = buf.cell((x, y)).unwrap();
+        assert_ne!(cell.fg, ratatui::style::Color::Red, "unselected Delete should not have red fg");
+        assert_ne!(cell.bg, ratatui::style::Color::Red, "unselected Delete should not have red bg");
+    }
+
+    #[test]
+    fn selected_delete_has_red_bg() {
+        let mut state = ContextMenuState::new_for_file(0, 0, 0);
+        let delete_idx = state.items.iter().position(|i| i.action == MenuAction::Delete).unwrap();
+        state.selected = delete_idx;
+        let buf = render_menu(&state);
+        let rect = state.menu_rect(40, 20);
+        let y = rect.y + 1 + delete_idx as u16;
+        let x = rect.x + 2;
+        let cell = buf.cell((x, y)).unwrap();
+        assert_eq!(cell.bg, ratatui::style::Color::Red, "selected Delete should have Red bg");
+        assert_eq!(cell.fg, ratatui::style::Color::White, "selected Delete should have White fg");
+        assert!(
+            cell.modifier.contains(Modifier::BOLD),
+            "selected Delete should have BOLD"
+        );
+        assert!(
+            !cell.modifier.contains(Modifier::REVERSED),
+            "selected Delete should NOT have REVERSED"
         );
     }
 }
