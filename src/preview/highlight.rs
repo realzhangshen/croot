@@ -11,7 +11,7 @@ static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
 static THEME_DARK: OnceLock<Theme> = OnceLock::new();
 
 fn syntax_set() -> &'static SyntaxSet {
-    SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines)
+    SYNTAX_SET.get_or_init(two_face::syntax::extra_newlines)
 }
 
 fn theme_dark() -> &'static Theme {
@@ -142,4 +142,96 @@ pub fn plain_lines(content: &str, max_lines: usize) -> Vec<Vec<StyledSpan>> {
         .take(max_lines)
         .map(|line| vec![(line.to_string(), Style::default())])
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    /// Helper: returns true if the result contains any non-default styling.
+    fn has_highlighting(lines: &[Vec<StyledSpan>]) -> bool {
+        lines
+            .iter()
+            .flatten()
+            .any(|(_, style)| *style != Style::default())
+    }
+
+    #[test]
+    fn new_extensions_recognized_by_highlight_file() {
+        let cases = [
+            ("Cargo.toml", "[package]\nname = \"foo\""),
+            ("Component.tsx", "const App = () => <div />;"),
+            ("Dockerfile", "FROM rust:latest\nRUN cargo build"),
+            ("main.zig", "const std = @import(\"std\");"),
+            ("flake.nix", "{ inputs.nixpkgs.url = \"github:NixOS/nixpkgs\"; }"),
+            ("App.vue", "<template><div /></template>"),
+        ];
+        for (filename, content) in cases {
+            let path = PathBuf::from(filename);
+            let result = highlight_file(&path, content, 100);
+            assert!(
+                has_highlighting(&result),
+                "{filename} should be syntax-highlighted, got plain text"
+            );
+        }
+    }
+
+    #[test]
+    fn new_tokens_recognized_by_highlight_code() {
+        let cases = [
+            ("toml", "[package]\nname = \"foo\""),
+            ("tsx", "const App = () => <div />;"),
+            ("dockerfile", "FROM rust:latest"),
+            ("zig", "const std = @import(\"std\");"),
+            ("nix", "{ pkgs ? import <nixpkgs> {} }: pkgs"),
+            ("vue", "<template><div /></template>"),
+        ];
+        for (token, code) in cases {
+            let result = highlight_code(token, code, 100);
+            assert!(
+                has_highlighting(&result),
+                "token '{token}' should be syntax-highlighted, got plain text"
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_extension_falls_back_to_plain_text() {
+        let path = PathBuf::from("data.unknownext12345");
+        let result = highlight_file(&path, "hello world", 100);
+        assert!(
+            !has_highlighting(&result),
+            "unknown extension should produce plain text"
+        );
+    }
+
+    #[test]
+    fn unknown_token_falls_back_to_plain_text() {
+        let result = highlight_code("unknownlang12345", "hello world", 100);
+        // plain_text path is not taken by highlight_code (it still uses the theme),
+        // but the token lookup falls back to Plain Text syntax, which produces
+        // uniform styling — check it doesn't panic and returns content.
+        assert_eq!(result.len(), 1);
+        assert!(!result[0].is_empty());
+    }
+
+    #[test]
+    fn existing_languages_still_highlighted() {
+        let cases = [
+            ("main.rs", "fn main() { println!(\"hello\"); }"),
+            ("script.py", "def hello():\n    print('hi')"),
+            ("app.js", "const x = () => {};"),
+            ("data.json", "{\"key\": \"value\"}"),
+            ("config.yaml", "key: value\nlist:\n  - item"),
+        ];
+        for (filename, content) in cases {
+            let path = PathBuf::from(filename);
+            let result = highlight_file(&path, content, 100);
+            assert!(
+                has_highlighting(&result),
+                "{filename} should still be syntax-highlighted (regression)"
+            );
+        }
+    }
 }
