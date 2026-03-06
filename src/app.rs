@@ -68,7 +68,7 @@ impl App {
         let config = Config::load();
         let mut tree = FileTree::new(root.clone(), config.tree.clone());
         let git = GitState::load(&root);
-        let cmux = CmuxBridge::detect(config.cmux.split_direction.clone());
+        let cmux = CmuxBridge::detect();
 
         if let Some(ref git) = git {
             git.apply_to_nodes(&mut tree.nodes);
@@ -198,13 +198,6 @@ impl App {
 
             if self.should_quit {
                 break;
-            }
-        }
-
-        // Cleanup
-        if self.config.preview.close_on_exit {
-            if let Some(ref mut cmux) = self.cmux {
-                cmux.close_preview().await;
             }
         }
 

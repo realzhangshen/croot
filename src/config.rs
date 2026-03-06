@@ -10,8 +10,6 @@ pub struct Config {
     pub tree: TreeConfig,
     #[serde(default)]
     pub preview: PreviewConfig,
-    #[serde(default)]
-    pub cmux: CmuxConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -54,22 +52,11 @@ pub struct PreviewConfig {
     pub render_markdown: bool,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct CmuxConfig {
-    #[serde(default = "default_split_direction")]
-    pub split_direction: String,
-    #[serde(default = "default_split_ratio")]
-    pub split_ratio: f32,
-}
-
 fn default_true() -> bool {
     true
 }
 fn default_preview_delay() -> u64 {
     150
-}
-fn default_split_direction() -> String {
-    "right".into()
 }
 fn default_split_ratio() -> f32 {
     0.5
@@ -110,15 +97,6 @@ impl Default for PreviewConfig {
             syntax_highlight: true,
             split_ratio: 0.5,
             render_markdown: true,
-        }
-    }
-}
-
-impl Default for CmuxConfig {
-    fn default() -> Self {
-        Self {
-            split_direction: "right".into(),
-            split_ratio: 0.5,
         }
     }
 }
