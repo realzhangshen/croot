@@ -1,16 +1,16 @@
 # croot
 
-A lightweight terminal file tree sidebar, built with Rust and [Ratatui](https://ratatui.rs).
-
-`croot` gives you a vim-style navigable file tree in your terminal, with git status integration and real-time filesystem watching.
+A terminal file explorer that brings the VS Code sidebar experience to your command line — built with Rust and [Ratatui](https://ratatui.rs).
 
 ## Features
 
-- Vim-style navigation (`hjkl`)
-- Git status indicators (modified, staged, untracked, etc.)
-- Real-time filesystem watching (auto-refresh on changes)
-- Respects `.gitignore` rules
-- Configurable via TOML
+- **Git status integration** — see modified, staged, and untracked files at a glance
+- **Real-time filesystem watching** — tree auto-refreshes on file changes
+- **Syntax-highlighted preview** — preview files with full syntax highlighting (150+ languages)
+
+## Pair with cmux
+
+croot works great alongside [cmux](https://github.com/realzhangshen/cmux) for a full vibe coding setup in the terminal — file tree on one side, editor and shell on the other.
 
 ## Installation
 
@@ -36,61 +36,9 @@ croot            # Browse current directory
 croot ~/projects # Browse a specific directory
 ```
 
-## Keybindings
-
-| Key | Action |
-|-----|--------|
-| `j` / `Down` | Move cursor down |
-| `k` / `Up` | Move cursor up |
-| `h` / `Left` | Collapse directory |
-| `l` / `Right` | Expand directory |
-| `Space` / `Tab` | Toggle expand/collapse |
-| `Enter` | Toggle expand/collapse |
-| `g` | Jump to top |
-| `G` | Jump to bottom |
-| `PageUp` / `PageDown` | Scroll by 10 lines |
-| `r` | Refresh tree |
-| `q` / `Ctrl+C` | Quit |
-
 ## Configuration
 
-croot reads configuration from `~/.config/croot/config.toml` (or `$XDG_CONFIG_HOME/croot/config.toml`).
-
-Example with all defaults:
-
-```toml
-[tree]
-show_hidden = true
-show_ignored = true
-dirs_first = true
-exclude = [".git", ".svn", ".hg", "CVS", ".DS_Store", "Thumbs.db"]
-
-[preview]
-auto_preview = false
-preview_delay_ms = 150
-close_on_exit = true
-
-[cmux]
-split_direction = "right"
-split_ratio = 0.5
-```
-
-### Options
-
-**`[tree]`** — File tree behavior
-- `show_hidden` — Show hidden files (default: `true`)
-- `show_ignored` — Show git-ignored files (default: `true`)
-- `dirs_first` — Sort directories before files (default: `true`)
-- `exclude` — Glob patterns to always exclude
-
-**`[preview]`** — File preview
-- `auto_preview` — Automatically preview selected file (default: `false`)
-- `preview_delay_ms` — Delay before previewing in ms (default: `150`)
-- `close_on_exit` — Close preview pane on exit (default: `true`)
-
-**`[cmux]`** — Cmux bridge settings
-- `split_direction` — Split direction: `"right"` or `"below"` (default: `"right"`)
-- `split_ratio` — Split pane ratio (default: `0.5`)
+Config file: `~/.config/croot/config.toml` (or `$XDG_CONFIG_HOME/croot/config.toml`)
 
 ## License
 
