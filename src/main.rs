@@ -82,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Run app
-    let mut app = App::new(path)?;
+    let mut app = App::new(path, enhanced_keyboard)?;
     let result = app.run(&mut terminal).await;
 
     // Terminal teardown

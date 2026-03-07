@@ -17,6 +17,7 @@ pub struct MenuItem {
 /// Actions triggered by context menu selections.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MenuAction {
+    OpenInEditor,
     CopyPath,
     CopyAbsPath,
     RevealInFinder,
@@ -48,6 +49,8 @@ impl ContextMenuState {
             node_idx,
             selected: 0,
             items: vec![
+                MenuItem { label: "Open in Editor".into(), action: MenuAction::OpenInEditor },
+                MenuItem { label: "─".into(), action: MenuAction::CopyPath }, // separator (inert)
                 MenuItem { label: "Copy Path".into(), action: MenuAction::CopyPath },
                 MenuItem { label: "Copy Absolute Path".into(), action: MenuAction::CopyAbsPath },
                 MenuItem { label: "Reveal in Finder".into(), action: MenuAction::RevealInFinder },

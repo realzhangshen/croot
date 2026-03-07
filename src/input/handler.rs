@@ -89,6 +89,10 @@ pub enum Action {
     /// Navigate to next/prev match in search results.
     SearchNext,
     SearchPrev,
+    /// Open the selected file in $EDITOR.
+    OpenInEditor,
+    /// Enter key: open file in editor or toggle directory.
+    EnterKey,
     None,
 }
 
@@ -137,7 +141,10 @@ pub fn handle_key(key: KeyEvent, preview_visible: bool, preview_has_selection: b
 
         // Toggle expand/collapse
         KeyCode::Char(' ') => Action::Toggle,
-        KeyCode::Enter => Action::Toggle,
+        KeyCode::Enter => Action::EnterKey,
+
+        // Open file in editor
+        KeyCode::Char('e') => Action::OpenInEditor,
 
         // Tab: switch focus when preview is visible, otherwise toggle
         KeyCode::Tab => {

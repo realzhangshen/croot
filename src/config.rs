@@ -10,6 +10,14 @@ pub struct Config {
     pub tree: TreeConfig,
     #[serde(default)]
     pub preview: PreviewConfig,
+    #[serde(default)]
+    pub editor: EditorConfig,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct EditorConfig {
+    #[serde(default)]
+    pub command: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

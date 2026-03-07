@@ -1,7 +1,13 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crossterm::event::{Event, EventStream};
+use crossterm::event::{
+    DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyboardEnhancementFlags,
+    PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+};
+use crossterm::terminal::{
+    EnterAlternateScreen, LeaveAlternateScreen,
+};
 use futures::StreamExt;
 use ratatui::{
     layout::{Constraint, Direction, Layout},
@@ -31,6 +37,13 @@ use crate::render::status_bar::{HyperlinkRegion, StatusBar};
 use crate::render::tree_view::TreeView;
 use crate::tree::forest::FileTree;
 
+/// Signal from action handling that requires terminal-level processing.
+pub enum PostAction {
+    None,
+    OpenEditor(PathBuf),
+}
+
+#[allow(clippy::struct_excessive_bools)]
 pub struct App {
     pub tree: FileTree,
     pub git: Option<GitState>,
@@ -61,10 +74,12 @@ pub struct App {
     search_filtered: Vec<usize>,
     // Hyperlink regions for post-render OSC 8 emission
     hyperlink_regions: Vec<HyperlinkRegion>,
+    // Whether Kitty keyboard enhancement protocol is active
+    enhanced_keyboard: bool,
 }
 
 impl App {
-    pub fn new(root: PathBuf) -> anyhow::Result<Self> {
+    pub fn new(root: PathBuf, enhanced_keyboard: bool) -> anyhow::Result<Self> {
         let config = Config::load();
         let mut tree = FileTree::new(root.clone(), config.tree.clone());
         let git = GitState::load(&root);
@@ -106,6 +121,7 @@ impl App {
             search_state: SearchState::new(),
             search_filtered: Vec::new(),
             hyperlink_regions: Vec::new(),
+            enhanced_keyboard,
         })
     }
 
@@ -127,6 +143,8 @@ impl App {
         if self.preview_visible {
             self.trigger_preview_load(&preview_tx);
         }
+
+        let mut post_action = PostAction::None;
 
         loop {
             terminal.draw(|frame| self.draw(frame))?;
@@ -154,14 +172,14 @@ impl App {
                                 InputMode::Dialog => handle_key_dialog(key),
                                 InputMode::Search => handle_key_search(key),
                             };
-                            self.handle_action(action, &preview_tx).await;
+                            post_action = self.handle_action(action, &preview_tx).await;
                         }
                         Some(Ok(Event::Mouse(mouse))) => {
                             if self.input_mode == InputMode::ContextMenu {
-                                self.handle_context_menu_mouse(mouse);
+                                post_action = self.handle_context_menu_mouse(mouse);
                             } else if self.input_mode == InputMode::Normal {
                                 let action = handle_mouse(mouse, self.tree_area_y, self.tree_area_height, self.preview_area_x);
-                                self.handle_action(action, &preview_tx).await;
+                                post_action = self.handle_action(action, &preview_tx).await;
                             }
                         }
                         Some(Ok(Event::Resize(_, _))) => {
@@ -194,6 +212,22 @@ impl App {
                         self.preview_state.apply(path, loaded.kind, loaded.content, loaded.file_info);
                     }
                 }
+            }
+
+            // Process post-actions that require terminal access
+            if let PostAction::OpenEditor(path) = std::mem::replace(&mut post_action, PostAction::None) {
+                self.open_editor_suspend(terminal, &path)?;
+                // Refresh tree, git, preview after editor exits
+                self.tree.refresh();
+                if let Some(ref mut git) = self.git {
+                    git.refresh();
+                }
+                self.reapply_git();
+                if self.preview_visible {
+                    self.trigger_preview_load(&preview_tx);
+                }
+                // Recreate event stream to flush stale buffered events
+                reader = EventStream::new();
             }
 
             if self.should_quit {
@@ -410,7 +444,8 @@ impl App {
         &mut self,
         action: Action,
         preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
-    ) {
+    ) -> PostAction {
+        let mut post = PostAction::None;
         match action {
             Action::Quit => {
                 if self.input_mode == InputMode::Normal {
@@ -515,7 +550,7 @@ impl App {
                 if let Some(menu) = self.context_menu.take() {
                     let menu_action = menu.selected_action().clone();
                     self.input_mode = InputMode::Normal;
-                    self.execute_menu_action(&menu_action, menu.node_idx, preview_tx)
+                    post = self.execute_menu_action(&menu_action, menu.node_idx, preview_tx)
                         .await;
                 }
             }
@@ -602,8 +637,28 @@ impl App {
                 self.search_navigate_prev();
             }
 
+            // Open file in editor
+            Action::OpenInEditor => {
+                if let Some(node) = self.tree.selected() {
+                    if !node.is_dir() {
+                        post = PostAction::OpenEditor(node.path.clone());
+                    }
+                }
+            }
+            Action::EnterKey => {
+                let selected_is_dir = self.tree.selected().is_some_and(crate::tree::node::TreeNode::is_dir);
+                if selected_is_dir {
+                    let idx = self.tree.cursor;
+                    self.tree.toggle(idx);
+                    self.reapply_git();
+                } else if let Some(path) = self.tree.selected().map(|n| n.path.clone()) {
+                    post = PostAction::OpenEditor(path);
+                }
+            }
+
             Action::None => {}
         }
+        post
     }
 
     fn handle_tree_action(&mut self, action: &Action) {
@@ -848,7 +903,7 @@ impl App {
         self.input_mode = InputMode::ContextMenu;
     }
 
-    fn handle_context_menu_mouse(&mut self, mouse: crossterm::event::MouseEvent) {
+    fn handle_context_menu_mouse(&mut self, mouse: crossterm::event::MouseEvent) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
 
         match mouse.kind {
@@ -862,9 +917,7 @@ impl App {
                             let node_idx = menu.node_idx;
                             self.context_menu = None;
                             self.input_mode = InputMode::Normal;
-                            // Can't call async from here, so store for later
-                            // Actually we can use a simpler approach: match synchronously
-                            self.execute_menu_action_sync(&menu_action, node_idx);
+                            return self.execute_menu_action_sync(&menu_action, node_idx);
                         }
                     } else {
                         self.context_menu = None;
@@ -889,6 +942,7 @@ impl App {
                 }
             }
         }
+        PostAction::None
     }
 
     async fn execute_menu_action(
@@ -896,8 +950,15 @@ impl App {
         action: &MenuAction,
         node_idx: usize,
         preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
-    ) {
+    ) -> PostAction {
         match action {
+            MenuAction::OpenInEditor => {
+                if let Some(node) = self.tree.nodes.get(node_idx) {
+                    if !node.is_dir() {
+                        return PostAction::OpenEditor(node.path.clone());
+                    }
+                }
+            }
             MenuAction::CopyPath => {
                 if let Some(node) = self.tree.nodes.get(node_idx) {
                     let rel = node
@@ -939,11 +1000,19 @@ impl App {
         } else if self.preview_visible {
             self.trigger_preview_load(preview_tx);
         }
+        PostAction::None
     }
 
     /// Synchronous version for mouse click handler (non-async context).
-    fn execute_menu_action_sync(&mut self, action: &MenuAction, node_idx: usize) {
+    fn execute_menu_action_sync(&mut self, action: &MenuAction, node_idx: usize) -> PostAction {
         match action {
+            MenuAction::OpenInEditor => {
+                if let Some(node) = self.tree.nodes.get(node_idx) {
+                    if !node.is_dir() {
+                        return PostAction::OpenEditor(node.path.clone());
+                    }
+                }
+            }
             MenuAction::CopyPath => {
                 if let Some(node) = self.tree.nodes.get(node_idx) {
                     let rel = node
@@ -978,6 +1047,7 @@ impl App {
             MenuAction::Rename => self.start_rename_at(node_idx),
             MenuAction::Delete => self.start_delete_at(node_idx),
         }
+        PostAction::None
     }
 
     // ── File operations ─────────────────────────────────────────────────
@@ -1257,5 +1327,70 @@ impl App {
         if let Some(ref git) = self.git {
             git.apply_to_nodes(&mut self.tree.nodes);
         }
+    }
+
+    // ── Editor ─────────────────────────────────────────────────────────
+
+    /// Resolve the editor command: config → $VISUAL → $EDITOR → "vi".
+    fn resolve_editor(&self) -> String {
+        if let Some(ref cmd) = self.config.editor.command {
+            if !cmd.is_empty() {
+                return cmd.clone();
+            }
+        }
+        if let Ok(v) = std::env::var("VISUAL") {
+            if !v.is_empty() {
+                return v;
+            }
+        }
+        if let Ok(v) = std::env::var("EDITOR") {
+            if !v.is_empty() {
+                return v;
+            }
+        }
+        "vi".to_string()
+    }
+
+    /// Suspend the terminal, spawn the editor, then resume.
+    fn open_editor_suspend<B: ratatui::backend::Backend>(
+        &self,
+        terminal: &mut Terminal<B>,
+        path: &std::path::Path,
+    ) -> anyhow::Result<()> {
+        // Leave alternate screen
+        let mut stdout = std::io::stdout();
+        if self.enhanced_keyboard {
+            let _ = crossterm::execute!(stdout, PopKeyboardEnhancementFlags);
+        }
+        let _ = crossterm::execute!(stdout, LeaveAlternateScreen, DisableMouseCapture);
+        let _ = crossterm::terminal::disable_raw_mode();
+
+        // Resolve editor and split into command + args (e.g. "code --wait")
+        let editor_str = self.resolve_editor();
+        let mut parts = editor_str.split_whitespace();
+        let cmd = parts.next().unwrap_or("vi");
+        let status = std::process::Command::new(cmd)
+            .args(parts)
+            .arg(path)
+            .status();
+
+        if let Err(e) = status {
+            eprintln!("Failed to open editor '{editor_str}': {e}");
+            std::thread::sleep(Duration::from_secs(2));
+        }
+
+        // Restore terminal
+        let _ = crossterm::terminal::enable_raw_mode();
+        let mut stdout = std::io::stdout();
+        let _ = crossterm::execute!(stdout, EnterAlternateScreen, EnableMouseCapture);
+        if self.enhanced_keyboard {
+            let _ = crossterm::execute!(
+                stdout,
+                PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+            );
+        }
+        terminal.clear()?;
+
+        Ok(())
     }
 }
