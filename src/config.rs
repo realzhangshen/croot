@@ -12,12 +12,45 @@ pub struct Config {
     pub preview: PreviewConfig,
     #[serde(default)]
     pub editor: EditorConfig,
+    #[serde(default)]
+    pub open: OpenConfig,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct EditorConfig {
     #[serde(default)]
     pub command: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenConfig {
+    #[serde(default = "default_open_command")]
+    pub default: String,
+    #[serde(default)]
+    pub rules: Vec<OpenRule>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenRule {
+    pub pattern: String,
+    pub command: String,
+}
+
+fn default_open_command() -> String {
+    if cfg!(target_os = "macos") {
+        "open".into()
+    } else {
+        "xdg-open".into()
+    }
+}
+
+impl Default for OpenConfig {
+    fn default() -> Self {
+        Self {
+            default: default_open_command(),
+            rules: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

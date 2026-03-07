@@ -32,6 +32,8 @@ content_inspector = "0.2"
 unicode-width = "0.2"
 arboard = "3"
 pulldown-cmark = { version = "0.12", default-features = false }
+globset = "0.4"
+shell-words = "1"
 
 [lints.rust]
 unsafe_code = "forbid"

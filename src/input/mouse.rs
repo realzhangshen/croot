@@ -1,6 +1,42 @@
+use std::time::Instant;
+
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
 use super::handler::Action;
+
+/// Tracks consecutive clicks on the same row to detect double-clicks.
+pub struct ClickTracker {
+    last_click_time: Option<Instant>,
+    last_click_row: Option<u16>,
+}
+
+impl ClickTracker {
+    pub fn new() -> Self {
+        Self {
+            last_click_time: None,
+            last_click_row: None,
+        }
+    }
+
+    /// Record a click on `row`. Returns `true` if this is a double-click
+    /// (same row within 300ms).
+    fn record_click(&mut self, row: u16) -> bool {
+        let now = Instant::now();
+        let is_double = match (self.last_click_time, self.last_click_row) {
+            (Some(t), Some(r)) => r == row && now.duration_since(t).as_millis() < 300,
+            _ => false,
+        };
+        if is_double {
+            // Reset to prevent triple-click
+            self.last_click_time = None;
+            self.last_click_row = None;
+        } else {
+            self.last_click_time = Some(now);
+            self.last_click_row = Some(row);
+        }
+        is_double
+    }
+}
 
 /// Map a mouse event to an Action given the tree area's position.
 /// `preview_x` is the x-coordinate where the preview pane starts (None if no preview visible).
@@ -9,6 +45,7 @@ pub fn handle_mouse(
     tree_area_y: u16,
     tree_area_height: u16,
     preview_x: Option<u16>,
+    click_tracker: &mut ClickTracker,
 ) -> Action {
     match event.kind {
         MouseEventKind::Down(MouseButton::Left) => {
@@ -25,7 +62,11 @@ pub fn handle_mouse(
             let row = event.row;
             if row >= tree_area_y && row < tree_area_y + tree_area_height {
                 let relative_row = row - tree_area_y;
-                Action::ClickRow(relative_row)
+                if click_tracker.record_click(relative_row) {
+                    Action::DoubleClick(relative_row)
+                } else {
+                    Action::ClickRow(relative_row)
+                }
             } else {
                 Action::None
             }

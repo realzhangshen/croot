@@ -91,6 +91,10 @@ pub enum Action {
     SearchPrev,
     /// Open the selected file in $EDITOR.
     OpenInEditor,
+    /// Open the selected file externally (fire-and-forget).
+    OpenExternally,
+    /// Double-click on a tree row.
+    DoubleClick(u16),
     /// Enter key: open file in editor or toggle directory.
     EnterKey,
     None,
@@ -145,6 +149,9 @@ pub fn handle_key(key: KeyEvent, preview_visible: bool, preview_has_selection: b
 
         // Open file in editor
         KeyCode::Char('e') => Action::OpenInEditor,
+
+        // Open file externally
+        KeyCode::Char('o') => Action::OpenExternally,
 
         // Tab: switch focus when preview is visible, otherwise toggle
         KeyCode::Tab => {

@@ -24,7 +24,7 @@ use crate::git::status::GitState;
 use crate::input::handler::{
     handle_key, handle_key_dialog, handle_key_menu, handle_key_search, Action, InputMode,
 };
-use crate::input::mouse::handle_mouse;
+use crate::input::mouse::{handle_mouse, ClickTracker};
 use crate::layout::{self, FocusPane, PreviewLayout};
 use crate::preview::loader::{load_preview, LoadedPreview};
 use crate::preview::state::{PreviewKind, PreviewState};
@@ -76,6 +76,8 @@ pub struct App {
     hyperlink_regions: Vec<HyperlinkRegion>,
     // Whether Kitty keyboard enhancement protocol is active
     enhanced_keyboard: bool,
+    // Double-click detection for tree rows
+    click_tracker: ClickTracker,
 }
 
 impl App {
@@ -122,6 +124,7 @@ impl App {
             search_filtered: Vec::new(),
             hyperlink_regions: Vec::new(),
             enhanced_keyboard,
+            click_tracker: ClickTracker::new(),
         })
     }
 
@@ -178,7 +181,7 @@ impl App {
                             if self.input_mode == InputMode::ContextMenu {
                                 post_action = self.handle_context_menu_mouse(mouse);
                             } else if self.input_mode == InputMode::Normal {
-                                let action = handle_mouse(mouse, self.tree_area_y, self.tree_area_height, self.preview_area_x);
+                                let action = handle_mouse(mouse, self.tree_area_y, self.tree_area_height, self.preview_area_x, &mut self.click_tracker);
                                 post_action = self.handle_action(action, &preview_tx).await;
                             }
                         }
@@ -645,6 +648,26 @@ impl App {
                     }
                 }
             }
+            Action::OpenExternally => {
+                if let Some(node) = self.tree.selected() {
+                    if !node.is_dir() {
+                        let path = node.path.clone();
+                        self.open_externally(&path);
+                    }
+                }
+            }
+            Action::DoubleClick(row) => {
+                // Cursor already set by the first ClickRow. For files, open externally.
+                // For directories, do nothing — the first click already toggled.
+                let row_idx = row as usize;
+                if row_idx < self.tree.rendered_indices.len() {
+                    let idx = self.tree.rendered_indices[row_idx];
+                    if idx < self.tree.len() && !self.tree.nodes[idx].is_dir() {
+                        let path = self.tree.nodes[idx].path.clone();
+                        self.open_externally(&path);
+                    }
+                }
+            }
             Action::EnterKey => {
                 let selected_is_dir = self.tree.selected().is_some_and(crate::tree::node::TreeNode::is_dir);
                 if selected_is_dir {
@@ -980,6 +1003,13 @@ impl App {
                     }
                 }
             }
+            MenuAction::OpenExternally => {
+                if let Some(node) = self.tree.nodes.get(node_idx) {
+                    if !node.is_dir() {
+                        self.open_externally(&node.path.clone());
+                    }
+                }
+            }
             MenuAction::RevealInFinder => {
                 if let Some(node) = self.tree.nodes.get(node_idx) {
                     let _ = std::process::Command::new("open")
@@ -1034,6 +1064,13 @@ impl App {
                     }
                 }
             }
+            MenuAction::OpenExternally => {
+                if let Some(node) = self.tree.nodes.get(node_idx) {
+                    if !node.is_dir() {
+                        self.open_externally(&node.path.clone());
+                    }
+                }
+            }
             MenuAction::RevealInFinder => {
                 if let Some(node) = self.tree.nodes.get(node_idx) {
                     let _ = std::process::Command::new("open")
@@ -1048,6 +1085,40 @@ impl App {
             MenuAction::Delete => self.start_delete_at(node_idx),
         }
         PostAction::None
+    }
+
+    // ── Open externally ─────────────────────────────────────────────────
+
+    fn resolve_open_command(&self, path: &std::path::Path) -> String {
+        let file_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy())
+            .unwrap_or_default();
+        for rule in &self.config.open.rules {
+            if let Ok(glob) = globset::Glob::new(&rule.pattern) {
+                let matcher = glob.compile_matcher();
+                if matcher.is_match(file_name.as_ref()) {
+                    return rule.command.clone();
+                }
+            }
+        }
+        self.config.open.default.clone()
+    }
+
+    fn open_externally(&self, path: &std::path::Path) {
+        let command_str = self.resolve_open_command(path);
+        let parts = match shell_words::split(&command_str) {
+            Ok(p) if !p.is_empty() => p,
+            _ => return,
+        };
+        let (cmd, args) = parts.split_first().unwrap();
+        let _ = std::process::Command::new(cmd)
+            .args(args)
+            .arg(path)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
     }
 
     // ── File operations ─────────────────────────────────────────────────

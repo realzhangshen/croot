@@ -18,6 +18,7 @@ pub struct MenuItem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MenuAction {
     OpenInEditor,
+    OpenExternally,
     CopyPath,
     CopyAbsPath,
     RevealInFinder,
@@ -50,6 +51,7 @@ impl ContextMenuState {
             selected: 0,
             items: vec![
                 MenuItem { label: "Open in Editor".into(), action: MenuAction::OpenInEditor },
+                MenuItem { label: "Open Externally".into(), action: MenuAction::OpenExternally },
                 MenuItem { label: "─".into(), action: MenuAction::CopyPath }, // separator (inert)
                 MenuItem { label: "Copy Path".into(), action: MenuAction::CopyPath },
                 MenuItem { label: "Copy Absolute Path".into(), action: MenuAction::CopyAbsPath },
