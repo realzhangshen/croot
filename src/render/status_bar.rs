@@ -5,7 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::Widget,
 };
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::colors;
 
@@ -27,8 +27,25 @@ pub struct HyperlinkRegion {
     pub url: String,
 }
 
+/// Truncate a string to fit within `max_width` display columns.
+/// Uses unicode character widths rather than byte counts.
+fn truncate_to_display_width(s: &str, max_width: usize) -> String {
+    let mut width = 0;
+    let mut end = 0;
+    for ch in s.chars() {
+        let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if width + w > max_width {
+            break;
+        }
+        width += w;
+        end += ch.len_utf8();
+    }
+    s[..end].to_string()
+}
+
 impl StatusBar<'_> {
     /// Compute hyperlink regions for post-render OSC 8 emission.
+    /// Each region's text is truncated to fit within the terminal width.
     pub fn hyperlink_regions(&self, area: Rect) -> Vec<HyperlinkRegion> {
         let mut regions = Vec::new();
         let mut col: u16 = 0;
@@ -46,10 +63,13 @@ impl StatusBar<'_> {
         col += root_span.width() as u16;
         col += 2; // "│ "
 
+        let available = (area.width as usize).saturating_sub(root_start as usize);
+        let root_text = truncate_to_display_width(self.root_name, available.saturating_sub(1));
+
         regions.push(HyperlinkRegion {
             x: area.x + root_start,
             y: area.y,
-            text: self.root_name.to_string(),
+            text: root_text,
             url: format!("file://{}", self.root_path),
         });
 
@@ -60,10 +80,13 @@ impl StatusBar<'_> {
             col += sel_span.width() as u16;
             let _ = col;
 
+            let available = (area.width as usize).saturating_sub(sel_start as usize);
+            let sel_text = truncate_to_display_width(sel_path, available.saturating_sub(1));
+
             regions.push(HyperlinkRegion {
                 x: area.x + sel_start,
                 y: area.y,
-                text: sel_path.to_string(),
+                text: sel_text,
                 url: format!("file://{abs_path}"),
             });
         }
