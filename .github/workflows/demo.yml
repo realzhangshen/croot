@@ -1,0 +1,167 @@
+name: Generate Demo GIF
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-demo:
+    name: Generate demo GIF
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build croot
+        run: cargo build --release
+
+      - name: Install Go (for VHS)
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Install VHS and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-jetbrains-mono
+          go install github.com/charmbracelet/vhs@latest
+
+      - name: Create sample project
+        run: |
+          mkdir -p demo-project/src demo-project/tests demo-project/docs
+
+          cat > demo-project/Cargo.toml << 'TOML'
+          [package]
+          name = "my-project"
+          version = "0.1.0"
+          edition = "2021"
+
+          [dependencies]
+          serde = { version = "1", features = ["derive"] }
+          tokio = { version = "1", features = ["full"] }
+          TOML
+
+          cat > demo-project/src/main.rs << 'RUST'
+          use serde::Deserialize;
+
+          #[derive(Debug, Deserialize)]
+          struct Config {
+              name: String,
+              port: u16,
+              debug: bool,
+          }
+
+          #[tokio::main]
+          async fn main() {
+              println!("Hello from my-project!");
+              let config = Config {
+                  name: "demo".into(),
+                  port: 8080,
+                  debug: true,
+              };
+              println!("Config: {:?}", config);
+          }
+          RUST
+
+          cat > demo-project/src/lib.rs << 'RUST'
+          pub mod utils;
+
+          pub fn add(a: i32, b: i32) -> i32 {
+              a + b
+          }
+          RUST
+
+          cat > demo-project/src/utils.rs << 'RUST'
+          pub fn format_name(name: &str) -> String {
+              name.trim().to_lowercase()
+          }
+          RUST
+
+          cat > demo-project/tests/test_lib.rs << 'RUST'
+          #[test]
+          fn test_add() {
+              assert_eq!(my_project::add(2, 3), 5);
+          }
+          RUST
+
+          cat > demo-project/README.md << 'MD'
+          # my-project
+
+          A sample Rust project for demonstration.
+
+          ## Features
+
+          - Async runtime with Tokio
+          - Configuration with Serde
+          - Clean project structure
+
+          ## Usage
+
+          ```bash
+          cargo run
+          ```
+          MD
+
+          cat > demo-project/docs/architecture.md << 'MD'
+          # Architecture
+
+          This project follows a standard Rust layout:
+          - `src/main.rs` — entry point
+          - `src/lib.rs` — library root
+          - `tests/` — integration tests
+          MD
+
+          cat > demo-project/.gitignore << 'GI'
+          /target
+          *.swp
+          .DS_Store
+          GI
+
+          # Initialize git repo with various file statuses
+          cd demo-project
+          git init
+          git add Cargo.toml src/main.rs src/lib.rs README.md .gitignore
+          git commit -m "Initial commit"
+
+          # Stage some files (will show as staged)
+          git add tests/test_lib.rs docs/architecture.md
+
+          # Modify a committed file (will show as modified)
+          echo "" >> src/main.rs
+
+          # Leave src/utils.rs and TODO.md as untracked
+          echo "TODO: add CI" > TODO.md
+
+      - name: Add croot to PATH
+        run: echo "${GITHUB_WORKSPACE}/target/release" >> "${GITHUB_PATH}"
+
+      - name: Generate demo GIF
+        run: |
+          export PATH="${HOME}/go/bin:${PATH}"
+          vhs web/demo.tape
+
+      - name: Upload GIF to release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release upload "${TAG}" web/assets/demo.gif --clobber
+
+      - name: Commit updated demo GIF
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/assets/demo.gif
+          if git diff --cached --quiet; then
+            echo "No changes to demo.gif"
+          else
+            git commit -m "Update demo GIF [skip ci]"
+            git push origin HEAD:main
+          fi
