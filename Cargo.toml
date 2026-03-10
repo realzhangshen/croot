@@ -13,7 +13,7 @@ categories = ["command-line-utilities"]
 authors = ["Zhang Shen"]
 
 [dependencies]
-ratatui = { version = "0.29", features = ["crossterm"] }
+ratatui = { version = "0.30", features = ["crossterm"] }
 crossterm = { version = "0.28", features = ["event-stream"] }
 clap = { version = "4", features = ["derive"] }
 ignore = "0.4"
