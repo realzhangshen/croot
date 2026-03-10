@@ -47,14 +47,43 @@ struct Cli {
 enum Command {
     /// Update croot to the latest version
     Update,
+    /// Manage croot configuration
+    Config {
+        #[command(subcommand)]
+        action: Option<ConfigAction>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// Open configuration file in editor
+    Edit,
+    /// Show configuration file path
+    Path,
+    /// Create default configuration file
+    Init,
+    /// Get a configuration value
+    Get {
+        /// Dotted key path (e.g. `tree.show_hidden`)
+        key: String,
+    },
+    /// Set a configuration value
+    Set {
+        /// Dotted key path (e.g. `preview.split_ratio`)
+        key: String,
+        /// Value to set
+        value: String,
+    },
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    if let Some(Command::Update) = cli.command {
-        return self_update();
+    match cli.command {
+        Some(Command::Update) => return self_update(),
+        Some(Command::Config { action }) => return handle_config(action),
+        None => {}
     }
 
     let path = cli.path.canonicalize().unwrap_or_else(|_| cli.path.clone());
@@ -98,6 +127,72 @@ async fn main() -> anyhow::Result<()> {
     terminal.show_cursor()?;
 
     result
+}
+
+fn handle_config(action: Option<ConfigAction>) -> anyhow::Result<()> {
+    match action {
+        None => {
+            // Print resolved config
+            let cfg = config::Config::load();
+            print!("{}", cfg.to_toml_string());
+        }
+        Some(ConfigAction::Path) => {
+            println!("{}", config::config_path().display());
+        }
+        Some(ConfigAction::Init) => {
+            let path = config::config_path();
+            if path.exists() {
+                eprintln!("error: config file already exists at {}", path.display());
+                process::exit(1);
+            }
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&path, config::Config::default_toml_with_comments())?;
+            println!("Created {}", path.display());
+        }
+        Some(ConfigAction::Edit) => {
+            let path = config::config_path();
+            // Init if file doesn't exist
+            if !path.exists() {
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(&path, config::Config::default_toml_with_comments())?;
+                eprintln!("Created {}", path.display());
+            }
+            let cfg = config::Config::load();
+            let editor_str = config::resolve_editor(&cfg);
+            let mut parts = editor_str.split_whitespace();
+            let cmd = parts.next().unwrap_or("vi");
+            let status = process::Command::new(cmd)
+                .args(parts)
+                .arg(&path)
+                .status();
+            match status {
+                Ok(s) if s.success() => {}
+                Ok(s) => process::exit(s.code().unwrap_or(1)),
+                Err(e) => {
+                    eprintln!("error: failed to launch editor '{cmd}': {e}");
+                    process::exit(1);
+                }
+            }
+        }
+        Some(ConfigAction::Get { key }) => match config::get_value(&key) {
+            Ok(val) => println!("{val}"),
+            Err(e) => {
+                eprintln!("error: {e}");
+                process::exit(1);
+            }
+        },
+        Some(ConfigAction::Set { key, value }) => {
+            if let Err(e) = config::set_value(&key, &value) {
+                eprintln!("error: {e}");
+                process::exit(1);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn self_update() -> anyhow::Result<()> {

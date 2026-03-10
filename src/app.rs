@@ -1404,22 +1404,7 @@ impl App {
 
     /// Resolve the editor command: config → $VISUAL → $EDITOR → "vi".
     fn resolve_editor(&self) -> String {
-        if let Some(ref cmd) = self.config.editor.command {
-            if !cmd.is_empty() {
-                return cmd.clone();
-            }
-        }
-        if let Ok(v) = std::env::var("VISUAL") {
-            if !v.is_empty() {
-                return v;
-            }
-        }
-        if let Ok(v) = std::env::var("EDITOR") {
-            if !v.is_empty() {
-                return v;
-            }
-        }
-        "vi".to_string()
+        crate::config::resolve_editor(&self.config)
     }
 
     /// Suspend the terminal, spawn the editor, then resume.
