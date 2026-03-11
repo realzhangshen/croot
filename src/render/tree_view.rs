@@ -30,13 +30,11 @@ impl StatefulWidget for TreeView<'_> {
         // Row highlight modes:
         //   Cursor  → REVERSED (strips fg for clean bar)
         //   Hover   → REVERSED | DIM (subtler than cursor)
-        //   Multi   → explicit bg color
         //   None    → transparent
         #[derive(PartialEq)]
         enum RowMode {
             Cursor,
             Hover,
-            MultiBg(ratatui::style::Color),
             None,
         }
 
@@ -64,7 +62,6 @@ impl StatefulWidget for TreeView<'_> {
 
             let node = &state.nodes[absolute_idx];
             let is_cursor = absolute_idx == state.cursor;
-            let is_multi_selected = state.selected_set.contains(&absolute_idx);
             let is_hovered = self.hover_row == Some(row);
 
             // Check if this node starts a compact chain
@@ -74,8 +71,6 @@ impl StatefulWidget for TreeView<'_> {
 
             let row_mode = if is_cursor {
                 RowMode::Cursor
-            } else if is_multi_selected {
-                RowMode::MultiBg(colors::MULTI_SELECTED_BG)
             } else if is_hovered {
                 RowMode::Hover
             } else {
@@ -91,7 +86,6 @@ impl StatefulWidget for TreeView<'_> {
                     RowMode::Hover => Style::default().add_modifier(
                         Modifier::REVERSED | Modifier::DIM | (base.add_modifier & Modifier::BOLD),
                     ),
-                    RowMode::MultiBg(bg) => base.bg(*bg),
                     RowMode::None => base,
                 }
             };
@@ -130,14 +124,6 @@ impl StatefulWidget for TreeView<'_> {
             } else {
                 icons::icon_for_file(&node.name, false)
             };
-
-            // Multi-select marker
-            if is_multi_selected {
-                spans.push(Span::styled(
-                    "● ",
-                    row_style(Style::default().fg(ratatui::style::Color::Cyan)),
-                ));
-            }
 
             let is_ignored = node.git_status == GitStatus::Ignored;
 
@@ -189,7 +175,6 @@ impl StatefulWidget for TreeView<'_> {
                 let fill_style = match &row_mode {
                     RowMode::Cursor => Style::default().add_modifier(Modifier::REVERSED),
                     RowMode::Hover => colors::hover_style(),
-                    RowMode::MultiBg(bg) => Style::default().bg(*bg),
                     RowMode::None => unreachable!(),
                 };
                 for x in area.x..(area.x + area.width) {
@@ -469,7 +454,6 @@ fn days_to_civil(days: i64) -> (i64, u32, u32) {
 mod tests {
     use super::*;
     use crate::tree::node::{NodeKind, TreeNode};
-    use std::collections::HashSet;
     use std::path::PathBuf;
 
     /// Build a minimal FileTree with two file nodes for rendering tests.
@@ -495,7 +479,6 @@ mod tests {
             rendered_indices: vec![],
             file_count: 2,
             dir_count: 0,
-            selected_set: HashSet::new(),
         }
     }
 

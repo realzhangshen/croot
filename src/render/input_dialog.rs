@@ -14,7 +14,6 @@ pub enum DialogKind {
     NewDir,
     Rename,
     ConfirmDelete,
-    ConfirmDeleteSelected,
 }
 
 impl DialogKind {
@@ -23,7 +22,7 @@ impl DialogKind {
             Self::NewFile => "New File",
             Self::NewDir => "New Directory",
             Self::Rename => "Rename",
-            Self::ConfirmDelete | Self::ConfirmDeleteSelected => "Confirm Delete",
+            Self::ConfirmDelete => "Confirm Delete",
         }
     }
 }
@@ -96,10 +95,7 @@ impl InputDialogState {
     /// Returns `(confirm_rect, cancel_rect)` in screen coordinates for the button row.
     pub fn button_positions(&self, area: Rect) -> (Rect, Rect) {
         let dialog_width = 50u16.min(area.width.saturating_sub(4));
-        let dialog_height = if matches!(
-            self.kind,
-            DialogKind::ConfirmDelete | DialogKind::ConfirmDeleteSelected
-        ) {
+        let dialog_height = if matches!(self.kind, DialogKind::ConfirmDelete) {
             6
         } else {
             5
@@ -127,10 +123,7 @@ pub struct InputDialogWidget<'a> {
 impl Widget for InputDialogWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let dialog_width = 50u16.min(area.width.saturating_sub(4));
-        let dialog_height = if matches!(
-            self.state.kind,
-            DialogKind::ConfirmDelete | DialogKind::ConfirmDeleteSelected
-        ) {
+        let dialog_height = if matches!(self.state.kind, DialogKind::ConfirmDelete) {
             6
         } else {
             5
@@ -165,10 +158,7 @@ impl Widget for InputDialogWidget<'_> {
             dialog_rect.x + (dialog_rect.width.saturating_sub(title.len() as u16 + 2)) / 2;
         buf.set_string(title_x, dialog_rect.y, format!(" {title} "), title_style);
 
-        if matches!(
-            self.state.kind,
-            DialogKind::ConfirmDelete | DialogKind::ConfirmDeleteSelected
-        ) {
+        if matches!(self.state.kind, DialogKind::ConfirmDelete) {
             // Show confirmation message
             let msg = format!("Delete '{}'?", self.state.target_name);
             let msg_x = dialog_rect.x + 2;

@@ -40,9 +40,6 @@ pub struct KeybindingsConfig {
     pub search: Option<String>,
     pub goto_top: Option<String>,
     pub goto_bottom: Option<String>,
-    pub select: Option<String>,
-    pub clear_select: Option<String>,
-    pub delete_selected: Option<String>,
     pub branch_picker: Option<String>,
     pub enter: Option<String>,
 }
@@ -304,9 +301,6 @@ auto_preview = false
 # search = "/"
 # goto_top = "g"
 # goto_bottom = "G"
-# select = "Space"
-# clear_select = "Esc"
-# delete_selected = "X"
 # branch_picker = "b"
 # enter = "Enter"
 "#

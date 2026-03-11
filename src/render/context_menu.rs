@@ -23,9 +23,6 @@ pub enum MenuAction {
     NewDir,
     Rename,
     Delete,
-    ToggleSelectItem,
-    ClearSelection,
-    DeleteSelected,
     TogglePreview,
     Refresh,
     CollapseAll,
@@ -47,42 +44,8 @@ pub struct ContextMenuState {
 }
 
 impl ContextMenuState {
-    /// Build selection-related menu items based on current multi-select state.
-    fn selection_items(is_node_selected: bool, selected_count: usize) -> Vec<MenuItem> {
-        let mut items = Vec::new();
-        items.push(MenuItem {
-            label: "─".into(),
-            action: MenuAction::CopyPath, // separator (inert)
-        });
-        items.push(MenuItem {
-            label: if is_node_selected {
-                "Deselect".into()
-            } else {
-                "Select".into()
-            },
-            action: MenuAction::ToggleSelectItem,
-        });
-        if selected_count > 0 {
-            items.push(MenuItem {
-                label: format!("Clear Selection ({selected_count})"),
-                action: MenuAction::ClearSelection,
-            });
-            items.push(MenuItem {
-                label: format!("Delete Selected ({selected_count})"),
-                action: MenuAction::DeleteSelected,
-            });
-        }
-        items
-    }
-
-    pub fn new_for_file(
-        x: u16,
-        y: u16,
-        node_idx: usize,
-        selected_count: usize,
-        is_node_selected: bool,
-    ) -> Self {
-        let mut items = vec![
+    pub fn new_for_file(x: u16, y: u16, node_idx: usize) -> Self {
+        let items = vec![
             MenuItem {
                 label: "Open in Editor".into(),
                 action: MenuAction::OpenInEditor,
@@ -91,9 +54,6 @@ impl ContextMenuState {
                 label: "Open Externally".into(),
                 action: MenuAction::OpenExternally,
             },
-        ];
-        items.extend(Self::selection_items(is_node_selected, selected_count));
-        items.extend([
             MenuItem {
                 label: "─".into(),
                 action: MenuAction::CopyPath,
@@ -122,7 +82,7 @@ impl ContextMenuState {
                 label: "Delete".into(),
                 action: MenuAction::Delete,
             },
-        ]);
+        ];
         Self {
             x,
             y,
@@ -171,14 +131,8 @@ impl ContextMenuState {
         }
     }
 
-    pub fn new_for_dir(
-        x: u16,
-        y: u16,
-        node_idx: usize,
-        selected_count: usize,
-        is_node_selected: bool,
-    ) -> Self {
-        let mut items = vec![
+    pub fn new_for_dir(x: u16, y: u16, node_idx: usize) -> Self {
+        let items = vec![
             MenuItem {
                 label: "New File".into(),
                 action: MenuAction::NewFile,
@@ -199,9 +153,6 @@ impl ContextMenuState {
                 label: "Toggle Preview".into(),
                 action: MenuAction::TogglePreview,
             },
-        ];
-        items.extend(Self::selection_items(is_node_selected, selected_count));
-        items.extend([
             MenuItem {
                 label: "─".into(),
                 action: MenuAction::CopyPath,
@@ -230,7 +181,7 @@ impl ContextMenuState {
                 label: "Delete".into(),
                 action: MenuAction::Delete,
             },
-        ]);
+        ];
         Self {
             x,
             y,
@@ -401,8 +352,7 @@ impl Widget for ContextMenuWidget<'_> {
 
             let is_separator = item.label.starts_with('─');
             let is_selected = i == self.state.selected && !is_separator;
-            let is_delete =
-                item.action == MenuAction::Delete || item.action == MenuAction::DeleteSelected;
+            let is_delete = item.action == MenuAction::Delete;
 
             let style = if is_separator {
                 separator_style
@@ -462,7 +412,7 @@ mod tests {
 
     #[test]
     fn normal_item_has_reversed() {
-        let state = ContextMenuState::new_for_file(0, 0, 0, 0, false);
+        let state = ContextMenuState::new_for_file(0, 0, 0);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
         // Item at index 1 (not selected when selected==0) — check a cell in that row
@@ -495,7 +445,7 @@ mod tests {
 
     #[test]
     fn selected_item_has_blue_bg_white_fg_bold() {
-        let state = ContextMenuState::new_for_file(0, 0, 0, 0, false);
+        let state = ContextMenuState::new_for_file(0, 0, 0);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
         // Item at index 0 is selected — check a cell in that row
@@ -525,7 +475,7 @@ mod tests {
 
     #[test]
     fn unselected_delete_has_no_red() {
-        let state = ContextMenuState::new_for_file(0, 0, 0, 0, false);
+        let state = ContextMenuState::new_for_file(0, 0, 0);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
         // Find the Delete item index
@@ -553,7 +503,7 @@ mod tests {
 
     #[test]
     fn selected_delete_has_red_bg() {
-        let mut state = ContextMenuState::new_for_file(0, 0, 0, 0, false);
+        let mut state = ContextMenuState::new_for_file(0, 0, 0);
         let delete_idx = state
             .items
             .iter()

@@ -22,7 +22,6 @@ pub const INLINE_CODE: Color = Color::Yellow;
 
 // UI colors — ANSI / terminal-default so they adapt to any theme
 // Cursor row uses Modifier::REVERSED (no explicit bg) for maximum contrast
-pub const MULTI_SELECTED_BG: Color = Color::DarkGray;
 pub const TREE_LINE: Color = Color::DarkGray;
 pub const STATUS_BAR_BG: Color = Color::DarkGray;
 pub const STATUS_BAR_FG: Color = Color::White;

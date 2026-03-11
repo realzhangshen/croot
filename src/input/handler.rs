@@ -73,12 +73,6 @@ pub enum Action {
     DialogLeft,
     /// Dialog input: move cursor right.
     DialogRight,
-    /// Toggle multi-select on current node.
-    ToggleSelect,
-    /// Clear multi-selection.
-    ClearSelect,
-    /// Delete all selected nodes.
-    DeleteSelected,
     /// Start search mode.
     StartSearch,
     /// Search input: typed a character.
@@ -168,9 +162,6 @@ pub fn build_keybinding_map(config: &KeybindingsConfig) -> KeybindingMap {
         (&config.search, Action::StartSearch),
         (&config.goto_top, Action::GotoTop),
         (&config.goto_bottom, Action::GotoBottom),
-        (&config.select, Action::ToggleSelect),
-        (&config.clear_select, Action::ClearSelect),
-        (&config.delete_selected, Action::DeleteSelected),
         (&config.branch_picker, Action::OpenBranchPicker),
         (&config.enter, Action::EnterKey),
     ];

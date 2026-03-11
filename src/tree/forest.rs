@@ -19,8 +19,6 @@ pub struct FileTree {
     pub file_count: usize,
     /// Cached count of visible directory nodes.
     pub dir_count: usize,
-    /// Multi-selected node indices.
-    pub selected_set: HashSet<usize>,
 }
 
 impl FileTree {
@@ -40,7 +38,6 @@ impl FileTree {
             rendered_indices: Vec::new(),
             file_count,
             dir_count,
-            selected_set: HashSet::new(),
         }
     }
 
@@ -241,8 +238,6 @@ impl FileTree {
         let cursor_path = self.nodes.get(self.cursor).map(|n| n.path.clone());
         self.nodes = load_children_with_meta(&self.root, 0, &self.config);
         self.recount();
-        // Indices are invalidated — clear multi-selection
-        self.selected_set.clear();
         // Restore cursor position by path, or clamp to valid range
         if let Some(ref target) = cursor_path {
             self.cursor = self
@@ -265,13 +260,6 @@ impl FileTree {
             .map(|n| n.path.clone())
             .collect();
 
-        // R2: Save selected paths (not indices) before rebuild
-        let selected_paths: HashSet<PathBuf> = self
-            .selected_set
-            .iter()
-            .filter_map(|&idx| self.nodes.get(idx).map(|n| n.path.clone()))
-            .collect();
-
         // Remember cursor path for restoration
         let cursor_path = self.nodes.get(self.cursor).map(|n| n.path.clone());
 
@@ -289,15 +277,6 @@ impl FileTree {
 
         self.recount();
 
-        // R2: Rebuild selected_set from paths → new indices
-        self.selected_set = self
-            .nodes
-            .iter()
-            .enumerate()
-            .filter(|(_, n)| selected_paths.contains(&n.path))
-            .map(|(i, _)| i)
-            .collect();
-
         // Restore cursor position by path, or clamp to valid range
         if let Some(ref target) = cursor_path {
             self.cursor = self
@@ -307,51 +286,6 @@ impl FileTree {
                 .unwrap_or(0);
         }
         self.cursor = self.cursor.min(self.nodes.len().saturating_sub(1));
-    }
-
-    /// Toggle multi-select on the current cursor node.
-    pub fn toggle_select(&mut self) {
-        let idx = self.cursor;
-        if idx < self.nodes.len() {
-            if self.selected_set.contains(&idx) {
-                self.selected_set.remove(&idx);
-            } else {
-                self.selected_set.insert(idx);
-            }
-        }
-    }
-
-    /// Select a range of nodes from `anchor` to `target` (inclusive).
-    #[allow(dead_code)]
-    pub fn select_range(&mut self, anchor: usize, target: usize) {
-        let (start, end) = if anchor <= target {
-            (anchor, target)
-        } else {
-            (target, anchor)
-        };
-        for i in start..=end.min(self.nodes.len().saturating_sub(1)) {
-            self.selected_set.insert(i);
-        }
-    }
-
-    /// Clear multi-selection.
-    pub fn clear_selection(&mut self) {
-        self.selected_set.clear();
-    }
-
-    /// Get paths of all selected nodes (or just the cursor if none selected).
-    pub fn selected_paths(&self) -> Vec<PathBuf> {
-        if self.selected_set.is_empty() {
-            if let Some(node) = self.nodes.get(self.cursor) {
-                return vec![node.path.clone()];
-            }
-            return Vec::new();
-        }
-        self.selected_set
-            .iter()
-            .filter_map(|&idx| self.nodes.get(idx))
-            .map(|node| node.path.clone())
-            .collect()
     }
 
     /// Check if a node at `index` is the last child of its parent.
@@ -518,7 +452,6 @@ mod tests {
             rendered_indices: Vec::new(),
             file_count,
             dir_count,
-            selected_set: HashSet::new(),
         }
     }
 
@@ -695,7 +628,6 @@ mod tests {
             rendered_indices: Vec::new(),
             file_count,
             dir_count,
-            selected_set: HashSet::new(),
         }
     }
 

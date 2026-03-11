@@ -651,18 +651,6 @@ impl App {
                 self.input_mode = InputMode::Normal;
             }
 
-            // Multi-select
-            Action::ToggleSelect => {
-                self.tree.toggle_select();
-                self.tree.cursor_down();
-            }
-            Action::ClearSelect => {
-                self.tree.clear_selection();
-            }
-            Action::DeleteSelected => {
-                self.delete_selected();
-            }
-
             // Search actions
             Action::StartSearch => {
                 self.input_mode = InputMode::Search;
@@ -1025,7 +1013,6 @@ impl App {
             return;
         }
         let relative_row = (row - self.tree_area_y) as usize;
-        let selected_count = self.tree.selected_set.len();
         let menu = if relative_row >= self.tree.rendered_indices.len() {
             // Empty space below tree items → workspace root menu
             ContextMenuState::new_for_workspace(col, row, self.tree.len())
@@ -1035,11 +1022,10 @@ impl App {
                 return;
             }
             self.tree.cursor = node_idx;
-            let is_node_selected = self.tree.selected_set.contains(&node_idx);
             if self.tree.nodes[node_idx].is_dir() {
-                ContextMenuState::new_for_dir(col, row, node_idx, selected_count, is_node_selected)
+                ContextMenuState::new_for_dir(col, row, node_idx)
             } else {
-                ContextMenuState::new_for_file(col, row, node_idx, selected_count, is_node_selected)
+                ContextMenuState::new_for_file(col, row, node_idx)
             }
         };
 
@@ -1209,16 +1195,6 @@ impl App {
             MenuAction::NewDir => self.start_new_dir_at(node_idx),
             MenuAction::Rename => self.start_rename_at(node_idx),
             MenuAction::Delete => self.start_delete_at(node_idx),
-            MenuAction::ToggleSelectItem => {
-                self.tree.cursor = node_idx;
-                self.tree.toggle_select();
-            }
-            MenuAction::ClearSelection => {
-                self.tree.clear_selection();
-            }
-            MenuAction::DeleteSelected => {
-                self.delete_selected();
-            }
             MenuAction::TogglePreview => {
                 self.preview_visible = !self.preview_visible;
                 if self.preview_visible {
@@ -1309,16 +1285,6 @@ impl App {
             MenuAction::NewDir => self.start_new_dir_at(node_idx),
             MenuAction::Rename => self.start_rename_at(node_idx),
             MenuAction::Delete => self.start_delete_at(node_idx),
-            MenuAction::ToggleSelectItem => {
-                self.tree.cursor = node_idx;
-                self.tree.toggle_select();
-            }
-            MenuAction::ClearSelection => {
-                self.tree.clear_selection();
-            }
-            MenuAction::DeleteSelected => {
-                self.delete_selected();
-            }
             MenuAction::TogglePreview => {
                 self.preview_visible = !self.preview_visible;
                 if !self.preview_visible {
@@ -1362,10 +1328,7 @@ impl App {
 
         if let Some(ref dialog) = self.input_dialog {
             let dialog_width = 50u16.min(area.width.saturating_sub(4));
-            let dialog_height = if matches!(
-                dialog.kind,
-                DialogKind::ConfirmDelete | DialogKind::ConfirmDeleteSelected
-            ) {
+            let dialog_height = if matches!(dialog.kind, DialogKind::ConfirmDelete) {
                 6
             } else {
                 5
@@ -1600,18 +1563,6 @@ impl App {
                     let _ = std::fs::remove_file(path);
                 }
             }
-            // R1: ConfirmDeleteSelected always deletes the entire selected_set
-            DialogKind::ConfirmDeleteSelected => {
-                let paths = self.tree.selected_paths();
-                for path in &paths {
-                    if path.is_dir() {
-                        let _ = std::fs::remove_dir_all(path);
-                    } else {
-                        let _ = std::fs::remove_file(path);
-                    }
-                }
-                self.tree.clear_selection();
-            }
         }
 
         // Refresh tree after any file operation
@@ -1646,28 +1597,6 @@ impl App {
         } else {
             self.root.clone()
         }
-    }
-
-    // ── Batch operations ──────────────────────────────────────────────────
-
-    fn delete_selected(&mut self) {
-        // R1: Only trigger if there's actually a multi-selection; no fallback
-        if self.tree.selected_set.is_empty() {
-            return;
-        }
-
-        let paths = self.tree.selected_paths();
-        let count = paths.len();
-        let name = format!("{count} items");
-
-        // Use the first path as context
-        let context = paths.first().cloned().unwrap_or_else(|| self.root.clone());
-        self.input_dialog = Some(InputDialogState::new(
-            DialogKind::ConfirmDeleteSelected,
-            context,
-            name,
-        ));
-        self.input_mode = InputMode::Dialog;
     }
 
     // ── Search ───────────────────────────────────────────────────────────
