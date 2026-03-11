@@ -23,7 +23,7 @@ jobs:
         run: cargo build --release
 
       - name: Install Go (for VHS)
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: 'stable'
 
