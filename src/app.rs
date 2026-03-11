@@ -178,14 +178,14 @@ impl App {
                                 InputMode::Dialog => handle_key_dialog(key),
                                 InputMode::Search => handle_key_search(key),
                             };
-                            post_action = self.handle_action(action, &preview_tx).await;
+                            post_action = self.handle_action(&action, &preview_tx);
                         }
                         Some(Ok(Event::Mouse(mouse))) => {
                             if self.input_mode == InputMode::ContextMenu {
                                 post_action = self.handle_context_menu_mouse(mouse);
                             } else if self.input_mode == InputMode::Normal {
                                 let action = handle_mouse(mouse, self.tree_area_y, self.tree_area_height, self.preview_area_x, &mut self.click_tracker);
-                                post_action = self.handle_action(action, &preview_tx).await;
+                                post_action = self.handle_action(&action, &preview_tx);
                             }
                         }
                         Some(Ok(Event::Resize(_, _))) => {
@@ -446,13 +446,13 @@ impl App {
         }
     }
 
-    async fn handle_action(
+    fn handle_action(
         &mut self,
-        action: Action,
+        action: &Action,
         preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
     ) -> PostAction {
         let mut post = PostAction::None;
-        match action {
+        match *action {
             Action::Quit => {
                 if self.input_mode == InputMode::Normal {
                     self.should_quit = true;
@@ -474,12 +474,12 @@ impl App {
             | Action::ScrollDown(_)
             | Action::GotoTop
             | Action::GotoBottom => {
-                self.handle_tree_action(&action);
+                self.handle_tree_action(action);
             }
 
             // Preview actions
             Action::PreviewScrollUp(_) | Action::PreviewScrollDown(_) | Action::SwitchFocus => {
-                self.handle_preview_action(&action);
+                self.handle_preview_action(action);
             }
             Action::TogglePreview => {
                 self.preview_visible = !self.preview_visible;
@@ -504,7 +504,7 @@ impl App {
             Action::DragUpdate(col, row) => {
                 if self.dragging_separator {
                     if self.main_area_width > 0 {
-                        let ratio = 1.0 - (col as f32 / self.main_area_width as f32);
+                        let ratio = 1.0 - (f32::from(col) / f32::from(self.main_area_width));
                         self.config.preview.split_ratio = ratio.clamp(0.2, 0.8);
                     }
                 } else if self.preview_area_x.is_some_and(|px| col >= px) {
@@ -518,7 +518,7 @@ impl App {
             | Action::CopySelection
             | Action::ClearSelection => {
                 self.dragging_separator = false;
-                self.handle_selection_action(&action);
+                self.handle_selection_action(action);
             }
 
             // Click routing
@@ -556,8 +556,7 @@ impl App {
                 if let Some(menu) = self.context_menu.take() {
                     let menu_action = menu.selected_action().clone();
                     self.input_mode = InputMode::Normal;
-                    post = self.execute_menu_action(&menu_action, menu.node_idx, preview_tx)
-                        .await;
+                    post = self.execute_menu_action(&menu_action, menu.node_idx, preview_tx);
                 }
             }
             // File operations (keyboard shortcuts)
@@ -971,7 +970,7 @@ impl App {
         PostAction::None
     }
 
-    async fn execute_menu_action(
+    fn execute_menu_action(
         &mut self,
         action: &MenuAction,
         node_idx: usize,

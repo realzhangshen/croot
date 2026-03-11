@@ -27,6 +27,14 @@ impl StatefulWidget for TreeView<'_> {
 
     #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut FileTree) {
+        // Row highlight modes:
+        //   Cursor  → REVERSED (strips fg for clean bar)
+        //   Hover   → REVERSED | DIM (subtler than cursor)
+        //   Multi   → explicit bg color
+        //   None    → transparent
+        #[derive(PartialEq)]
+        enum RowMode { Cursor, Hover, MultiBg(ratatui::style::Color), None }
+
         let height = area.height as usize;
 
         // Build a list of visible node indices, skipping compacted intermediate dirs.
@@ -59,13 +67,6 @@ impl StatefulWidget for TreeView<'_> {
 
             let mut spans = Vec::new();
 
-            // Determine row highlight mode:
-            //   Cursor  → REVERSED (strips fg for clean bar)
-            //   Hover   → REVERSED | DIM (subtler than cursor)
-            //   Multi   → explicit bg color
-            //   None    → transparent
-            #[derive(PartialEq)]
-            enum RowMode { Cursor, Hover, MultiBg(ratatui::style::Color), None }
             let row_mode = if is_cursor {
                 RowMode::Cursor
             } else if is_multi_selected {
