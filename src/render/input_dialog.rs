@@ -92,6 +92,32 @@ impl InputDialogState {
             self.cursor_pos += next;
         }
     }
+
+    /// Returns `(confirm_rect, cancel_rect)` in screen coordinates for the button row.
+    pub fn button_positions(&self, area: Rect) -> (Rect, Rect) {
+        let dialog_width = 50u16.min(area.width.saturating_sub(4));
+        let dialog_height = if matches!(
+            self.kind,
+            DialogKind::ConfirmDelete | DialogKind::ConfirmDeleteSelected
+        ) {
+            6
+        } else {
+            5
+        };
+        let x = area.x + (area.width.saturating_sub(dialog_width)) / 2;
+        let y = area.y + (area.height.saturating_sub(dialog_height)) / 2;
+
+        let btn_y = y + 3;
+        let confirm_x = x + 2;
+        let confirm_w = 9; // "[Confirm]".len()
+        let cancel_x = confirm_x + confirm_w + 2;
+        let cancel_w = 8; // "[Cancel]".len()
+
+        (
+            Rect::new(confirm_x, btn_y, confirm_w, 1),
+            Rect::new(cancel_x, btn_y, cancel_w, 1),
+        )
+    }
 }
 
 pub struct InputDialogWidget<'a> {
@@ -148,9 +174,11 @@ impl Widget for InputDialogWidget<'_> {
             let msg_x = dialog_rect.x + 2;
             buf.set_string(msg_x, dialog_rect.y + 2, &msg, text_style);
 
-            let hint = "[Enter] confirm  [Esc] cancel";
-            let hint_x = dialog_rect.x + 2;
-            buf.set_string(hint_x, dialog_rect.y + 3, hint, colors::popup_dim());
+            let btn_y = dialog_rect.y + 3;
+            let confirm_x = dialog_rect.x + 2;
+            buf.set_string(confirm_x, btn_y, "[Confirm]", colors::popup_selected());
+            let cancel_x = confirm_x + 9 + 2;
+            buf.set_string(cancel_x, btn_y, "[Cancel]", colors::popup_dim());
         } else {
             // Input field
             let input_y = dialog_rect.y + 2;
@@ -182,14 +210,12 @@ impl Widget for InputDialogWidget<'_> {
                 cell.set_style(Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED));
             }
 
-            // Hint
-            let hint = "[Enter] confirm  [Esc] cancel";
-            buf.set_string(
-                dialog_rect.x + 2,
-                dialog_rect.y + 3,
-                hint,
-                colors::popup_dim(),
-            );
+            // Buttons
+            let btn_y = dialog_rect.y + 3;
+            let confirm_x = dialog_rect.x + 2;
+            buf.set_string(confirm_x, btn_y, "[Confirm]", colors::popup_selected());
+            let cancel_x = confirm_x + 9 + 2;
+            buf.set_string(cancel_x, btn_y, "[Cancel]", colors::popup_dim());
         }
     }
 }

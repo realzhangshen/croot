@@ -1378,7 +1378,24 @@ impl App {
                 && mouse.row >= dy
                 && mouse.row < dy + dialog_height;
 
-            if !inside {
+            if inside {
+                let (confirm_rect, cancel_rect) = dialog.button_positions(area);
+                if mouse.column >= confirm_rect.x
+                    && mouse.column < confirm_rect.x + confirm_rect.width
+                    && mouse.row == confirm_rect.y
+                {
+                    self.confirm_dialog();
+                    return PostAction::None;
+                }
+                if mouse.column >= cancel_rect.x
+                    && mouse.column < cancel_rect.x + cancel_rect.width
+                    && mouse.row == cancel_rect.y
+                {
+                    self.input_dialog = None;
+                    self.input_mode = InputMode::Normal;
+                    return PostAction::None;
+                }
+            } else {
                 self.input_dialog = None;
                 self.input_mode = InputMode::Normal;
             }
