@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use crate::config::{parse_key, KeybindingsConfig};
 use crate::render::context_menu::MenuAction;
 
 /// Actions that can be triggered by user input.
@@ -131,29 +134,110 @@ pub enum InputMode {
     Picker,
 }
 
-/// Map a keyboard event to an Action in Normal mode.
-///
-/// Pure mouse interaction mode: only Ctrl+C (quit/copy) and Esc (clear selection) are kept.
-/// All other operations are available via toolbar, right-click context menu, and clickable UI.
-pub fn handle_key(key: KeyEvent, _preview_visible: bool, preview_has_selection: bool) -> Action {
-    match key.code {
-        // Ctrl+C or Super+C (Command+C via Kitty keyboard protocol): copy or quit
-        KeyCode::Char('c')
-            if key.modifiers.contains(KeyModifiers::CONTROL)
-                || key.modifiers.contains(KeyModifiers::SUPER) =>
-        {
-            if preview_has_selection {
-                Action::CopySelection
-            } else {
-                Action::Quit
+/// A key binding: a key code plus modifiers.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct KeyBinding {
+    pub code: KeyCode,
+    pub modifiers: KeyModifiers,
+}
+
+/// Maps key bindings to actions.
+pub type KeybindingMap = HashMap<KeyBinding, Action>;
+
+/// Build the keybinding map from user config. Only keys the user has set will be active.
+pub fn build_keybinding_map(config: &KeybindingsConfig) -> KeybindingMap {
+    let mut map = KeybindingMap::new();
+
+    let entries: &[(&Option<String>, Action)] = &[
+        (&config.quit, Action::Quit),
+        (&config.cursor_up, Action::CursorUp),
+        (&config.cursor_down, Action::CursorDown),
+        (&config.cursor_left, Action::CursorLeft),
+        (&config.cursor_right, Action::CursorRight),
+        (&config.toggle, Action::Toggle),
+        (&config.refresh, Action::Refresh),
+        (&config.new_file, Action::NewFile),
+        (&config.new_dir, Action::NewDir),
+        (&config.rename, Action::RenameNode),
+        (&config.delete, Action::DeleteNode),
+        (&config.toggle_preview, Action::TogglePreview),
+        (&config.toggle_render, Action::ToggleRender),
+        (&config.open_in_editor, Action::OpenInEditor),
+        (&config.open_externally, Action::OpenExternally),
+        (&config.collapse_all, Action::CollapseAll),
+        (&config.search, Action::StartSearch),
+        (&config.goto_top, Action::GotoTop),
+        (&config.goto_bottom, Action::GotoBottom),
+        (&config.select, Action::ToggleSelect),
+        (&config.clear_select, Action::ClearSelect),
+        (&config.delete_selected, Action::DeleteSelected),
+        (&config.branch_picker, Action::OpenBranchPicker),
+        (&config.enter, Action::EnterKey),
+    ];
+
+    for (opt, action) in entries {
+        if let Some(ref s) = opt {
+            if let Some((code, modifiers)) = parse_key(s) {
+                map.insert(KeyBinding { code, modifiers }, action.clone());
             }
         }
-
-        // Esc: clear selection if one exists
-        KeyCode::Esc if preview_has_selection => Action::ClearSelection,
-
-        _ => Action::None,
     }
+
+    map
+}
+
+/// Map a keyboard event to an Action in Normal mode.
+///
+/// Hardcoded: Ctrl+C (quit/copy) and Esc (clear selection).
+/// All other shortcuts come from the user-configured keybinding map.
+pub fn handle_key(
+    key: KeyEvent,
+    _preview_visible: bool,
+    preview_has_selection: bool,
+    keybindings: &KeybindingMap,
+) -> Action {
+    // Hardcoded: Ctrl+C / Super+C (copy or quit)
+    if matches!(key.code, KeyCode::Char('c'))
+        && (key.modifiers.contains(KeyModifiers::CONTROL)
+            || key.modifiers.contains(KeyModifiers::SUPER))
+    {
+        return if preview_has_selection {
+            Action::CopySelection
+        } else {
+            Action::Quit
+        };
+    }
+
+    // Hardcoded: Esc clears selection
+    if key.code == KeyCode::Esc && preview_has_selection {
+        return Action::ClearSelection;
+    }
+
+    // Look up user-configured keybindings
+    // Try exact modifiers first
+    let binding = KeyBinding {
+        code: key.code,
+        modifiers: key.modifiers,
+    };
+    if let Some(action) = keybindings.get(&binding) {
+        return action.clone();
+    }
+
+    // For uppercase chars, terminals may send Char('A') with SHIFT modifier (Kitty protocol)
+    // or Char('A') without SHIFT (legacy). Normalize by stripping SHIFT for letter chars.
+    if let KeyCode::Char(ch) = key.code {
+        if ch.is_ascii_uppercase() && key.modifiers.contains(KeyModifiers::SHIFT) {
+            let stripped = KeyBinding {
+                code: KeyCode::Char(ch.to_ascii_lowercase()),
+                modifiers: key.modifiers - KeyModifiers::SHIFT,
+            };
+            if let Some(action) = keybindings.get(&stripped) {
+                return action.clone();
+            }
+        }
+    }
+
+    Action::None
 }
 
 /// Map a keyboard event in context menu mode.

@@ -6,5 +6,4 @@ pub mod picker;
 pub mod preview_view;
 pub mod search_bar;
 pub mod status_bar;
-pub mod toolbar;
 pub mod tree_view;

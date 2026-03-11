@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use crossterm::event::{KeyCode, KeyModifiers};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Default)]
@@ -14,6 +15,96 @@ pub struct Config {
     pub editor: EditorConfig,
     #[serde(default)]
     pub open: OpenConfig,
+    #[serde(default)]
+    pub keybindings: KeybindingsConfig,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct KeybindingsConfig {
+    pub quit: Option<String>,
+    pub cursor_up: Option<String>,
+    pub cursor_down: Option<String>,
+    pub cursor_left: Option<String>,
+    pub cursor_right: Option<String>,
+    pub toggle: Option<String>,
+    pub refresh: Option<String>,
+    pub new_file: Option<String>,
+    pub new_dir: Option<String>,
+    pub rename: Option<String>,
+    pub delete: Option<String>,
+    pub toggle_preview: Option<String>,
+    pub toggle_render: Option<String>,
+    pub open_in_editor: Option<String>,
+    pub open_externally: Option<String>,
+    pub collapse_all: Option<String>,
+    pub search: Option<String>,
+    pub goto_top: Option<String>,
+    pub goto_bottom: Option<String>,
+    pub select: Option<String>,
+    pub clear_select: Option<String>,
+    pub delete_selected: Option<String>,
+    pub branch_picker: Option<String>,
+    pub enter: Option<String>,
+}
+
+/// Parse a key binding string like `"q"`, `"Enter"`, `"Ctrl+c"`, `"Shift+a"`.
+pub fn parse_key(s: &str) -> Option<(KeyCode, KeyModifiers)> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+
+    let parts: Vec<&str> = s.split('+').collect();
+    let mut modifiers = KeyModifiers::empty();
+
+    let key_part = if parts.len() == 1 {
+        parts[0]
+    } else {
+        for &part in &parts[..parts.len() - 1] {
+            match part.to_lowercase().as_str() {
+                "ctrl" | "control" => modifiers |= KeyModifiers::CONTROL,
+                "shift" => modifiers |= KeyModifiers::SHIFT,
+                "alt" => modifiers |= KeyModifiers::ALT,
+                "super" | "cmd" | "command" => modifiers |= KeyModifiers::SUPER,
+                _ => return None,
+            }
+        }
+        parts[parts.len() - 1]
+    };
+
+    let code = match key_part.to_lowercase().as_str() {
+        "enter" | "return" => KeyCode::Enter,
+        "esc" | "escape" => KeyCode::Esc,
+        "tab" => KeyCode::Tab,
+        "space" | " " => KeyCode::Char(' '),
+        "backspace" | "bs" => KeyCode::Backspace,
+        "delete" | "del" => KeyCode::Delete,
+        "up" => KeyCode::Up,
+        "down" => KeyCode::Down,
+        "left" => KeyCode::Left,
+        "right" => KeyCode::Right,
+        "home" => KeyCode::Home,
+        "end" => KeyCode::End,
+        "pageup" | "pgup" => KeyCode::PageUp,
+        "pagedown" | "pgdn" => KeyCode::PageDown,
+        "insert" | "ins" => KeyCode::Insert,
+        s if s.len() == 1 => {
+            let ch = s.chars().next().unwrap();
+            // Use the original case from key_part, not lowered
+            let original_ch = key_part.chars().next().unwrap();
+            if original_ch.is_uppercase() {
+                modifiers |= KeyModifiers::SHIFT;
+            }
+            KeyCode::Char(original_ch.to_lowercase().next().unwrap_or(ch))
+        }
+        s if s.starts_with('f') => {
+            let num: u8 = s[1..].parse().ok()?;
+            KeyCode::F(num)
+        }
+        _ => return None,
+    };
+
+    Some((code, modifiers))
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -188,6 +279,36 @@ auto_preview = false
 # [[open.rules]]
 # pattern = "*.pdf"
 # command = "zathura"
+
+# [keybindings]
+# Keyboard shortcuts are disabled by default.
+# Uncomment any line below to enable that shortcut.
+# Supports: single chars ("q", "j"), named keys ("Enter", "Esc", "Space"),
+#           modifiers ("Ctrl+c", "Shift+a", "Alt+x")
+# quit = "q"
+# cursor_up = "k"
+# cursor_down = "j"
+# cursor_left = "h"
+# cursor_right = "l"
+# toggle = "o"
+# refresh = "r"
+# new_file = "a"
+# new_dir = "A"
+# rename = "R"
+# delete = "D"
+# toggle_preview = "p"
+# toggle_render = "m"
+# open_in_editor = "e"
+# open_externally = "x"
+# collapse_all = "W"
+# search = "/"
+# goto_top = "g"
+# goto_bottom = "G"
+# select = "Space"
+# clear_select = "Esc"
+# delete_selected = "X"
+# branch_picker = "b"
+# enter = "Enter"
 "#
         .to_string()
     }

@@ -27,6 +27,9 @@ pub enum MenuAction {
     ClearSelection,
     DeleteSelected,
     TogglePreview,
+    Refresh,
+    CollapseAll,
+    StartSearch,
 }
 
 /// State for the visible context menu.
@@ -144,6 +147,26 @@ impl ContextMenuState {
                     label: "New Directory".into(),
                     action: MenuAction::NewDir,
                 },
+                MenuItem {
+                    label: "─".into(),
+                    action: MenuAction::CopyPath,
+                },
+                MenuItem {
+                    label: "Refresh".into(),
+                    action: MenuAction::Refresh,
+                },
+                MenuItem {
+                    label: "Collapse All".into(),
+                    action: MenuAction::CollapseAll,
+                },
+                MenuItem {
+                    label: "Toggle Preview".into(),
+                    action: MenuAction::TogglePreview,
+                },
+                MenuItem {
+                    label: "Search".into(),
+                    action: MenuAction::StartSearch,
+                },
             ],
         }
     }
@@ -163,6 +186,18 @@ impl ContextMenuState {
             MenuItem {
                 label: "New Directory".into(),
                 action: MenuAction::NewDir,
+            },
+            MenuItem {
+                label: "─".into(),
+                action: MenuAction::CopyPath,
+            },
+            MenuItem {
+                label: "Collapse All".into(),
+                action: MenuAction::CollapseAll,
+            },
+            MenuItem {
+                label: "Toggle Preview".into(),
+                action: MenuAction::TogglePreview,
             },
         ];
         items.extend(Self::selection_items(is_node_selected, selected_count));
@@ -448,9 +483,14 @@ mod tests {
     #[test]
     fn workspace_menu_has_new_file_and_dir() {
         let state = ContextMenuState::new_for_workspace(0, 0, 999);
-        assert_eq!(state.items.len(), 2);
+        assert_eq!(state.items.len(), 7);
         assert_eq!(state.items[0].action, MenuAction::NewFile);
         assert_eq!(state.items[1].action, MenuAction::NewDir);
+        // items[2] is separator
+        assert_eq!(state.items[3].action, MenuAction::Refresh);
+        assert_eq!(state.items[4].action, MenuAction::CollapseAll);
+        assert_eq!(state.items[5].action, MenuAction::TogglePreview);
+        assert_eq!(state.items[6].action, MenuAction::StartSearch);
     }
 
     #[test]

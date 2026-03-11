@@ -20,8 +20,8 @@ use crate::cmux::bridge::CmuxBridge;
 use crate::config::Config;
 use crate::git::status::GitState;
 use crate::input::handler::{
-    handle_key, handle_key_dialog, handle_key_menu, handle_key_picker, handle_key_search, Action,
-    InputMode,
+    build_keybinding_map, handle_key, handle_key_dialog, handle_key_menu, handle_key_picker,
+    handle_key_search, Action, InputMode, KeybindingMap,
 };
 use crate::input::mouse::{handle_mouse, ClickTracker};
 use crate::layout::{self, FocusPane, PreviewLayout};
@@ -34,7 +34,6 @@ use crate::render::picker::{PickerState, PickerWidget};
 use crate::render::preview_view::PreviewView;
 use crate::render::search_bar::{fuzzy_match, SearchBar, SearchState};
 use crate::render::status_bar::{HyperlinkRegion, StatusBar};
-use crate::render::toolbar::{ToolbarState, ToolbarWidget};
 use crate::render::tree_view::TreeView;
 use crate::tree::forest::FileTree;
 
@@ -80,16 +79,13 @@ pub struct App {
     enhanced_keyboard: bool,
     // Double-click detection for tree rows
     click_tracker: ClickTracker,
-    // Toolbar state
-    toolbar_state: ToolbarState,
-    toolbar_area_y: u16,
+    // User-configured keybindings
+    keybinding_map: KeybindingMap,
     // Status/search bar y-coordinates for mouse routing
     status_bar_y: u16,
     search_bar_y: Option<u16>,
     // Status bar branch click region: (x_start, x_end)
     status_bar_branch_region: Option<(u16, u16)>,
-    // Toolbar hover column for highlighting
-    toolbar_hover_col: Option<u16>,
 }
 
 impl App {
@@ -105,10 +101,7 @@ impl App {
 
         let preview_visible = config.preview.auto_preview;
         let render_markdown = config.preview.render_markdown;
-
-        let toolbar_project_name = root
-            .file_name()
-            .map_or("croot".to_string(), |n| n.to_string_lossy().into_owned());
+        let keybinding_map = build_keybinding_map(&config.keybindings);
 
         Ok(Self {
             tree,
@@ -142,12 +135,10 @@ impl App {
             hyperlink_regions: Vec::new(),
             enhanced_keyboard,
             click_tracker: ClickTracker::new(),
-            toolbar_state: ToolbarState::new(&toolbar_project_name),
-            toolbar_area_y: 0,
+            keybinding_map,
             status_bar_y: 0,
             search_bar_y: None,
             status_bar_branch_region: None,
-            toolbar_hover_col: None,
         })
     }
 
@@ -186,7 +177,7 @@ impl App {
                             let action = match self.input_mode {
                                 InputMode::Normal => {
                                     let has_selection = self.preview_state.selection.is_active();
-                                    let action = handle_key(key, self.preview_visible, has_selection);
+                                    let action = handle_key(key, self.preview_visible, has_selection, &self.keybinding_map);
                                     if self.focus == FocusPane::Preview {
                                         match action {
                                             Action::ScrollUp(n) => Action::PreviewScrollUp(n),
@@ -215,25 +206,14 @@ impl App {
                                 // R5: Click outside dialog cancels it
                                 post_action = self.handle_dialog_mouse(mouse);
                             } else {
-                                // R5: Route by area priority: toolbar > status > search > tree/preview
+                                // Route by area priority: status > search > tree/preview
                                 let is_left_down = matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left));
-                                let in_tree_pane = self.preview_area_x
-                                    .is_none_or(|px| mouse.column < px.saturating_sub(1));
 
-                                if mouse.row == self.toolbar_area_y && in_tree_pane && is_left_down {
-                                    if let Some(action) = self.toolbar_state.button_at(mouse.column) {
-                                        post_action = self.handle_action(&action, &preview_tx);
-                                    }
-                                } else if mouse.row == self.status_bar_y && is_left_down {
+                                if mouse.row == self.status_bar_y && is_left_down {
                                     post_action = self.handle_status_bar_click(mouse.column, &preview_tx);
                                 } else if self.search_bar_y.is_some_and(|y| mouse.row == y) && is_left_down {
                                     post_action = self.handle_search_bar_click(mouse.column, &preview_tx);
-                                } else if matches!(mouse.kind, MouseEventKind::Moved) && mouse.row == self.toolbar_area_y && in_tree_pane {
-                                    // Track toolbar hover
-                                    self.toolbar_hover_col = Some(mouse.column);
-                                    self.hover_row = None;
                                 } else {
-                                    self.toolbar_hover_col = None;
                                     let action = handle_mouse(mouse, self.tree_area_y, self.tree_area_height, self.preview_area_x, &mut self.click_tracker);
                                     post_action = self.handle_action(&action, &preview_tx);
                                 }
@@ -350,20 +330,7 @@ impl App {
             None
         };
 
-        // Toolbar gets the first row of main_area; tree content starts below it
-        self.toolbar_area_y = main_area.y;
-        let toolbar_area = ratatui::layout::Rect {
-            x: main_area.x,
-            y: main_area.y,
-            width: main_area.width,
-            height: 1.min(main_area.height),
-        };
-        let content_area = ratatui::layout::Rect {
-            x: main_area.x,
-            y: main_area.y + toolbar_area.height,
-            width: main_area.width,
-            height: main_area.height.saturating_sub(toolbar_area.height),
-        };
+        let content_area = main_area;
         self.tree_area_y = content_area.y;
         self.main_area_width = main_area.width;
 
@@ -451,23 +418,6 @@ impl App {
             }
             .render(content_area, frame.buffer_mut(), &mut self.tree);
         }
-
-        // Render toolbar (only spans tree pane width, not preview)
-        let toolbar_render_width = if self.preview_visible && content_area.width > 20 {
-            let ratio = self.config.preview.split_ratio.clamp(0.2, 0.8);
-            (f32::from(content_area.width) * (1.0 - ratio)) as u16
-        } else {
-            toolbar_area.width
-        };
-        let toolbar_render_area = ratatui::layout::Rect {
-            width: toolbar_render_width,
-            ..toolbar_area
-        };
-        ToolbarWidget {
-            state: &mut self.toolbar_state,
-            hover_col: self.toolbar_hover_col,
-        }
-        .render(toolbar_render_area, frame.buffer_mut());
 
         let root_name = self.root.file_name().map_or_else(
             || self.root.to_string_lossy().into_owned(),
@@ -1277,6 +1227,24 @@ impl App {
                     self.focus = FocusPane::Tree;
                 }
             }
+            MenuAction::Refresh => {
+                self.tree.refresh();
+                if let Some(ref mut git) = self.git {
+                    git.refresh();
+                }
+                self.reapply_git();
+                self.update_search_filter();
+            }
+            MenuAction::CollapseAll => {
+                self.tree.collapse_all();
+                self.reapply_git();
+                self.update_search_filter();
+            }
+            MenuAction::StartSearch => {
+                self.input_mode = InputMode::Search;
+                self.search_state.clear();
+                self.search_filtered.clear();
+            }
         }
 
         // Refresh preview after menu actions that modify files
@@ -1356,6 +1324,24 @@ impl App {
                 if !self.preview_visible {
                     self.focus = FocusPane::Tree;
                 }
+            }
+            MenuAction::Refresh => {
+                self.tree.refresh();
+                if let Some(ref mut git) = self.git {
+                    git.refresh();
+                }
+                self.reapply_git();
+                self.update_search_filter();
+            }
+            MenuAction::CollapseAll => {
+                self.tree.collapse_all();
+                self.reapply_git();
+                self.update_search_filter();
+            }
+            MenuAction::StartSearch => {
+                self.input_mode = InputMode::Search;
+                self.search_state.clear();
+                self.search_filtered.clear();
             }
         }
         PostAction::None
