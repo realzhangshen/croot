@@ -186,6 +186,8 @@ impl App {
                         Some(Ok(Event::Mouse(mouse))) => {
                             if self.input_mode == InputMode::ContextMenu {
                                 post_action = self.handle_context_menu_mouse(mouse);
+                            } else if self.input_mode == InputMode::Picker {
+                                post_action = self.handle_picker_mouse(mouse);
                             } else if self.input_mode == InputMode::Normal {
                                 let action = handle_mouse(mouse, self.tree_area_y, self.tree_area_height, self.preview_area_x, &mut self.click_tracker);
                                 post_action = self.handle_action(&action, &preview_tx);
@@ -450,9 +452,8 @@ impl App {
             widget.render(size, frame.buffer_mut());
         }
 
-        if let Some(ref picker) = self.picker_state {
-            let widget = PickerWidget { state: picker };
-            widget.render(size, frame.buffer_mut());
+        if let Some(ref mut picker) = self.picker_state {
+            PickerWidget::render_mut(picker, size, frame.buffer_mut());
         }
     }
 
@@ -1018,6 +1019,71 @@ impl App {
                 // Any other click closes the menu
                 if matches!(mouse.kind, MouseEventKind::Down(_)) {
                     self.context_menu = None;
+                    self.input_mode = InputMode::Normal;
+                }
+            }
+        }
+        PostAction::None
+    }
+
+    fn handle_picker_mouse(&mut self, mouse: crossterm::event::MouseEvent) -> PostAction {
+        use crossterm::event::{MouseButton, MouseEventKind};
+
+        let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+        let area = ratatui::layout::Rect::new(0, 0, cols, rows);
+
+        let layout = match self.picker_state.as_ref().and_then(|p| p.layout(area)) {
+            Some(l) => l,
+            None => return PostAction::None,
+        };
+
+        let dialog = layout.dialog_rect;
+        let inside = mouse.column >= dialog.x
+            && mouse.column < dialog.x + dialog.width
+            && mouse.row >= dialog.y
+            && mouse.row < dialog.y + dialog.height;
+
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                if inside {
+                    if let Some(picker) = self.picker_state.as_mut() {
+                        if let Some(idx) = picker.row_to_filtered_idx(&layout, mouse.row) {
+                            picker.selected = idx;
+                            self.confirm_picker();
+                        }
+                    }
+                } else {
+                    // Click outside closes picker
+                    self.picker_state = None;
+                    self.input_mode = InputMode::Normal;
+                }
+            }
+            MouseEventKind::Moved => {
+                if inside {
+                    if let Some(picker) = self.picker_state.as_mut() {
+                        if let Some(idx) = picker.row_to_filtered_idx(&layout, mouse.row) {
+                            picker.selected = idx;
+                        }
+                    }
+                }
+            }
+            MouseEventKind::ScrollUp => {
+                if inside {
+                    if let Some(picker) = self.picker_state.as_mut() {
+                        picker.move_up();
+                    }
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                if inside {
+                    if let Some(picker) = self.picker_state.as_mut() {
+                        picker.move_down();
+                    }
+                }
+            }
+            _ => {
+                if matches!(mouse.kind, MouseEventKind::Down(_)) {
+                    self.picker_state = None;
                     self.input_mode = InputMode::Normal;
                 }
             }

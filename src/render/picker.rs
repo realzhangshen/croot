@@ -2,7 +2,6 @@ use ratatui::{
     buffer::Buffer,
     layout::Rect,
     style::{Color, Modifier, Style},
-    widgets::Widget,
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -153,26 +152,38 @@ impl PickerState {
     }
 }
 
-/// Widget for rendering the picker overlay.
-pub struct PickerWidget<'a> {
-    pub state: &'a PickerState,
+/// Computed layout geometry for the picker dialog.
+pub struct PickerLayout {
+    pub dialog_rect: Rect,
+    pub list_y: u16,
+    pub list_height: u16,
 }
 
-impl Widget for PickerWidget<'_> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        // Need enough space for border + input + at least hint row
+impl PickerState {
+    /// Compute the dialog geometry for a given terminal area.
+    /// Used by both the renderer and mouse handler.
+    pub fn layout(&self, area: Rect) -> Option<PickerLayout> {
         if area.width < 8 || area.height < 5 {
-            return;
+            return None;
         }
 
         let dialog_width = 44u16.min(area.width.saturating_sub(4));
         let max_visible_items = 10u16;
-        let has_error = self.state.error_message.is_some();
-        // 1 border top + 1 input + 1 blank + items + 1 hint + (1 error?) + 1 border bottom
-        let item_count = self.state.filtered_indices.len() as u16;
+        let has_error = self.error_message.is_some();
+        let item_count = self.filtered_indices.len() as u16;
         let visible_items = item_count.min(max_visible_items);
-        // Also account for separator rows that appear in filtered view
-        let separator_count = self.separator_count_in_view(visible_items);
+
+        // Count separator rows (same logic as PickerWidget::separator_count_in_view)
+        let has_local = self
+            .filtered_indices
+            .iter()
+            .any(|&i| !self.all_items[i].is_remote);
+        let has_remote = self
+            .filtered_indices
+            .iter()
+            .any(|&i| self.all_items[i].is_remote);
+        let separator_count = u16::from(has_local && has_remote);
+
         let content_rows = visible_items + separator_count;
         let dialog_height =
             (3 + content_rows + 1 + u16::from(has_error) + 1).min(area.height.saturating_sub(2));
@@ -180,6 +191,48 @@ impl Widget for PickerWidget<'_> {
         let x = area.x + (area.width.saturating_sub(dialog_width)) / 2;
         let y = area.y + (area.height.saturating_sub(dialog_height)) / 2;
         let dialog_rect = Rect::new(x, y, dialog_width, dialog_height);
+
+        let list_y = dialog_rect.y + 3;
+        let list_height = dialog_rect
+            .height
+            .saturating_sub(3 + 1 + u16::from(has_error) + 1);
+
+        Some(PickerLayout {
+            dialog_rect,
+            list_y,
+            list_height,
+        })
+    }
+
+    /// Map a screen row to a filtered item index, using the persisted `scroll_offset`.
+    pub fn row_to_filtered_idx(&self, layout: &PickerLayout, row: u16) -> Option<usize> {
+        if row < layout.list_y || row >= layout.list_y + layout.list_height {
+            return None;
+        }
+
+        let display_rows = build_display_rows(self);
+        let display_idx = self.scroll_offset + (row - layout.list_y) as usize;
+        if display_idx >= display_rows.len() {
+            return None;
+        }
+
+        match &display_rows[display_idx] {
+            DisplayRow::Item { filtered_idx, .. } => Some(*filtered_idx),
+            DisplayRow::Separator(_) => None,
+        }
+    }
+}
+
+/// Widget for rendering the picker overlay.
+pub struct PickerWidget;
+
+impl PickerWidget {
+    /// Render the picker, persisting scroll offset for stable mouse hit-testing.
+    pub fn render_mut(state: &mut PickerState, area: Rect, buf: &mut Buffer) {
+        let Some(layout) = state.layout(area) else {
+            return;
+        };
+        let dialog_rect = layout.dialog_rect;
 
         let base = colors::popup_base();
         let title_style = base.add_modifier(Modifier::BOLD);
@@ -197,7 +250,7 @@ impl Widget for PickerWidget<'_> {
         draw_border(buf, dialog_rect, base);
 
         // Title
-        let title = match self.state.kind {
+        let title = match state.kind {
             PickerKind::Branch => "Switch Branch",
         };
         let title_x =
@@ -229,28 +282,26 @@ impl Widget for PickerWidget<'_> {
         // Draw query
         let query_x = input_x + 2;
         let query_width = input_width.saturating_sub(2);
-        let display_text = if self.state.query.len() > query_width {
-            &self.state.query[self.state.query.len() - query_width..]
+        let display_text = if state.query.len() > query_width {
+            &state.query[state.query.len() - query_width..]
         } else {
-            &self.state.query
+            &state.query
         };
         buf.set_string(query_x, input_y, display_text, Style::default());
 
         // Draw cursor
-        let cursor_display_pos = if self.state.query.len() > query_width {
+        let cursor_display_pos = if state.query.len() > query_width {
             query_width
         } else {
-            self.state.cursor_pos
+            state.cursor_pos
         };
         if let Some(cell) = buf.cell_mut((query_x + cursor_display_pos as u16, input_y)) {
             cell.set_style(Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED));
         }
 
         // Item list
-        let list_y = dialog_rect.y + 3;
-        let list_height = dialog_rect
-            .height
-            .saturating_sub(3 + 1 + u16::from(has_error) + 1);
+        let list_y = layout.list_y;
+        let list_height = layout.list_height;
         let inner_width = dialog_rect.width.saturating_sub(4) as usize;
 
         if list_height == 0 || inner_width == 0 {
@@ -258,13 +309,13 @@ impl Widget for PickerWidget<'_> {
         }
 
         // Build display rows: interleave separators and filtered items
-        let display_rows = self.build_display_rows();
+        let display_rows = build_display_rows(state);
         let total_display = display_rows.len();
 
-        // Adjust scroll to keep selected visible
-        let selected_display_row = self.selected_display_row(&display_rows);
+        // Adjust scroll to keep selected visible and persist it
+        let selected_display_row = selected_display_row_in(&display_rows, state.selected);
         let scroll = {
-            let mut s = self.state.scroll_offset;
+            let mut s = state.scroll_offset;
             if selected_display_row >= s + list_height as usize {
                 s = selected_display_row.saturating_sub((list_height as usize).saturating_sub(1));
             }
@@ -273,6 +324,7 @@ impl Widget for PickerWidget<'_> {
             }
             s
         };
+        state.scroll_offset = scroll;
 
         for row in 0..list_height as usize {
             let display_idx = scroll + row;
@@ -293,8 +345,8 @@ impl Widget for PickerWidget<'_> {
                     filtered_idx,
                     item_idx,
                 } => {
-                    let item = &self.state.all_items[*item_idx];
-                    let is_selected = *filtered_idx == self.state.selected;
+                    let item = &state.all_items[*item_idx];
+                    let is_selected = *filtered_idx == state.selected;
 
                     let prefix = if item.is_current { "✓ " } else { "  " };
                     let label = format!("{prefix}{}", item.label);
@@ -319,7 +371,7 @@ impl Widget for PickerWidget<'_> {
         }
 
         // Error message
-        if let Some(ref err) = self.state.error_message {
+        if let Some(ref err) = state.error_message {
             let err_y = dialog_rect.y + dialog_rect.height - 2;
             let err_style = Style::reset().fg(Color::Red).add_modifier(Modifier::BOLD);
             let truncated = truncate_to_display_width(err, inner_width);
@@ -343,57 +395,38 @@ enum DisplayRow {
     },
 }
 
-impl PickerWidget<'_> {
-    /// Count separator rows that would appear in the visible window.
-    fn separator_count_in_view(&self, _visible_items: u16) -> u16 {
-        // Check if any filtered item is remote and any is local
-        let has_local = self
-            .state
-            .filtered_indices
-            .iter()
-            .any(|&i| !self.state.all_items[i].is_remote);
-        let has_remote = self
-            .state
-            .filtered_indices
-            .iter()
-            .any(|&i| self.state.all_items[i].is_remote);
-        u16::from(has_local && has_remote)
-    }
+/// Build display rows interleaving separators with filtered items.
+fn build_display_rows(state: &PickerState) -> Vec<DisplayRow> {
+    let mut rows = Vec::new();
+    let mut seen_remote = false;
 
-    /// Build display rows interleaving separators with filtered items.
-    fn build_display_rows(&self) -> Vec<DisplayRow> {
-        let mut rows = Vec::new();
-        let mut seen_remote = false;
-
-        for (filtered_idx, &item_idx) in self.state.filtered_indices.iter().enumerate() {
-            let item = &self.state.all_items[item_idx];
-            if item.is_remote && !seen_remote {
-                // Check if there were any local items before this
-                let has_local_before = rows.iter().any(|r| matches!(r, DisplayRow::Item { .. }));
-                if has_local_before {
-                    rows.push(DisplayRow::Separator("Remote".to_string()));
-                }
-                seen_remote = true;
+    for (filtered_idx, &item_idx) in state.filtered_indices.iter().enumerate() {
+        let item = &state.all_items[item_idx];
+        if item.is_remote && !seen_remote {
+            let has_local_before = rows.iter().any(|r| matches!(r, DisplayRow::Item { .. }));
+            if has_local_before {
+                rows.push(DisplayRow::Separator("Remote".to_string()));
             }
-            rows.push(DisplayRow::Item {
-                filtered_idx,
-                item_idx,
-            });
+            seen_remote = true;
         }
-        rows
+        rows.push(DisplayRow::Item {
+            filtered_idx,
+            item_idx,
+        });
     }
+    rows
+}
 
-    /// Find the display row index for the currently selected filtered item.
-    fn selected_display_row(&self, display_rows: &[DisplayRow]) -> usize {
-        for (i, row) in display_rows.iter().enumerate() {
-            if let DisplayRow::Item { filtered_idx, .. } = row {
-                if *filtered_idx == self.state.selected {
-                    return i;
-                }
+/// Find the display row index for a given selected filtered item.
+fn selected_display_row_in(display_rows: &[DisplayRow], selected: usize) -> usize {
+    for (i, row) in display_rows.iter().enumerate() {
+        if let DisplayRow::Item { filtered_idx, .. } = row {
+            if *filtered_idx == selected {
+                return i;
             }
         }
-        0
     }
+    0
 }
 
 #[cfg(test)]
@@ -498,8 +531,8 @@ mod tests {
     fn render_picker(state: &PickerState, width: u16, height: u16) -> Buffer {
         let area = Rect::new(0, 0, width, height);
         let mut buf = Buffer::empty(area);
-        let widget = PickerWidget { state };
-        widget.render(area, &mut buf);
+        let mut state = state.clone();
+        PickerWidget::render_mut(&mut state, area, &mut buf);
         buf
     }
 
