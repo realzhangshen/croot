@@ -10,7 +10,7 @@ A terminal file explorer that brings the VS Code sidebar experience to your comm
 
 ## Pair with cmux
 
-croot works great alongside [cmux](https://github.com/realzhangshen/cmux) for a full vibe coding setup in the terminal — file tree on one side, editor and shell on the other.
+croot works great alongside [cmux](https://github.com/manaflow-ai/cmux) for a full vibe coding setup in the terminal — file tree on one side, editor and shell on the other.
 
 ## Installation
 
