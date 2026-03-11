@@ -813,10 +813,14 @@ impl App {
             return;
         };
         if idx < self.tree.len() {
+            let already_selected = self.tree.cursor == idx;
             self.tree.cursor = idx;
             if self.tree.nodes[idx].is_dir() {
                 self.tree.toggle(idx);
                 self.reapply_git();
+            } else if already_selected && self.preview_visible {
+                self.preview_visible = false;
+                self.focus = FocusPane::Tree;
             } else {
                 self.preview_visible = true;
                 self.trigger_preview_load(preview_tx);
