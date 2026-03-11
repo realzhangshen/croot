@@ -40,6 +40,16 @@ croot ~/projects # Browse a specific directory
 
 Config file: `~/.config/croot/config.toml` (or `$XDG_CONFIG_HOME/croot/config.toml`)
 
+## Development
+
+```bash
+make install-hooks   # Set up pre-commit and pre-push hooks
+make ci              # Run all CI checks locally (fmt, check, clippy, test)
+make fix             # Auto-format code
+```
+
+The pre-commit hook runs `cargo fmt --check` (sub-second). The pre-push hook mirrors CI with all four checks. Both are skippable with `--no-verify`.
+
 ## License
 
 [MIT](LICENSE)

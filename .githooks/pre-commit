@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Pre-commit hook: fast formatting check only (~sub-second)
+# Skip with: git commit --no-verify
+
+set -e
+
+echo "pre-commit: checking formatting..."
+
+if ! cargo fmt --check 2>/dev/null; then
+    echo ""
+    echo "✗ Formatting check failed."
+    echo "  Run 'cargo fmt' to fix, then re-commit."
+    exit 1
+fi
+
+echo "pre-commit: ok"
