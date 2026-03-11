@@ -29,7 +29,7 @@ pub struct HyperlinkRegion {
 
 /// Truncate a string to fit within `max_width` display columns.
 /// Uses unicode character widths rather than byte counts.
-fn truncate_to_display_width(s: &str, max_width: usize) -> String {
+pub(crate) fn truncate_to_display_width(s: &str, max_width: usize) -> String {
     let mut width = 0;
     let mut end = 0;
     for ch in s.chars() {

@@ -188,6 +188,10 @@ impl Widget for InputDialogWidget<'_> {
 }
 
 pub(crate) fn draw_border(buf: &mut Buffer, rect: Rect, style: Style) {
+    if rect.width < 2 || rect.height < 2 {
+        return;
+    }
+
     // Corners
     if let Some(cell) = buf.cell_mut((rect.x, rect.y)) {
         cell.set_symbol("╭");

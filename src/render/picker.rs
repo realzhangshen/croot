@@ -4,9 +4,11 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::Widget,
 };
+use unicode_width::UnicodeWidthStr;
 
 use super::colors;
 use super::input_dialog::draw_border;
+use super::status_bar::truncate_to_display_width;
 use crate::git::branches::BranchInfo;
 use crate::render::search_bar::fuzzy_match;
 
@@ -158,6 +160,11 @@ pub struct PickerWidget<'a> {
 
 impl Widget for PickerWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        // Need enough space for border + input + at least hint row
+        if area.width < 8 || area.height < 5 {
+            return;
+        }
+
         let dialog_width = 44u16.min(area.width.saturating_sub(4));
         let max_visible_items = 10u16;
         let has_error = self.state.error_message.is_some();
@@ -246,6 +253,10 @@ impl Widget for PickerWidget<'_> {
             .saturating_sub(3 + 1 + u16::from(has_error) + 1);
         let inner_width = dialog_rect.width.saturating_sub(4) as usize;
 
+        if list_height == 0 || inner_width == 0 {
+            return;
+        }
+
         // Build display rows: interleave separators and filtered items
         let display_rows = self.build_display_rows();
         let total_display = display_rows.len();
@@ -255,7 +266,7 @@ impl Widget for PickerWidget<'_> {
         let scroll = {
             let mut s = self.state.scroll_offset;
             if selected_display_row >= s + list_height as usize {
-                s = selected_display_row.saturating_sub(list_height as usize - 1);
+                s = selected_display_row.saturating_sub((list_height as usize).saturating_sub(1));
             }
             if selected_display_row < s {
                 s = selected_display_row;
@@ -272,14 +283,11 @@ impl Widget for PickerWidget<'_> {
             match &display_rows[display_idx] {
                 DisplayRow::Separator(label) => {
                     let sep_text = format!("─ {label} ");
-                    let remaining = inner_width.saturating_sub(sep_text.len());
+                    let sep_display_width = UnicodeWidthStr::width(sep_text.as_str());
+                    let remaining = inner_width.saturating_sub(sep_display_width);
                     let full = format!("{sep_text}{}", "─".repeat(remaining));
-                    buf.set_string(
-                        dialog_rect.x + 2,
-                        dy,
-                        &full[..full.len().min(inner_width)],
-                        colors::popup_dim(),
-                    );
+                    let truncated = truncate_to_display_width(&full, inner_width);
+                    buf.set_string(dialog_rect.x + 2, dy, &truncated, colors::popup_dim());
                 }
                 DisplayRow::Item {
                     filtered_idx,
@@ -290,11 +298,7 @@ impl Widget for PickerWidget<'_> {
 
                     let prefix = if item.is_current { "✓ " } else { "  " };
                     let label = format!("{prefix}{}", item.label);
-                    let display = if label.len() > inner_width {
-                        &label[..inner_width]
-                    } else {
-                        &label
-                    };
+                    let display = truncate_to_display_width(&label, inner_width);
 
                     let style = if is_selected {
                         colors::popup_selected()
@@ -309,7 +313,7 @@ impl Widget for PickerWidget<'_> {
                             cell.set_symbol(" ");
                         }
                     }
-                    buf.set_string(dialog_rect.x + 2, dy, display, style);
+                    buf.set_string(dialog_rect.x + 2, dy, &display, style);
                 }
             }
         }
@@ -318,12 +322,8 @@ impl Widget for PickerWidget<'_> {
         if let Some(ref err) = self.state.error_message {
             let err_y = dialog_rect.y + dialog_rect.height - 2;
             let err_style = Style::reset().fg(Color::Red).add_modifier(Modifier::BOLD);
-            let truncated = if err.len() > inner_width {
-                &err[..inner_width]
-            } else {
-                err
-            };
-            buf.set_string(dialog_rect.x + 2, err_y, truncated, err_style);
+            let truncated = truncate_to_display_width(err, inner_width);
+            buf.set_string(dialog_rect.x + 2, err_y, &truncated, err_style);
         }
 
         // Hint
@@ -493,5 +493,54 @@ mod tests {
         state.delete_char();
         // Back to empty query — all non-separator items shown
         assert_eq!(state.filtered_indices.len(), 3);
+    }
+
+    fn render_picker(state: &PickerState, width: u16, height: u16) -> Buffer {
+        let area = Rect::new(0, 0, width, height);
+        let mut buf = Buffer::empty(area);
+        let widget = PickerWidget { state };
+        widget.render(area, &mut buf);
+        buf
+    }
+
+    #[test]
+    fn render_with_unicode_separator_no_panic() {
+        // The separator uses "─" (3-byte UTF-8 char). Previously this panicked
+        // because byte-length was used instead of display width for truncation.
+        let state = PickerState::new_branch(&make_branches());
+        // Width 44 triggered the original panic (byte index 40 inside "─")
+        render_picker(&state, 48, 20);
+    }
+
+    #[test]
+    fn render_with_current_branch_checkmark_no_panic() {
+        // "✓" is multi-byte; ensure label truncation doesn't slice mid-char
+        let branches = vec![BranchInfo {
+            name: "a-very-long-branch-name-that-will-be-truncated".to_string(),
+            is_remote: false,
+            is_current: true,
+        }];
+        let state = PickerState::new_branch(&branches);
+        render_picker(&state, 30, 15);
+    }
+
+    #[test]
+    fn render_with_error_message_no_panic() {
+        let mut state = PickerState::new_branch(&make_branches());
+        state.error_message = Some("Something went wrong with émojis 🎉 and ñ".to_string());
+        render_picker(&state, 40, 20);
+    }
+
+    #[test]
+    fn render_tiny_terminal_no_panic() {
+        // Extremely small terminal: list_height would be 0, dialog could be
+        // smaller than border. Must not panic. Start from 1x1 since ratatui
+        // Buffer itself panics with 0-dimension areas.
+        let state = PickerState::new_branch(&make_branches());
+        for w in 1..=10 {
+            for h in 1..=10 {
+                render_picker(&state, w, h);
+            }
+        }
     }
 }
