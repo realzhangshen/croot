@@ -71,12 +71,8 @@ pub fn handle_mouse(
                 Action::None
             }
         }
-        MouseEventKind::Down(MouseButton::Right) => {
-            Action::RightClick(event.column, event.row)
-        }
-        MouseEventKind::Drag(MouseButton::Left) => {
-            Action::DragUpdate(event.column, event.row)
-        }
+        MouseEventKind::Down(MouseButton::Right) => Action::RightClick(event.column, event.row),
+        MouseEventKind::Drag(MouseButton::Left) => Action::DragUpdate(event.column, event.row),
         MouseEventKind::ScrollUp => {
             if preview_x.is_some_and(|px| event.column >= px) {
                 Action::PreviewScrollUp(3)

@@ -101,7 +101,10 @@ impl PreviewView<'_> {
         if state.kind == PreviewKind::Rendered {
             spans.push(Span::styled(
                 " [MD]",
-                Style::default().fg(Color::Cyan).bg(bg).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .bg(bg)
+                    .add_modifier(Modifier::BOLD),
             ));
         }
 

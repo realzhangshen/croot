@@ -79,7 +79,13 @@ pub fn load_preview(
     }
 
     // Text file — read full content
-    load_text_preview(path, &file_info, syntax_highlight, render_markdown, preview_width)
+    load_text_preview(
+        path,
+        &file_info,
+        syntax_highlight,
+        render_markdown,
+        preview_width,
+    )
 }
 
 fn is_markdown_file(path: &Path) -> bool {

@@ -165,10 +165,7 @@ fn handle_config(action: Option<ConfigAction>) -> anyhow::Result<()> {
             let editor_str = config::resolve_editor(&cfg);
             let mut parts = editor_str.split_whitespace();
             let cmd = parts.next().unwrap_or("vi");
-            let status = process::Command::new(cmd)
-                .args(parts)
-                .arg(&path)
-                .status();
+            let status = process::Command::new(cmd).args(parts).arg(&path).status();
             match status {
                 Ok(s) if s.success() => {}
                 Ok(s) => process::exit(s.code().unwrap_or(1)),
@@ -199,9 +196,7 @@ fn self_update() -> anyhow::Result<()> {
     println!("Updating croot...");
 
     // Refresh tap to get latest formula
-    let _ = process::Command::new("brew")
-        .args(["update"])
-        .status();
+    let _ = process::Command::new("brew").args(["update"]).status();
 
     let status = process::Command::new("brew")
         .args(["upgrade", "croot"])

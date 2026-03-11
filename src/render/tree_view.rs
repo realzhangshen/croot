@@ -33,7 +33,12 @@ impl StatefulWidget for TreeView<'_> {
         //   Multi   → explicit bg color
         //   None    → transparent
         #[derive(PartialEq)]
-        enum RowMode { Cursor, Hover, MultiBg(ratatui::style::Color), None }
+        enum RowMode {
+            Cursor,
+            Hover,
+            MultiBg(ratatui::style::Color),
+            None,
+        }
 
         let height = area.height as usize;
 
@@ -80,14 +85,12 @@ impl StatefulWidget for TreeView<'_> {
             // Build a row style: REVERSED variants strip fg for a clean bar.
             let row_style = |base: Style| -> Style {
                 match &row_mode {
-                    RowMode::Cursor => {
-                        Style::default()
-                            .add_modifier(Modifier::REVERSED | (base.add_modifier & (Modifier::BOLD | Modifier::DIM)))
-                    }
-                    RowMode::Hover => {
-                        Style::default()
-                            .add_modifier(Modifier::REVERSED | Modifier::DIM | (base.add_modifier & Modifier::BOLD))
-                    }
+                    RowMode::Cursor => Style::default().add_modifier(
+                        Modifier::REVERSED | (base.add_modifier & (Modifier::BOLD | Modifier::DIM)),
+                    ),
+                    RowMode::Hover => Style::default().add_modifier(
+                        Modifier::REVERSED | Modifier::DIM | (base.add_modifier & Modifier::BOLD),
+                    ),
                     RowMode::MultiBg(bg) => base.bg(*bg),
                     RowMode::None => base,
                 }
@@ -172,7 +175,10 @@ impl StatefulWidget for TreeView<'_> {
                 if is_ignored {
                     marker_base = marker_base.add_modifier(Modifier::DIM);
                 }
-                spans.push(Span::styled(format!(" {git_marker}"), row_style(marker_base)));
+                spans.push(Span::styled(
+                    format!(" {git_marker}"),
+                    row_style(marker_base),
+                ));
             }
 
             // Build info columns (size + modified) for right-aligned display
@@ -204,11 +210,14 @@ impl StatefulWidget for TreeView<'_> {
                 let min_gap = 2;
                 if line_width + min_gap + info_width < area.width {
                     let info_x = area.x + area.width - info_width;
-                    let info_style = row_style(
-                        Style::default()
-                            .fg(colors::GIT_IGNORED)
-                            .add_modifier(if row_mode == RowMode::Cursor { Modifier::DIM } else { Modifier::empty() }),
-                    );
+                    let info_style =
+                        row_style(Style::default().fg(colors::GIT_IGNORED).add_modifier(
+                            if row_mode == RowMode::Cursor {
+                                Modifier::DIM
+                            } else {
+                                Modifier::empty()
+                            },
+                        ));
                     let info_span = Line::from(Span::styled(info_text, info_style));
                     info_span.render(Rect::new(info_x, y, info_width, 1), buf);
                 }
@@ -297,10 +306,18 @@ fn git_status_style(status: GitStatus) -> Style {
         GitStatus::Added | GitStatus::Untracked => Style::default().fg(colors::GIT_ADDED),
         GitStatus::Deleted => Style::default().fg(colors::GIT_DELETED),
         GitStatus::Ignored => Style::default().fg(colors::GIT_IGNORED),
-        GitStatus::Conflicted => Style::default().fg(colors::GIT_CONFLICTED).add_modifier(Modifier::BOLD),
-        GitStatus::StagedModified => Style::default().fg(colors::GIT_STAGED_MODIFIED).add_modifier(Modifier::DIM),
-        GitStatus::StagedAdded => Style::default().fg(colors::GIT_STAGED_ADDED).add_modifier(Modifier::DIM),
-        GitStatus::StagedDeleted => Style::default().fg(colors::GIT_STAGED_DELETED).add_modifier(Modifier::DIM),
+        GitStatus::Conflicted => Style::default()
+            .fg(colors::GIT_CONFLICTED)
+            .add_modifier(Modifier::BOLD),
+        GitStatus::StagedModified => Style::default()
+            .fg(colors::GIT_STAGED_MODIFIED)
+            .add_modifier(Modifier::DIM),
+        GitStatus::StagedAdded => Style::default()
+            .fg(colors::GIT_STAGED_ADDED)
+            .add_modifier(Modifier::DIM),
+        GitStatus::StagedDeleted => Style::default()
+            .fg(colors::GIT_STAGED_DELETED)
+            .add_modifier(Modifier::DIM),
         GitStatus::Clean => Style::default().fg(colors::DEFAULT_FG),
     }
 }

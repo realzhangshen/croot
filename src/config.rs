@@ -295,11 +295,7 @@ fn navigate<'a>(val: &'a toml::Value, key: &str) -> Result<&'a toml::Value, Stri
 }
 
 /// Insert a value at a dotted key path, creating intermediate tables as needed.
-fn insert_at_key(
-    root: &mut toml::Value,
-    key: &str,
-    value: toml::Value,
-) -> Result<(), String> {
+fn insert_at_key(root: &mut toml::Value, key: &str, value: toml::Value) -> Result<(), String> {
     let parts: Vec<&str> = key.split('.').collect();
     if parts.is_empty() {
         return Err("Empty key".to_string());
@@ -312,7 +308,10 @@ fn insert_at_key(
             current
                 .as_table_mut()
                 .ok_or_else(|| format!("Expected table at '{part}'"))?
-                .insert((*part).to_string(), toml::Value::Table(toml::map::Map::new()));
+                .insert(
+                    (*part).to_string(),
+                    toml::Value::Table(toml::map::Map::new()),
+                );
         }
         current = current.get_mut(part).unwrap();
     }

@@ -5,9 +5,7 @@ use crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyboardEnhancementFlags,
     PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
-use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen,
-};
+use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
 use futures::StreamExt;
 use ratatui::{
     layout::{Constraint, Direction, Layout},
@@ -221,7 +219,9 @@ impl App {
             }
 
             // Process post-actions that require terminal access
-            if let PostAction::OpenEditor(path) = std::mem::replace(&mut post_action, PostAction::None) {
+            if let PostAction::OpenEditor(path) =
+                std::mem::replace(&mut post_action, PostAction::None)
+            {
                 self.open_editor_suspend(terminal, &path)?;
                 // Refresh tree, git, preview after editor exits
                 self.tree.refresh();
@@ -270,8 +270,7 @@ impl App {
     fn draw(&mut self, frame: &mut ratatui::Frame) {
         let size = frame.area();
 
-        let show_search_bar = self.input_mode == InputMode::Search
-            || !self.search_state.is_empty();
+        let show_search_bar = self.input_mode == InputMode::Search || !self.search_state.is_empty();
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -671,7 +670,10 @@ impl App {
                 }
             }
             Action::EnterKey => {
-                let selected_is_dir = self.tree.selected().is_some_and(crate::tree::node::TreeNode::is_dir);
+                let selected_is_dir = self
+                    .tree
+                    .selected()
+                    .is_some_and(crate::tree::node::TreeNode::is_dir);
                 if selected_is_dir {
                     let idx = self.tree.cursor;
                     self.tree.toggle(idx);
@@ -901,7 +903,10 @@ impl App {
 
     fn open_context_menu(&mut self, col: u16, row: u16) {
         // Exclude preview pane and separator
-        if self.preview_area_x.is_some_and(|px| col >= px.saturating_sub(1)) {
+        if self
+            .preview_area_x
+            .is_some_and(|px| col >= px.saturating_sub(1))
+        {
             return;
         }
         if row < self.tree_area_y || row >= self.tree_area_y + self.tree_area_height {
@@ -1027,7 +1032,10 @@ impl App {
         }
 
         // Refresh preview after menu actions that modify files
-        if matches!(action, MenuAction::NewFile | MenuAction::NewDir | MenuAction::Rename | MenuAction::Delete) {
+        if matches!(
+            action,
+            MenuAction::NewFile | MenuAction::NewDir | MenuAction::Rename | MenuAction::Delete
+        ) {
             // Refresh handled in confirm_dialog
         } else if self.preview_visible {
             self.trigger_preview_load(preview_tx);
@@ -1158,11 +1166,7 @@ impl App {
         if let Some(node) = self.tree.selected() {
             let name = node.name.clone();
             let path = node.path.clone();
-            self.input_dialog = Some(InputDialogState::new(
-                DialogKind::ConfirmDelete,
-                path,
-                name,
-            ));
+            self.input_dialog = Some(InputDialogState::new(DialogKind::ConfirmDelete, path, name));
             self.input_mode = InputMode::Dialog;
         }
     }
@@ -1200,11 +1204,7 @@ impl App {
         if let Some(node) = self.tree.nodes.get(node_idx) {
             let name = node.name.clone();
             let path = node.path.clone();
-            self.input_dialog = Some(InputDialogState::new(
-                DialogKind::ConfirmDelete,
-                path,
-                name,
-            ));
+            self.input_dialog = Some(InputDialogState::new(DialogKind::ConfirmDelete, path, name));
             self.input_mode = InputMode::Dialog;
         }
     }
@@ -1348,9 +1348,7 @@ impl App {
         self.search_state.match_count = self.search_filtered.len();
 
         // Move cursor to first match if current cursor isn't in results
-        if !self.search_filtered.is_empty()
-            && !self.search_filtered.contains(&self.tree.cursor)
-        {
+        if !self.search_filtered.is_empty() && !self.search_filtered.contains(&self.tree.cursor) {
             self.tree.cursor = self.search_filtered[0];
         }
     }

@@ -44,11 +44,7 @@ fn syntect_style_to_ratatui(style: syntect::highlighting::Style) -> Style {
 ///
 /// Returns pre-styled lines ready for rendering.
 /// `max_lines` caps how many lines we process (performance guard).
-pub fn highlight_file(
-    path: &Path,
-    content: &str,
-    max_lines: usize,
-) -> Vec<Vec<StyledSpan>> {
+pub fn highlight_file(path: &Path, content: &str, max_lines: usize) -> Vec<Vec<StyledSpan>> {
     let ss = syntax_set();
     let theme = theme_dark();
 
@@ -99,11 +95,7 @@ pub fn highlight_file(
 /// Highlight a code snippet by language name (for use in Markdown fenced code blocks).
 ///
 /// Falls back to plain text if the language is not recognized.
-pub fn highlight_code(
-    lang: &str,
-    code: &str,
-    max_lines: usize,
-) -> Vec<Vec<StyledSpan>> {
+pub fn highlight_code(lang: &str, code: &str, max_lines: usize) -> Vec<Vec<StyledSpan>> {
     let ss = syntax_set();
     let theme = theme_dark();
 
@@ -164,7 +156,10 @@ mod tests {
             ("Component.tsx", "const App = () => <div />;"),
             ("Dockerfile", "FROM rust:latest\nRUN cargo build"),
             ("main.zig", "const std = @import(\"std\");"),
-            ("flake.nix", "{ inputs.nixpkgs.url = \"github:NixOS/nixpkgs\"; }"),
+            (
+                "flake.nix",
+                "{ inputs.nixpkgs.url = \"github:NixOS/nixpkgs\"; }",
+            ),
             ("App.vue", "<template><div /></template>"),
         ];
         for (filename, content) in cases {

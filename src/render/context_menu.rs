@@ -1,8 +1,4 @@
-use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    widgets::Widget,
-};
+use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 use unicode_width::UnicodeWidthStr;
 
 use super::colors;
@@ -50,15 +46,42 @@ impl ContextMenuState {
             node_idx,
             selected: 0,
             items: vec![
-                MenuItem { label: "Open in Editor".into(), action: MenuAction::OpenInEditor },
-                MenuItem { label: "Open Externally".into(), action: MenuAction::OpenExternally },
-                MenuItem { label: "─".into(), action: MenuAction::CopyPath }, // separator (inert)
-                MenuItem { label: "Copy Path".into(), action: MenuAction::CopyPath },
-                MenuItem { label: "Copy Absolute Path".into(), action: MenuAction::CopyAbsPath },
-                MenuItem { label: "Reveal in Finder".into(), action: MenuAction::RevealInFinder },
-                MenuItem { label: "─".into(), action: MenuAction::CopyPath }, // separator (inert)
-                MenuItem { label: "Rename".into(), action: MenuAction::Rename },
-                MenuItem { label: "Delete".into(), action: MenuAction::Delete },
+                MenuItem {
+                    label: "Open in Editor".into(),
+                    action: MenuAction::OpenInEditor,
+                },
+                MenuItem {
+                    label: "Open Externally".into(),
+                    action: MenuAction::OpenExternally,
+                },
+                MenuItem {
+                    label: "─".into(),
+                    action: MenuAction::CopyPath,
+                }, // separator (inert)
+                MenuItem {
+                    label: "Copy Path".into(),
+                    action: MenuAction::CopyPath,
+                },
+                MenuItem {
+                    label: "Copy Absolute Path".into(),
+                    action: MenuAction::CopyAbsPath,
+                },
+                MenuItem {
+                    label: "Reveal in Finder".into(),
+                    action: MenuAction::RevealInFinder,
+                },
+                MenuItem {
+                    label: "─".into(),
+                    action: MenuAction::CopyPath,
+                }, // separator (inert)
+                MenuItem {
+                    label: "Rename".into(),
+                    action: MenuAction::Rename,
+                },
+                MenuItem {
+                    label: "Delete".into(),
+                    action: MenuAction::Delete,
+                },
             ],
         }
     }
@@ -70,8 +93,14 @@ impl ContextMenuState {
             node_idx,
             selected: 0,
             items: vec![
-                MenuItem { label: "New File".into(), action: MenuAction::NewFile },
-                MenuItem { label: "New Directory".into(), action: MenuAction::NewDir },
+                MenuItem {
+                    label: "New File".into(),
+                    action: MenuAction::NewFile,
+                },
+                MenuItem {
+                    label: "New Directory".into(),
+                    action: MenuAction::NewDir,
+                },
             ],
         }
     }
@@ -83,14 +112,38 @@ impl ContextMenuState {
             node_idx,
             selected: 0,
             items: vec![
-                MenuItem { label: "New File".into(), action: MenuAction::NewFile },
-                MenuItem { label: "New Directory".into(), action: MenuAction::NewDir },
-                MenuItem { label: "Copy Path".into(), action: MenuAction::CopyPath },
-                MenuItem { label: "Copy Absolute Path".into(), action: MenuAction::CopyAbsPath },
-                MenuItem { label: "Reveal in Finder".into(), action: MenuAction::RevealInFinder },
-                MenuItem { label: "─".into(), action: MenuAction::CopyPath }, // separator
-                MenuItem { label: "Rename".into(), action: MenuAction::Rename },
-                MenuItem { label: "Delete".into(), action: MenuAction::Delete },
+                MenuItem {
+                    label: "New File".into(),
+                    action: MenuAction::NewFile,
+                },
+                MenuItem {
+                    label: "New Directory".into(),
+                    action: MenuAction::NewDir,
+                },
+                MenuItem {
+                    label: "Copy Path".into(),
+                    action: MenuAction::CopyPath,
+                },
+                MenuItem {
+                    label: "Copy Absolute Path".into(),
+                    action: MenuAction::CopyAbsPath,
+                },
+                MenuItem {
+                    label: "Reveal in Finder".into(),
+                    action: MenuAction::RevealInFinder,
+                },
+                MenuItem {
+                    label: "─".into(),
+                    action: MenuAction::CopyPath,
+                }, // separator
+                MenuItem {
+                    label: "Rename".into(),
+                    action: MenuAction::Rename,
+                },
+                MenuItem {
+                    label: "Delete".into(),
+                    action: MenuAction::Delete,
+                },
             ],
         }
     }
@@ -123,7 +176,13 @@ impl ContextMenuState {
 
     /// Return the menu rect, clamped to fit within the terminal area.
     pub fn menu_rect(&self, terminal_width: u16, terminal_height: u16) -> Rect {
-        let width = self.items.iter().map(|i| i.label.width()).max().unwrap_or(10) as u16 + 4;
+        let width = self
+            .items
+            .iter()
+            .map(|i| i.label.width())
+            .max()
+            .unwrap_or(10) as u16
+            + 4;
         let height = self.items.len() as u16 + 2; // +2 for border
 
         let x = if self.x + width > terminal_width {
@@ -147,7 +206,12 @@ impl ContextMenuState {
     }
 
     /// Convert a screen row to a menu item index (if valid).
-    pub fn row_to_item(&self, row: u16, terminal_width: u16, terminal_height: u16) -> Option<usize> {
+    pub fn row_to_item(
+        &self,
+        row: u16,
+        terminal_width: u16,
+        terminal_height: u16,
+    ) -> Option<usize> {
         let rect = self.menu_rect(terminal_width, terminal_height);
         if row <= rect.y || row >= rect.y + rect.height - 1 {
             return None; // border rows
@@ -167,7 +231,9 @@ pub struct ContextMenuWidget<'a> {
 
 impl Widget for ContextMenuWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let menu_rect = self.state.menu_rect(area.x + area.width, area.y + area.height);
+        let menu_rect = self
+            .state
+            .menu_rect(area.x + area.width, area.y + area.height);
 
         let base = colors::popup_base();
         let border_style = colors::popup_dim();
@@ -347,8 +413,16 @@ mod tests {
             !cell.modifier.contains(Modifier::REVERSED),
             "selected menu item should NOT have REVERSED"
         );
-        assert_eq!(cell.bg, ratatui::style::Color::Blue, "selected item should have Blue bg");
-        assert_eq!(cell.fg, ratatui::style::Color::White, "selected item should have White fg");
+        assert_eq!(
+            cell.bg,
+            ratatui::style::Color::Blue,
+            "selected item should have Blue bg"
+        );
+        assert_eq!(
+            cell.fg,
+            ratatui::style::Color::White,
+            "selected item should have White fg"
+        );
     }
 
     #[test]
@@ -357,28 +431,52 @@ mod tests {
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
         // Find the Delete item index
-        let delete_idx = state.items.iter().position(|i| i.action == MenuAction::Delete).unwrap();
+        let delete_idx = state
+            .items
+            .iter()
+            .position(|i| i.action == MenuAction::Delete)
+            .unwrap();
         // selected==0, so Delete is not selected
         assert_ne!(state.selected, delete_idx);
         let y = rect.y + 1 + delete_idx as u16;
         let x = rect.x + 2;
         let cell = buf.cell((x, y)).unwrap();
-        assert_ne!(cell.fg, ratatui::style::Color::Red, "unselected Delete should not have red fg");
-        assert_ne!(cell.bg, ratatui::style::Color::Red, "unselected Delete should not have red bg");
+        assert_ne!(
+            cell.fg,
+            ratatui::style::Color::Red,
+            "unselected Delete should not have red fg"
+        );
+        assert_ne!(
+            cell.bg,
+            ratatui::style::Color::Red,
+            "unselected Delete should not have red bg"
+        );
     }
 
     #[test]
     fn selected_delete_has_red_bg() {
         let mut state = ContextMenuState::new_for_file(0, 0, 0);
-        let delete_idx = state.items.iter().position(|i| i.action == MenuAction::Delete).unwrap();
+        let delete_idx = state
+            .items
+            .iter()
+            .position(|i| i.action == MenuAction::Delete)
+            .unwrap();
         state.selected = delete_idx;
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
         let y = rect.y + 1 + delete_idx as u16;
         let x = rect.x + 2;
         let cell = buf.cell((x, y)).unwrap();
-        assert_eq!(cell.bg, ratatui::style::Color::Red, "selected Delete should have Red bg");
-        assert_eq!(cell.fg, ratatui::style::Color::White, "selected Delete should have White fg");
+        assert_eq!(
+            cell.bg,
+            ratatui::style::Color::Red,
+            "selected Delete should have Red bg"
+        );
+        assert_eq!(
+            cell.fg,
+            ratatui::style::Color::White,
+            "selected Delete should have White fg"
+        );
         assert!(
             cell.modifier.contains(Modifier::BOLD),
             "selected Delete should have BOLD"

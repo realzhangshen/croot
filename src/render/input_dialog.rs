@@ -131,7 +131,8 @@ impl Widget for InputDialogWidget<'_> {
 
         // Title
         let title = self.state.kind.title();
-        let title_x = dialog_rect.x + (dialog_rect.width.saturating_sub(title.len() as u16 + 2)) / 2;
+        let title_x =
+            dialog_rect.x + (dialog_rect.width.saturating_sub(title.len() as u16 + 2)) / 2;
         buf.set_string(title_x, dialog_rect.y, format!(" {title} "), title_style);
 
         if self.state.kind == DialogKind::ConfirmDelete {
@@ -142,12 +143,7 @@ impl Widget for InputDialogWidget<'_> {
 
             let hint = "[Enter] confirm  [Esc] cancel";
             let hint_x = dialog_rect.x + 2;
-            buf.set_string(
-                hint_x,
-                dialog_rect.y + 3,
-                hint,
-                colors::popup_dim(),
-            );
+            buf.set_string(hint_x, dialog_rect.y + 3, hint, colors::popup_dim());
         } else {
             // Input field
             let input_y = dialog_rect.y + 2;
@@ -167,12 +163,7 @@ impl Widget for InputDialogWidget<'_> {
             } else {
                 &self.state.input
             };
-            buf.set_string(
-                input_x,
-                input_y,
-                display_text,
-                Style::default(),
-            );
+            buf.set_string(input_x, input_y, display_text, Style::default());
 
             // Draw cursor
             let cursor_display_pos = if self.state.input.len() > input_width {
@@ -181,10 +172,7 @@ impl Widget for InputDialogWidget<'_> {
                 self.state.cursor_pos
             };
             if let Some(cell) = buf.cell_mut((input_x + cursor_display_pos as u16, input_y)) {
-                cell.set_style(
-                    Style::default()
-                        .add_modifier(Modifier::BOLD | Modifier::REVERSED),
-                );
+                cell.set_style(Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED));
             }
 
             // Hint

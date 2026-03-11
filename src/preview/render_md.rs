@@ -35,8 +35,8 @@ struct MdRenderer {
     in_blockquote: bool,
     in_table: bool,
     table_alignments: Vec<pulldown_cmark::Alignment>,
-    table_head: Vec<String>,       // single header row: cell texts
-    table_rows: Vec<Vec<String>>,  // body rows: each is a list of cell texts
+    table_head: Vec<String>,      // single header row: cell texts
+    table_rows: Vec<Vec<String>>, // body rows: each is a list of cell texts
     current_table_row: Vec<String>,
     current_cell_text: String,
     link_url: Option<String>,
@@ -185,8 +185,7 @@ impl MdRenderer {
                     }
                     _ => format!("{indent}• "),
                 };
-                self.current_line
-                    .push((marker, self.current_style()));
+                self.current_line.push((marker, self.current_style()));
             }
             Tag::Emphasis => {
                 self.push_style(Style::default().add_modifier(Modifier::ITALIC));
@@ -208,7 +207,9 @@ impl MdRenderer {
             Tag::Image { dest_url, .. } => {
                 self.current_line.push((
                     format!("[image: {dest_url}]"),
-                    Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::ITALIC),
                 ));
             }
             Tag::Table(alignments) => {
@@ -265,10 +266,8 @@ impl MdRenderer {
             TagEnd::Link => {
                 self.pop_style();
                 if let Some(url) = self.link_url.take() {
-                    self.current_line.push((
-                        format!(" ({url})"),
-                        Style::default().fg(Color::DarkGray),
-                    ));
+                    self.current_line
+                        .push((format!(" ({url})"), Style::default().fg(Color::DarkGray)));
                 }
             }
             TagEnd::Table => {
@@ -296,10 +295,8 @@ impl MdRenderer {
             return;
         }
         if self.in_blockquote && self.current_line.is_empty() {
-            self.current_line.push((
-                "│ ".to_string(),
-                Style::default().fg(Color::DarkGray),
-            ));
+            self.current_line
+                .push(("│ ".to_string(), Style::default().fg(Color::DarkGray)));
         }
         self.current_line
             .push((text.to_string(), self.current_style()));
@@ -313,8 +310,7 @@ impl MdRenderer {
             return;
         }
         let style = Style::default().fg(colors::INLINE_CODE);
-        self.current_line
-            .push((format!("`{code}`"), style));
+        self.current_line.push((format!("`{code}`"), style));
     }
 
     fn end_code_block(&mut self) {
@@ -347,9 +343,7 @@ impl MdRenderer {
         let body = &self.table_rows;
 
         // Collect all rows to compute column widths
-        let num_cols = head
-            .len()
-            .max(body.iter().map(Vec::len).max().unwrap_or(0));
+        let num_cols = head.len().max(body.iter().map(Vec::len).max().unwrap_or(0));
         if num_cols == 0 {
             return;
         }

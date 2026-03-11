@@ -239,10 +239,15 @@ mod tests {
         );
         let buf = render_to_buffer(bar, 80);
 
-        let text: String = (0..80).map(|x| buf.cell((x, 0)).unwrap().symbol().to_string()).collect();
+        let text: String = (0..80)
+            .map(|x| buf.cell((x, 0)).unwrap().symbol().to_string())
+            .collect();
         assert!(text.contains("main"), "Missing branch name in: {text:?}");
         assert!(text.contains("croot"), "Missing root name in: {text:?}");
-        assert!(text.contains("src/app.rs"), "Missing selected path in: {text:?}");
+        assert!(
+            text.contains("src/app.rs"),
+            "Missing selected path in: {text:?}"
+        );
         assert!(text.contains("42 files"), "Missing file count in: {text:?}");
         assert!(text.contains("8 dirs"), "Missing dir count in: {text:?}");
         assert!(text.contains("│"), "Missing separator in: {text:?}");
@@ -253,10 +258,15 @@ mod tests {
         let bar = make_status_bar(None, "myproject", "/tmp", None, None, 10, 3);
         let buf = render_to_buffer(bar, 80);
 
-        let text: String = (0..80).map(|x| buf.cell((x, 0)).unwrap().symbol().to_string()).collect();
+        let text: String = (0..80)
+            .map(|x| buf.cell((x, 0)).unwrap().symbol().to_string())
+            .collect();
         // Root name should appear near the start (no branch prefix)
         let root_pos = text.find("myproject").expect("Missing root name");
-        assert!(root_pos < 5, "Root should be near start, found at {root_pos}");
+        assert!(
+            root_pos < 5,
+            "Root should be near start, found at {root_pos}"
+        );
     }
 
     #[test]
@@ -264,13 +274,18 @@ mod tests {
         let bar = make_status_bar(Some("main"), "croot", "/tmp", None, None, 5, 2);
         let buf = render_to_buffer(bar, 80);
 
-        let text: String = (0..80).map(|x| buf.cell((x, 0)).unwrap().symbol().to_string()).collect();
+        let text: String = (0..80)
+            .map(|x| buf.cell((x, 0)).unwrap().symbol().to_string())
+            .collect();
         assert!(text.contains("croot"), "Missing root name");
         assert!(text.contains("5 files"), "Missing file count");
         // Should not have extra separators from selected path
         // Count separators: branch│ root│ counts — should have exactly 2
         let sep_count = text.matches('│').count();
-        assert_eq!(sep_count, 2, "Expected 2 separators, got {sep_count} in: {text:?}");
+        assert_eq!(
+            sep_count, 2,
+            "Expected 2 separators, got {sep_count} in: {text:?}"
+        );
     }
 
     #[test]
@@ -299,7 +314,10 @@ mod tests {
         assert_eq!(regions[1].text, "src/app.rs");
         assert_eq!(regions[1].url, "file:///home/user/croot/src/app.rs");
         assert_eq!(regions[1].y, 5);
-        assert!(regions[1].x > regions[0].x, "Selected link should be after root link");
+        assert!(
+            regions[1].x > regions[0].x,
+            "Selected link should be after root link"
+        );
     }
 
     #[test]
