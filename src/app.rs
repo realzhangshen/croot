@@ -34,6 +34,7 @@ use crate::render::picker::{PickerState, PickerWidget};
 use crate::render::preview_view::PreviewView;
 use crate::render::search_bar::{fuzzy_match, SearchBar, SearchState};
 use crate::render::status_bar::{HyperlinkRegion, StatusBar};
+use crate::render::toolbar::{ToolbarState, ToolbarWidget};
 use crate::render::tree_view::TreeView;
 use crate::tree::forest::FileTree;
 
@@ -79,6 +80,16 @@ pub struct App {
     enhanced_keyboard: bool,
     // Double-click detection for tree rows
     click_tracker: ClickTracker,
+    // Toolbar state
+    toolbar_state: ToolbarState,
+    toolbar_area_y: u16,
+    // Status/search bar y-coordinates for mouse routing
+    status_bar_y: u16,
+    search_bar_y: Option<u16>,
+    // Status bar branch click region: (x_start, x_end)
+    status_bar_branch_region: Option<(u16, u16)>,
+    // Toolbar hover column for highlighting
+    toolbar_hover_col: Option<u16>,
 }
 
 impl App {
@@ -94,6 +105,10 @@ impl App {
 
         let preview_visible = config.preview.auto_preview;
         let render_markdown = config.preview.render_markdown;
+
+        let toolbar_project_name = root
+            .file_name()
+            .map_or("croot".to_string(), |n| n.to_string_lossy().into_owned());
 
         Ok(Self {
             tree,
@@ -127,6 +142,12 @@ impl App {
             hyperlink_regions: Vec::new(),
             enhanced_keyboard,
             click_tracker: ClickTracker::new(),
+            toolbar_state: ToolbarState::new(&toolbar_project_name),
+            toolbar_area_y: 0,
+            status_bar_y: 0,
+            search_bar_y: None,
+            status_bar_branch_region: None,
+            toolbar_hover_col: None,
         })
     }
 
@@ -184,13 +205,38 @@ impl App {
                             post_action = self.handle_action(&action, &preview_tx);
                         }
                         Some(Ok(Event::Mouse(mouse))) => {
+                            use crossterm::event::{MouseButton, MouseEventKind};
+
                             if self.input_mode == InputMode::ContextMenu {
                                 post_action = self.handle_context_menu_mouse(mouse);
                             } else if self.input_mode == InputMode::Picker {
                                 post_action = self.handle_picker_mouse(mouse);
-                            } else if self.input_mode == InputMode::Normal {
-                                let action = handle_mouse(mouse, self.tree_area_y, self.tree_area_height, self.preview_area_x, &mut self.click_tracker);
-                                post_action = self.handle_action(&action, &preview_tx);
+                            } else if self.input_mode == InputMode::Dialog {
+                                // R5: Click outside dialog cancels it
+                                post_action = self.handle_dialog_mouse(mouse);
+                            } else {
+                                // R5: Route by area priority: toolbar > status > search > tree/preview
+                                let is_left_down = matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left));
+                                let in_tree_pane = self.preview_area_x
+                                    .is_none_or(|px| mouse.column < px.saturating_sub(1));
+
+                                if mouse.row == self.toolbar_area_y && in_tree_pane && is_left_down {
+                                    if let Some(action) = self.toolbar_state.button_at(mouse.column) {
+                                        post_action = self.handle_action(&action, &preview_tx);
+                                    }
+                                } else if mouse.row == self.status_bar_y && is_left_down {
+                                    post_action = self.handle_status_bar_click(mouse.column, &preview_tx);
+                                } else if self.search_bar_y.is_some_and(|y| mouse.row == y) && is_left_down {
+                                    post_action = self.handle_search_bar_click(mouse.column, &preview_tx);
+                                } else if matches!(mouse.kind, MouseEventKind::Moved) && mouse.row == self.toolbar_area_y && in_tree_pane {
+                                    // Track toolbar hover
+                                    self.toolbar_hover_col = Some(mouse.column);
+                                    self.hover_row = None;
+                                } else {
+                                    self.toolbar_hover_col = None;
+                                    let action = handle_mouse(mouse, self.tree_area_y, self.tree_area_height, self.preview_area_x, &mut self.click_tracker);
+                                    post_action = self.handle_action(&action, &preview_tx);
+                                }
                             }
                         }
                         Some(Ok(Event::Resize(_, _))) => {
@@ -296,33 +342,57 @@ impl App {
         let main_area = chunks[0];
         let status_area = chunks[1];
 
-        self.tree_area_y = main_area.y;
+        // Store status/search bar y for mouse routing
+        self.status_bar_y = status_area.y;
+        self.search_bar_y = if show_search_bar {
+            Some(chunks[2].y)
+        } else {
+            None
+        };
+
+        // Toolbar gets the first row of main_area; tree content starts below it
+        self.toolbar_area_y = main_area.y;
+        let toolbar_area = ratatui::layout::Rect {
+            x: main_area.x,
+            y: main_area.y,
+            width: main_area.width,
+            height: 1.min(main_area.height),
+        };
+        let content_area = ratatui::layout::Rect {
+            x: main_area.x,
+            y: main_area.y + toolbar_area.height,
+            width: main_area.width,
+            height: main_area.height.saturating_sub(toolbar_area.height),
+        };
+        self.tree_area_y = content_area.y;
         self.main_area_width = main_area.width;
 
-        if self.preview_visible && main_area.width > 20 {
+        if self.preview_visible && content_area.width > 20 {
             // Split horizontally: tree | separator | preview
             let ratio = self.config.preview.split_ratio.clamp(0.2, 0.8);
-            let tree_width = (f32::from(main_area.width) * (1.0 - ratio)) as u16;
+            let tree_width = (f32::from(content_area.width) * (1.0 - ratio)) as u16;
             let separator_width: u16 = 1;
-            let preview_width = main_area.width.saturating_sub(tree_width + separator_width);
+            let preview_width = content_area
+                .width
+                .saturating_sub(tree_width + separator_width);
 
             let tree_area = ratatui::layout::Rect {
-                x: main_area.x,
-                y: main_area.y,
+                x: content_area.x,
+                y: content_area.y,
                 width: tree_width,
-                height: main_area.height,
+                height: content_area.height,
             };
             let separator_area = ratatui::layout::Rect {
-                x: main_area.x + tree_width,
-                y: main_area.y,
+                x: content_area.x + tree_width,
+                y: content_area.y,
                 width: separator_width,
-                height: main_area.height,
+                height: content_area.height,
             };
             let preview_area = ratatui::layout::Rect {
-                x: main_area.x + tree_width + separator_width,
-                y: main_area.y,
+                x: content_area.x + tree_width + separator_width,
+                y: content_area.y,
                 width: preview_width,
-                height: main_area.height,
+                height: content_area.height,
             };
 
             self.tree_area_height = tree_area.height;
@@ -372,15 +442,32 @@ impl App {
         } else {
             self.preview_area_x = None;
             self.preview_layout = None;
-            self.tree_area_height = main_area.height;
+            self.tree_area_height = content_area.height;
 
             TreeView {
                 config: &self.config.tree,
                 hover_row: self.hover_row,
                 filter_indices: &self.search_filtered,
             }
-            .render(main_area, frame.buffer_mut(), &mut self.tree);
+            .render(content_area, frame.buffer_mut(), &mut self.tree);
         }
+
+        // Render toolbar (only spans tree pane width, not preview)
+        let toolbar_render_width = if self.preview_visible && content_area.width > 20 {
+            let ratio = self.config.preview.split_ratio.clamp(0.2, 0.8);
+            (f32::from(content_area.width) * (1.0 - ratio)) as u16
+        } else {
+            toolbar_area.width
+        };
+        let toolbar_render_area = ratatui::layout::Rect {
+            width: toolbar_render_width,
+            ..toolbar_area
+        };
+        ToolbarWidget {
+            state: &mut self.toolbar_state,
+            hover_col: self.toolbar_hover_col,
+        }
+        .render(toolbar_render_area, frame.buffer_mut());
 
         let root_name = self.root.file_name().map_or_else(
             || self.root.to_string_lossy().into_owned(),
@@ -429,6 +516,13 @@ impl App {
             selected_path: selected_rel.as_deref(),
             selected_abs_path: selected_abs.as_deref(),
         };
+        // Track branch click region for mouse routing
+        self.status_bar_branch_region = branch.as_ref().map(|b| {
+            // Branch is rendered as "  {branch} │ " starting at col 0
+            let end = (2 + b.len() + 1) as u16; // "  branch "
+            (0, end)
+        });
+
         self.hyperlink_regions = status_bar.hyperlink_regions(status_area);
         status_bar.render(status_area, frame.buffer_mut());
 
@@ -437,6 +531,7 @@ impl App {
             let search_area = chunks[2];
             let search_bar = SearchBar {
                 state: &self.search_state,
+                show_close_button: true,
             };
             search_bar.render(search_area, frame.buffer_mut());
         }
@@ -670,6 +765,21 @@ impl App {
                     }
                 }
             }
+            // Collapse all directories
+            Action::CollapseAll => {
+                self.tree.collapse_all();
+                self.reapply_git();
+                self.update_search_filter();
+                if self.preview_visible {
+                    self.trigger_preview_load(preview_tx);
+                }
+            }
+            // Focus search bar without clearing query (R3)
+            Action::FocusSearch => {
+                self.input_mode = InputMode::Search;
+                // Don't clear search_state or search_filtered
+            }
+
             Action::DoubleClick(row) => {
                 // Cursor already set by the first ClickRow. For files, open externally.
                 // For directories, do nothing — the first click already toggled.
@@ -773,6 +883,7 @@ impl App {
                     git.refresh();
                 }
                 self.reapply_git();
+                self.update_search_filter();
             }
             Action::ScrollUp(n) => {
                 for _ in 0..*n {
@@ -964,6 +1075,7 @@ impl App {
             return;
         }
         let relative_row = (row - self.tree_area_y) as usize;
+        let selected_count = self.tree.selected_set.len();
         let menu = if relative_row >= self.tree.rendered_indices.len() {
             // Empty space below tree items → workspace root menu
             ContextMenuState::new_for_workspace(col, row, self.tree.len())
@@ -973,10 +1085,11 @@ impl App {
                 return;
             }
             self.tree.cursor = node_idx;
+            let is_node_selected = self.tree.selected_set.contains(&node_idx);
             if self.tree.nodes[node_idx].is_dir() {
-                ContextMenuState::new_for_dir(col, row, node_idx)
+                ContextMenuState::new_for_dir(col, row, node_idx, selected_count, is_node_selected)
             } else {
-                ContextMenuState::new_for_file(col, row, node_idx)
+                ContextMenuState::new_for_file(col, row, node_idx, selected_count, is_node_selected)
             }
         };
 
@@ -1091,6 +1204,7 @@ impl App {
         PostAction::None
     }
 
+    // SYNC: keep in sync with execute_menu_action_sync
     fn execute_menu_action(
         &mut self,
         action: &MenuAction,
@@ -1145,6 +1259,24 @@ impl App {
             MenuAction::NewDir => self.start_new_dir_at(node_idx),
             MenuAction::Rename => self.start_rename_at(node_idx),
             MenuAction::Delete => self.start_delete_at(node_idx),
+            MenuAction::ToggleSelectItem => {
+                self.tree.cursor = node_idx;
+                self.tree.toggle_select();
+            }
+            MenuAction::ClearSelection => {
+                self.tree.clear_selection();
+            }
+            MenuAction::DeleteSelected => {
+                self.delete_selected();
+            }
+            MenuAction::TogglePreview => {
+                self.preview_visible = !self.preview_visible;
+                if self.preview_visible {
+                    self.trigger_preview_load(preview_tx);
+                } else {
+                    self.focus = FocusPane::Tree;
+                }
+            }
         }
 
         // Refresh preview after menu actions that modify files
@@ -1159,7 +1291,7 @@ impl App {
         PostAction::None
     }
 
-    /// Synchronous version for mouse click handler (non-async context).
+    // SYNC: keep in sync with execute_menu_action
     fn execute_menu_action_sync(&mut self, action: &MenuAction, node_idx: usize) -> PostAction {
         match action {
             MenuAction::OpenInEditor => {
@@ -1209,7 +1341,107 @@ impl App {
             MenuAction::NewDir => self.start_new_dir_at(node_idx),
             MenuAction::Rename => self.start_rename_at(node_idx),
             MenuAction::Delete => self.start_delete_at(node_idx),
+            MenuAction::ToggleSelectItem => {
+                self.tree.cursor = node_idx;
+                self.tree.toggle_select();
+            }
+            MenuAction::ClearSelection => {
+                self.tree.clear_selection();
+            }
+            MenuAction::DeleteSelected => {
+                self.delete_selected();
+            }
+            MenuAction::TogglePreview => {
+                self.preview_visible = !self.preview_visible;
+                if !self.preview_visible {
+                    self.focus = FocusPane::Tree;
+                }
+            }
         }
+        PostAction::None
+    }
+
+    // ── Dialog mouse (R5: click outside dismisses) ───────────────────────
+
+    fn handle_dialog_mouse(&mut self, mouse: crossterm::event::MouseEvent) -> PostAction {
+        use crossterm::event::{MouseButton, MouseEventKind};
+
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return PostAction::None;
+        }
+
+        // Check if click is outside the dialog area
+        let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+        let area = ratatui::layout::Rect::new(0, 0, cols, rows);
+
+        if let Some(ref dialog) = self.input_dialog {
+            let dialog_width = 50u16.min(area.width.saturating_sub(4));
+            let dialog_height = if matches!(
+                dialog.kind,
+                DialogKind::ConfirmDelete | DialogKind::ConfirmDeleteSelected
+            ) {
+                6
+            } else {
+                5
+            };
+            let dx = (area.width.saturating_sub(dialog_width)) / 2;
+            let dy = (area.height.saturating_sub(dialog_height)) / 2;
+
+            let inside = mouse.column >= dx
+                && mouse.column < dx + dialog_width
+                && mouse.row >= dy
+                && mouse.row < dy + dialog_height;
+
+            if !inside {
+                self.input_dialog = None;
+                self.input_mode = InputMode::Normal;
+            }
+        }
+        PostAction::None
+    }
+
+    // ── Status bar click ────────────────────────────────────────────────
+
+    fn handle_status_bar_click(
+        &mut self,
+        col: u16,
+        _preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+    ) -> PostAction {
+        // Check if click is on the branch name region
+        if let Some((start, end)) = self.status_bar_branch_region {
+            if col >= start && col < end && self.git.is_some() {
+                self.open_branch_picker();
+            }
+        }
+        PostAction::None
+    }
+
+    // ── Search bar click ────────────────────────────────────────────────
+
+    fn handle_search_bar_click(
+        &mut self,
+        col: u16,
+        _preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+    ) -> PostAction {
+        use crate::render::search_bar::SearchBar;
+
+        // Check if click is on the [×] close button
+        if let Some(search_y) = self.search_bar_y {
+            let (_, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+            let area_width = self.main_area_width;
+            let close_x = SearchBar::close_button_x(0, area_width);
+            if col >= close_x {
+                // Close button clicked → cancel search
+                self.input_mode = InputMode::Normal;
+                self.search_state.clear();
+                self.search_filtered.clear();
+                let _ = (search_y, rows);
+                return PostAction::None;
+            }
+        }
+
+        // Click elsewhere on search bar → focus search (R3: preserve query)
+        self.input_mode = InputMode::Search;
         PostAction::None
     }
 
@@ -1356,25 +1588,26 @@ impl App {
                     }
                 }
             }
+            // R1: ConfirmDelete always deletes only the context_path node
             DialogKind::ConfirmDelete => {
-                if self.tree.selected_set.is_empty() {
-                    let path = &dialog.context_path;
+                let path = &dialog.context_path;
+                if path.is_dir() {
+                    let _ = std::fs::remove_dir_all(path);
+                } else {
+                    let _ = std::fs::remove_file(path);
+                }
+            }
+            // R1: ConfirmDeleteSelected always deletes the entire selected_set
+            DialogKind::ConfirmDeleteSelected => {
+                let paths = self.tree.selected_paths();
+                for path in &paths {
                     if path.is_dir() {
                         let _ = std::fs::remove_dir_all(path);
                     } else {
                         let _ = std::fs::remove_file(path);
                     }
-                } else {
-                    let paths = self.tree.selected_paths();
-                    for path in &paths {
-                        if path.is_dir() {
-                            let _ = std::fs::remove_dir_all(path);
-                        } else {
-                            let _ = std::fs::remove_file(path);
-                        }
-                    }
-                    self.tree.clear_selection();
                 }
+                self.tree.clear_selection();
             }
         }
 
@@ -1415,8 +1648,8 @@ impl App {
     // ── Batch operations ──────────────────────────────────────────────────
 
     fn delete_selected(&mut self) {
+        // R1: Only trigger if there's actually a multi-selection; no fallback
         if self.tree.selected_set.is_empty() {
-            self.start_delete();
             return;
         }
 
@@ -1427,7 +1660,7 @@ impl App {
         // Use the first path as context
         let context = paths.first().cloned().unwrap_or_else(|| self.root.clone());
         self.input_dialog = Some(InputDialogState::new(
-            DialogKind::ConfirmDelete,
+            DialogKind::ConfirmDeleteSelected,
             context,
             name,
         ));

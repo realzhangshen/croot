@@ -222,6 +222,38 @@ impl FileTree {
         &self.nodes[start..end]
     }
 
+    /// Recompute cached file/directory counts from the current nodes.
+    fn recount(&mut self) {
+        self.file_count = self
+            .nodes
+            .iter()
+            .filter(|n| n.kind == NodeKind::File || n.kind == NodeKind::Symlink)
+            .count();
+        self.dir_count = self
+            .nodes
+            .iter()
+            .filter(|n| n.kind == NodeKind::Directory)
+            .count();
+    }
+
+    /// Collapse all expanded directories back to the root level.
+    pub fn collapse_all(&mut self) {
+        let cursor_path = self.nodes.get(self.cursor).map(|n| n.path.clone());
+        self.nodes = load_children_with_meta(&self.root, 0, &self.config);
+        self.recount();
+        // Indices are invalidated — clear multi-selection
+        self.selected_set.clear();
+        // Restore cursor position by path, or clamp to valid range
+        if let Some(ref target) = cursor_path {
+            self.cursor = self
+                .nodes
+                .iter()
+                .position(|n| n.path == *target)
+                .unwrap_or(0);
+        }
+        self.cursor = self.cursor.min(self.nodes.len().saturating_sub(1));
+    }
+
     /// Refresh expanded directories (re-read from filesystem).
     /// Preserves which directories were expanded by collecting their paths first.
     pub fn refresh(&mut self) {
@@ -231,6 +263,13 @@ impl FileTree {
             .iter()
             .filter(|n| n.is_dir() && n.is_expanded)
             .map(|n| n.path.clone())
+            .collect();
+
+        // R2: Save selected paths (not indices) before rebuild
+        let selected_paths: HashSet<PathBuf> = self
+            .selected_set
+            .iter()
+            .filter_map(|&idx| self.nodes.get(idx).map(|n| n.path.clone()))
             .collect();
 
         // Remember cursor path for restoration
@@ -248,17 +287,16 @@ impl FileTree {
             i += 1;
         }
 
-        // Recompute cached counts after full rebuild
-        self.file_count = self
+        self.recount();
+
+        // R2: Rebuild selected_set from paths → new indices
+        self.selected_set = self
             .nodes
             .iter()
-            .filter(|n| n.kind == NodeKind::File || n.kind == NodeKind::Symlink)
-            .count();
-        self.dir_count = self
-            .nodes
-            .iter()
-            .filter(|n| n.kind == NodeKind::Directory)
-            .count();
+            .enumerate()
+            .filter(|(_, n)| selected_paths.contains(&n.path))
+            .map(|(i, _)| i)
+            .collect();
 
         // Restore cursor position by path, or clamp to valid range
         if let Some(ref target) = cursor_path {

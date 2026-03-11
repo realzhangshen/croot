@@ -73,6 +73,16 @@ impl SearchState {
 
 pub struct SearchBar<'a> {
     pub state: &'a SearchState,
+    pub show_close_button: bool,
+}
+
+impl SearchBar<'_> {
+    /// Returns the x coordinate where the close button `[×]` starts.
+    /// Returns None if close button is not shown.
+    pub fn close_button_x(area_x: u16, area_width: u16) -> u16 {
+        // Close button is rendered at the far right: " [×]"
+        area_x + area_width.saturating_sub(4)
+    }
 }
 
 impl Widget for SearchBar<'_> {
@@ -129,20 +139,43 @@ impl Widget for SearchBar<'_> {
             }
         }
 
-        // Match count on the right
+        // Close button on the far right
+        let close_btn = "[×]";
+        let close_reserve = if self.show_close_button {
+            close_btn.len() as u16 + 1 // +1 for space
+        } else {
+            0
+        };
+
+        // Match count on the right (before close button)
         let match_info = if self.state.query.is_empty() {
             String::new()
         } else {
             format!(" {} matches ", self.state.match_count)
         };
-        if !match_info.is_empty() {
-            let info_x = area.x + area.width - match_info.len() as u16;
+        let right_reserved = match_info.len() as u16 + close_reserve;
+        if !match_info.is_empty() && area.width > right_reserved {
+            let info_x = area.x + area.width - right_reserved;
             let info_style = if self.state.match_count > 0 {
                 Style::default().fg(Color::Green).bg(bg)
             } else {
                 Style::default().fg(Color::Red).bg(bg)
             };
             buf.set_string(info_x, area.y, &match_info, info_style);
+        }
+
+        // Draw close button (only if it fits)
+        if self.show_close_button && area.width > close_btn.len() as u16 + 1 {
+            let close_x = area.x + area.width - close_btn.len() as u16 - 1;
+            buf.set_string(
+                close_x,
+                area.y,
+                close_btn,
+                Style::default()
+                    .fg(Color::Red)
+                    .bg(bg)
+                    .add_modifier(Modifier::BOLD),
+            );
         }
     }
 }

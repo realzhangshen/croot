@@ -12,6 +12,7 @@ pub struct MenuItem {
 
 /// Actions triggered by context menu selections.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum MenuAction {
     OpenInEditor,
     OpenExternally,
@@ -22,6 +23,10 @@ pub enum MenuAction {
     NewDir,
     Rename,
     Delete,
+    ToggleSelectItem,
+    ClearSelection,
+    DeleteSelected,
+    TogglePreview,
 }
 
 /// State for the visible context menu.
@@ -39,50 +44,88 @@ pub struct ContextMenuState {
 }
 
 impl ContextMenuState {
-    pub fn new_for_file(x: u16, y: u16, node_idx: usize) -> Self {
+    /// Build selection-related menu items based on current multi-select state.
+    fn selection_items(is_node_selected: bool, selected_count: usize) -> Vec<MenuItem> {
+        let mut items = Vec::new();
+        items.push(MenuItem {
+            label: "─".into(),
+            action: MenuAction::CopyPath, // separator (inert)
+        });
+        items.push(MenuItem {
+            label: if is_node_selected {
+                "Deselect".into()
+            } else {
+                "Select".into()
+            },
+            action: MenuAction::ToggleSelectItem,
+        });
+        if selected_count > 0 {
+            items.push(MenuItem {
+                label: format!("Clear Selection ({selected_count})"),
+                action: MenuAction::ClearSelection,
+            });
+            items.push(MenuItem {
+                label: format!("Delete Selected ({selected_count})"),
+                action: MenuAction::DeleteSelected,
+            });
+        }
+        items
+    }
+
+    pub fn new_for_file(
+        x: u16,
+        y: u16,
+        node_idx: usize,
+        selected_count: usize,
+        is_node_selected: bool,
+    ) -> Self {
+        let mut items = vec![
+            MenuItem {
+                label: "Open in Editor".into(),
+                action: MenuAction::OpenInEditor,
+            },
+            MenuItem {
+                label: "Open Externally".into(),
+                action: MenuAction::OpenExternally,
+            },
+        ];
+        items.extend(Self::selection_items(is_node_selected, selected_count));
+        items.extend([
+            MenuItem {
+                label: "─".into(),
+                action: MenuAction::CopyPath,
+            }, // separator (inert)
+            MenuItem {
+                label: "Copy Path".into(),
+                action: MenuAction::CopyPath,
+            },
+            MenuItem {
+                label: "Copy Absolute Path".into(),
+                action: MenuAction::CopyAbsPath,
+            },
+            MenuItem {
+                label: "Reveal in Finder".into(),
+                action: MenuAction::RevealInFinder,
+            },
+            MenuItem {
+                label: "─".into(),
+                action: MenuAction::CopyPath,
+            }, // separator (inert)
+            MenuItem {
+                label: "Rename".into(),
+                action: MenuAction::Rename,
+            },
+            MenuItem {
+                label: "Delete".into(),
+                action: MenuAction::Delete,
+            },
+        ]);
         Self {
             x,
             y,
             node_idx,
             selected: 0,
-            items: vec![
-                MenuItem {
-                    label: "Open in Editor".into(),
-                    action: MenuAction::OpenInEditor,
-                },
-                MenuItem {
-                    label: "Open Externally".into(),
-                    action: MenuAction::OpenExternally,
-                },
-                MenuItem {
-                    label: "─".into(),
-                    action: MenuAction::CopyPath,
-                }, // separator (inert)
-                MenuItem {
-                    label: "Copy Path".into(),
-                    action: MenuAction::CopyPath,
-                },
-                MenuItem {
-                    label: "Copy Absolute Path".into(),
-                    action: MenuAction::CopyAbsPath,
-                },
-                MenuItem {
-                    label: "Reveal in Finder".into(),
-                    action: MenuAction::RevealInFinder,
-                },
-                MenuItem {
-                    label: "─".into(),
-                    action: MenuAction::CopyPath,
-                }, // separator (inert)
-                MenuItem {
-                    label: "Rename".into(),
-                    action: MenuAction::Rename,
-                },
-                MenuItem {
-                    label: "Delete".into(),
-                    action: MenuAction::Delete,
-                },
-            ],
+            items,
         }
     }
 
@@ -105,46 +148,60 @@ impl ContextMenuState {
         }
     }
 
-    pub fn new_for_dir(x: u16, y: u16, node_idx: usize) -> Self {
+    pub fn new_for_dir(
+        x: u16,
+        y: u16,
+        node_idx: usize,
+        selected_count: usize,
+        is_node_selected: bool,
+    ) -> Self {
+        let mut items = vec![
+            MenuItem {
+                label: "New File".into(),
+                action: MenuAction::NewFile,
+            },
+            MenuItem {
+                label: "New Directory".into(),
+                action: MenuAction::NewDir,
+            },
+        ];
+        items.extend(Self::selection_items(is_node_selected, selected_count));
+        items.extend([
+            MenuItem {
+                label: "─".into(),
+                action: MenuAction::CopyPath,
+            },
+            MenuItem {
+                label: "Copy Path".into(),
+                action: MenuAction::CopyPath,
+            },
+            MenuItem {
+                label: "Copy Absolute Path".into(),
+                action: MenuAction::CopyAbsPath,
+            },
+            MenuItem {
+                label: "Reveal in Finder".into(),
+                action: MenuAction::RevealInFinder,
+            },
+            MenuItem {
+                label: "─".into(),
+                action: MenuAction::CopyPath,
+            }, // separator
+            MenuItem {
+                label: "Rename".into(),
+                action: MenuAction::Rename,
+            },
+            MenuItem {
+                label: "Delete".into(),
+                action: MenuAction::Delete,
+            },
+        ]);
         Self {
             x,
             y,
             node_idx,
             selected: 0,
-            items: vec![
-                MenuItem {
-                    label: "New File".into(),
-                    action: MenuAction::NewFile,
-                },
-                MenuItem {
-                    label: "New Directory".into(),
-                    action: MenuAction::NewDir,
-                },
-                MenuItem {
-                    label: "Copy Path".into(),
-                    action: MenuAction::CopyPath,
-                },
-                MenuItem {
-                    label: "Copy Absolute Path".into(),
-                    action: MenuAction::CopyAbsPath,
-                },
-                MenuItem {
-                    label: "Reveal in Finder".into(),
-                    action: MenuAction::RevealInFinder,
-                },
-                MenuItem {
-                    label: "─".into(),
-                    action: MenuAction::CopyPath,
-                }, // separator
-                MenuItem {
-                    label: "Rename".into(),
-                    action: MenuAction::Rename,
-                },
-                MenuItem {
-                    label: "Delete".into(),
-                    action: MenuAction::Delete,
-                },
-            ],
+            items,
         }
     }
 
@@ -309,7 +366,8 @@ impl Widget for ContextMenuWidget<'_> {
 
             let is_separator = item.label.starts_with('─');
             let is_selected = i == self.state.selected && !is_separator;
-            let is_delete = item.action == MenuAction::Delete;
+            let is_delete =
+                item.action == MenuAction::Delete || item.action == MenuAction::DeleteSelected;
 
             let style = if is_separator {
                 separator_style
@@ -369,7 +427,7 @@ mod tests {
 
     #[test]
     fn normal_item_has_reversed() {
-        let state = ContextMenuState::new_for_file(0, 0, 0);
+        let state = ContextMenuState::new_for_file(0, 0, 0, 0, false);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
         // Item at index 1 (not selected when selected==0) — check a cell in that row
@@ -397,7 +455,7 @@ mod tests {
 
     #[test]
     fn selected_item_has_blue_bg_white_fg_bold() {
-        let state = ContextMenuState::new_for_file(0, 0, 0);
+        let state = ContextMenuState::new_for_file(0, 0, 0, 0, false);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
         // Item at index 0 is selected — check a cell in that row
@@ -427,7 +485,7 @@ mod tests {
 
     #[test]
     fn unselected_delete_has_no_red() {
-        let state = ContextMenuState::new_for_file(0, 0, 0);
+        let state = ContextMenuState::new_for_file(0, 0, 0, 0, false);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
         // Find the Delete item index
@@ -455,7 +513,7 @@ mod tests {
 
     #[test]
     fn selected_delete_has_red_bg() {
-        let mut state = ContextMenuState::new_for_file(0, 0, 0);
+        let mut state = ContextMenuState::new_for_file(0, 0, 0, 0, false);
         let delete_idx = state
             .items
             .iter()

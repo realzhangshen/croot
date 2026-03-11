@@ -3,7 +3,10 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::render::context_menu::MenuAction;
 
 /// Actions that can be triggered by user input.
+/// Many variants are only constructed at runtime via toolbar/context-menu/mouse — not from
+/// keyboard shortcuts — so the compiler reports them as "never constructed". They are used.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum Action {
     Quit,
     CursorUp,
@@ -93,6 +96,10 @@ pub enum Action {
     OpenInEditor,
     /// Open the selected file externally (fire-and-forget).
     OpenExternally,
+    /// Collapse all expanded directories.
+    CollapseAll,
+    /// Focus the search bar without clearing the existing query.
+    FocusSearch,
     /// Double-click on a tree row.
     DoubleClick(u16),
     /// Enter key: open file in editor or toggle directory.
@@ -124,12 +131,11 @@ pub enum InputMode {
     Picker,
 }
 
-/// Map a keyboard event to an Action.
+/// Map a keyboard event to an Action in Normal mode.
 ///
-/// `preview_visible`: whether the preview panel is currently shown.
-/// When preview is hidden, Tab still acts as Toggle for backward compat.
-/// `preview_has_selection`: whether there is an active text selection in the preview.
-pub fn handle_key(key: KeyEvent, preview_visible: bool, preview_has_selection: bool) -> Action {
+/// Pure mouse interaction mode: only Ctrl+C (quit/copy) and Esc (clear selection) are kept.
+/// All other operations are available via toolbar, right-click context menu, and clickable UI.
+pub fn handle_key(key: KeyEvent, _preview_visible: bool, preview_has_selection: bool) -> Action {
     match key.code {
         // Ctrl+C or Super+C (Command+C via Kitty keyboard protocol): copy or quit
         KeyCode::Char('c')
@@ -143,71 +149,8 @@ pub fn handle_key(key: KeyEvent, preview_visible: bool, preview_has_selection: b
             }
         }
 
-        // y: copy selection if one exists (vim-style yank)
-        KeyCode::Char('y') if preview_has_selection => Action::CopySelection,
-
         // Esc: clear selection if one exists
         KeyCode::Esc if preview_has_selection => Action::ClearSelection,
-
-        // Quit
-        KeyCode::Char('q') => Action::Quit,
-
-        // Navigation
-        KeyCode::Char('k') | KeyCode::Up => Action::CursorUp,
-        KeyCode::Char('j') | KeyCode::Down => Action::CursorDown,
-        KeyCode::Char('h') | KeyCode::Left => Action::CursorLeft,
-        KeyCode::Char('l') | KeyCode::Right => Action::CursorRight,
-
-        // Toggle expand/collapse
-        KeyCode::Char(' ') => Action::Toggle,
-        KeyCode::Enter => Action::EnterKey,
-
-        // Open file in editor
-        KeyCode::Char('e') => Action::OpenInEditor,
-
-        // Open file externally
-        KeyCode::Char('o') => Action::OpenExternally,
-
-        // Tab: switch focus when preview is visible, otherwise toggle
-        KeyCode::Tab => {
-            if preview_visible {
-                Action::SwitchFocus
-            } else {
-                Action::Toggle
-            }
-        }
-
-        // Preview toggle
-        KeyCode::Char('p') => Action::TogglePreview,
-
-        // Toggle Markdown render mode
-        KeyCode::Char('m') => Action::ToggleRender,
-
-        // File operations
-        KeyCode::Char('a') => Action::NewFile,
-        KeyCode::Char('A') => Action::NewDir,
-        KeyCode::Char('R') => Action::RenameNode,
-        KeyCode::Char('D') => Action::DeleteNode,
-
-        // Multi-select
-        KeyCode::Char('v') => Action::ToggleSelect,
-        KeyCode::Char('V') => Action::ClearSelect,
-        KeyCode::Char('X') => Action::DeleteSelected,
-
-        // Branch picker
-        KeyCode::Char('b') => Action::OpenBranchPicker,
-
-        // Search
-        KeyCode::Char('/') => Action::StartSearch,
-
-        // Refresh
-        KeyCode::Char('r') => Action::Refresh,
-
-        // Page navigation
-        KeyCode::PageUp => Action::ScrollUp(10),
-        KeyCode::PageDown => Action::ScrollDown(10),
-        KeyCode::Char('g') => Action::GotoTop,
-        KeyCode::Char('G') => Action::GotoBottom,
 
         _ => Action::None,
     }

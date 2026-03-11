@@ -14,6 +14,7 @@ pub enum DialogKind {
     NewDir,
     Rename,
     ConfirmDelete,
+    ConfirmDeleteSelected,
 }
 
 impl DialogKind {
@@ -22,7 +23,7 @@ impl DialogKind {
             Self::NewFile => "New File",
             Self::NewDir => "New Directory",
             Self::Rename => "Rename",
-            Self::ConfirmDelete => "Confirm Delete",
+            Self::ConfirmDelete | Self::ConfirmDeleteSelected => "Confirm Delete",
         }
     }
 }
@@ -100,7 +101,10 @@ pub struct InputDialogWidget<'a> {
 impl Widget for InputDialogWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let dialog_width = 50u16.min(area.width.saturating_sub(4));
-        let dialog_height = if self.state.kind == DialogKind::ConfirmDelete {
+        let dialog_height = if matches!(
+            self.state.kind,
+            DialogKind::ConfirmDelete | DialogKind::ConfirmDeleteSelected
+        ) {
             6
         } else {
             5
@@ -135,7 +139,10 @@ impl Widget for InputDialogWidget<'_> {
             dialog_rect.x + (dialog_rect.width.saturating_sub(title.len() as u16 + 2)) / 2;
         buf.set_string(title_x, dialog_rect.y, format!(" {title} "), title_style);
 
-        if self.state.kind == DialogKind::ConfirmDelete {
+        if matches!(
+            self.state.kind,
+            DialogKind::ConfirmDelete | DialogKind::ConfirmDeleteSelected
+        ) {
             // Show confirmation message
             let msg = format!("Delete '{}'?", self.state.target_name);
             let msg_x = dialog_rect.x + 2;
