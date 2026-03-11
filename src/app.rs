@@ -131,7 +131,10 @@ impl App {
     pub async fn run<B: ratatui::backend::Backend>(
         &mut self,
         terminal: &mut Terminal<B>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<()>
+    where
+        B::Error: Send + Sync + 'static,
+    {
         let mut reader = EventStream::new();
 
         // Set up file watcher with 100ms debounce
@@ -1412,7 +1415,10 @@ impl App {
         &self,
         terminal: &mut Terminal<B>,
         path: &std::path::Path,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<()>
+    where
+        B::Error: Send + Sync + 'static,
+    {
         // Leave alternate screen
         let mut stdout = std::io::stdout();
         if self.enhanced_keyboard {
