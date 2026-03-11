@@ -97,6 +97,20 @@ pub enum Action {
     DoubleClick(u16),
     /// Enter key: open file in editor or toggle directory.
     EnterKey,
+    /// Open the branch picker overlay.
+    OpenBranchPicker,
+    /// Picker input: user typed a character.
+    PickerChar(char),
+    /// Picker input: backspace.
+    PickerBackspace,
+    /// Picker input: confirm selection.
+    PickerConfirm,
+    /// Picker input: cancel.
+    PickerCancel,
+    /// Picker navigation: move up.
+    PickerUp,
+    /// Picker navigation: move down.
+    PickerDown,
     None,
 }
 
@@ -107,6 +121,7 @@ pub enum InputMode {
     ContextMenu,
     Dialog,
     Search,
+    Picker,
 }
 
 /// Map a keyboard event to an Action.
@@ -179,6 +194,9 @@ pub fn handle_key(key: KeyEvent, preview_visible: bool, preview_has_selection: b
         KeyCode::Char('V') => Action::ClearSelect,
         KeyCode::Char('X') => Action::DeleteSelected,
 
+        // Branch picker
+        KeyCode::Char('b') => Action::OpenBranchPicker,
+
         // Search
         KeyCode::Char('/') => Action::StartSearch,
 
@@ -217,6 +235,19 @@ pub fn handle_key_search(key: KeyEvent) -> Action {
         KeyCode::Tab | KeyCode::Down => Action::SearchNext,
         KeyCode::BackTab | KeyCode::Up => Action::SearchPrev,
         KeyCode::Char(c) => Action::SearchChar(c),
+        _ => Action::None,
+    }
+}
+
+/// Map a keyboard event in picker mode.
+pub fn handle_key_picker(key: KeyEvent) -> Action {
+    match key.code {
+        KeyCode::Esc => Action::PickerCancel,
+        KeyCode::Enter => Action::PickerConfirm,
+        KeyCode::Backspace => Action::PickerBackspace,
+        KeyCode::Up | KeyCode::BackTab => Action::PickerUp,
+        KeyCode::Down | KeyCode::Tab => Action::PickerDown,
+        KeyCode::Char(c) => Action::PickerChar(c),
         _ => Action::None,
     }
 }

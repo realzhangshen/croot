@@ -187,7 +187,7 @@ impl Widget for InputDialogWidget<'_> {
     }
 }
 
-fn draw_border(buf: &mut Buffer, rect: Rect, style: Style) {
+pub(crate) fn draw_border(buf: &mut Buffer, rect: Rect, style: Style) {
     // Corners
     if let Some(cell) = buf.cell_mut((rect.x, rect.y)) {
         cell.set_symbol("╭");

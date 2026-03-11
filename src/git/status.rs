@@ -94,6 +94,10 @@ impl GitState {
         self.branch.as_deref()
     }
 
+    pub fn repo_root(&self) -> &Path {
+        &self.repo_root
+    }
+
     fn read_branch(repo: &Repository) -> Option<String> {
         let head = repo.head().ok()?;
         if head.is_branch() {

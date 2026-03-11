@@ -20,7 +20,8 @@ use crate::cmux::bridge::CmuxBridge;
 use crate::config::Config;
 use crate::git::status::GitState;
 use crate::input::handler::{
-    handle_key, handle_key_dialog, handle_key_menu, handle_key_search, Action, InputMode,
+    handle_key, handle_key_dialog, handle_key_menu, handle_key_picker, handle_key_search, Action,
+    InputMode,
 };
 use crate::input::mouse::{handle_mouse, ClickTracker};
 use crate::layout::{self, FocusPane, PreviewLayout};
@@ -29,6 +30,7 @@ use crate::preview::state::{PreviewKind, PreviewState};
 use crate::render::colors;
 use crate::render::context_menu::{ContextMenuState, ContextMenuWidget, MenuAction};
 use crate::render::input_dialog::{DialogKind, InputDialogState, InputDialogWidget};
+use crate::render::picker::{PickerState, PickerWidget};
 use crate::render::preview_view::PreviewView;
 use crate::render::search_bar::{fuzzy_match, SearchBar, SearchState};
 use crate::render::status_bar::{HyperlinkRegion, StatusBar};
@@ -66,6 +68,7 @@ pub struct App {
     input_mode: InputMode,
     context_menu: Option<ContextMenuState>,
     input_dialog: Option<InputDialogState>,
+    picker_state: Option<PickerState>,
     // Search state
     search_state: SearchState,
     /// Filtered node indices when search is active. Empty = no filter.
@@ -118,6 +121,7 @@ impl App {
             input_mode: InputMode::Normal,
             context_menu: None,
             input_dialog: None,
+            picker_state: None,
             search_state: SearchState::new(),
             search_filtered: Vec::new(),
             hyperlink_regions: Vec::new(),
@@ -175,6 +179,7 @@ impl App {
                                 InputMode::ContextMenu => handle_key_menu(key),
                                 InputMode::Dialog => handle_key_dialog(key),
                                 InputMode::Search => handle_key_search(key),
+                                InputMode::Picker => handle_key_picker(key),
                             };
                             post_action = self.handle_action(&action, &preview_tx);
                         }
@@ -188,6 +193,7 @@ impl App {
                         }
                         Some(Ok(Event::Resize(_, _))) => {
                             self.context_menu = None;
+                            self.picker_state = None;
                             self.input_mode = InputMode::Normal;
                             if self.preview_visible {
                                 self.trigger_preview_load(&preview_tx);
@@ -443,6 +449,11 @@ impl App {
             let widget = InputDialogWidget { state: dialog };
             widget.render(size, frame.buffer_mut());
         }
+
+        if let Some(ref picker) = self.picker_state {
+            let widget = PickerWidget { state: picker };
+            widget.render(size, frame.buffer_mut());
+        }
     }
 
     fn handle_action(
@@ -459,6 +470,7 @@ impl App {
                     self.input_mode = InputMode::Normal;
                     self.context_menu = None;
                     self.input_dialog = None;
+                    self.picker_state = None;
                 }
             }
 
@@ -669,6 +681,40 @@ impl App {
                     }
                 }
             }
+            // Branch picker
+            Action::OpenBranchPicker => {
+                if self.git.is_some() {
+                    self.open_branch_picker();
+                }
+            }
+            Action::PickerChar(ch) => {
+                if let Some(ref mut picker) = self.picker_state {
+                    picker.insert_char(ch);
+                }
+            }
+            Action::PickerBackspace => {
+                if let Some(ref mut picker) = self.picker_state {
+                    picker.delete_char();
+                }
+            }
+            Action::PickerUp => {
+                if let Some(ref mut picker) = self.picker_state {
+                    picker.move_up();
+                }
+            }
+            Action::PickerDown => {
+                if let Some(ref mut picker) = self.picker_state {
+                    picker.move_down();
+                }
+            }
+            Action::PickerConfirm => {
+                self.confirm_picker();
+            }
+            Action::PickerCancel => {
+                self.picker_state = None;
+                self.input_mode = InputMode::Normal;
+            }
+
             Action::EnterKey => {
                 let selected_is_dir = self
                     .tree
@@ -1401,6 +1447,86 @@ impl App {
     fn reapply_git(&mut self) {
         if let Some(ref git) = self.git {
             git.apply_to_nodes(&mut self.tree.nodes);
+        }
+    }
+
+    // ── Branch picker ──────────────────────────────────────────────────
+
+    fn open_branch_picker(&mut self) {
+        let Some(ref git) = self.git else { return };
+        let branches = crate::git::branches::list_branches(git.repo_root());
+        self.picker_state = Some(PickerState::new_branch(&branches));
+        self.input_mode = InputMode::Picker;
+    }
+
+    fn confirm_picker(&mut self) {
+        let Some(picker) = self.picker_state.take() else {
+            return;
+        };
+
+        let Some(item) = picker.selected_item().cloned() else {
+            self.input_mode = InputMode::Normal;
+            return;
+        };
+
+        // Don't switch to the already-current branch
+        if item.is_current {
+            self.input_mode = InputMode::Normal;
+            return;
+        }
+
+        let Some(ref git) = self.git else {
+            self.input_mode = InputMode::Normal;
+            return;
+        };
+
+        // For remote branches like "origin/feature", use --track to resolve
+        // multi-remote ambiguity (e.g. both origin/foo and upstream/foo exist).
+        let result = if item.is_remote {
+            // Try to create a local tracking branch from the specific remote ref.
+            // If the local branch already exists, git will error — that's fine,
+            // the user can select the local branch directly instead.
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(git.repo_root())
+                .arg("switch")
+                .arg("--track")
+                .arg(&item.data)
+                .output()
+        } else {
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(git.repo_root())
+                .arg("switch")
+                .arg(&item.data)
+                .output()
+        };
+
+        match result {
+            Ok(output) if output.status.success() => {
+                self.input_mode = InputMode::Normal;
+                // Refresh tree and git state
+                self.tree.refresh();
+                if let Some(ref mut git) = self.git {
+                    git.refresh();
+                }
+                self.reapply_git();
+            }
+            Ok(output) => {
+                // Show error from stderr
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                let branches = crate::git::branches::list_branches(git.repo_root());
+                let mut restored_picker = PickerState::new_branch(&branches);
+                restored_picker.error_message = Some(stderr);
+                self.picker_state = Some(restored_picker);
+                // Stay in picker mode so user can Esc
+            }
+            Err(e) => {
+                let branches = crate::git::branches::list_branches(git.repo_root());
+                let mut restored_picker = PickerState::new_branch(&branches);
+                restored_picker.error_message = Some(format!("git: {e}"));
+                self.picker_state = Some(restored_picker);
+            }
         }
     }
 
