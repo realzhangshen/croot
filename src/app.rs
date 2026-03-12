@@ -34,7 +34,8 @@ use crate::render::input_dialog::{DialogKind, InputDialogState, InputDialogWidge
 use crate::render::picker::{PickerState, PickerWidget};
 use crate::render::preview_view::PreviewView;
 use crate::render::search_bar::{
-    do_match, GlobalSearchResult, GlobalSearchType, SearchBar, SearchMode, SearchState,
+    do_match, do_match_positions, GlobalSearchResult, GlobalSearchType, SearchBar, SearchMode,
+    SearchState,
 };
 use crate::render::status_bar::{HyperlinkRegion, StatusBar};
 use crate::render::tree_view::TreeView;
@@ -409,6 +410,7 @@ impl App {
                 } else {
                     &[]
                 },
+                highlight_char_positions: &self.search_state.match_char_positions,
             }
             .render(tree_area, frame.buffer_mut(), &mut self.tree);
 
@@ -469,6 +471,7 @@ impl App {
                 } else {
                     &[]
                 },
+                highlight_char_positions: &self.search_state.match_char_positions,
             }
             .render(content_area, frame.buffer_mut(), &mut self.tree);
         }
@@ -1774,6 +1777,9 @@ impl App {
 
     /// Find mode: compute `match_indices` (highlight only, no filtering).
     fn update_find_matches(&mut self) {
+        // ALWAYS clear positions — node indices shift on expand/collapse
+        self.search_state.match_char_positions.clear();
+
         if self.search_state.query.is_empty() {
             self.search_state.match_indices.clear();
             self.search_state.current_match = 0;
@@ -1786,17 +1792,25 @@ impl App {
 
         let mut matches = Vec::new();
         for idx in displayable {
-            let target_name = self.tree.compact_display_name_for(idx);
-            let rel_path = self.tree.nodes[idx]
-                .path
-                .strip_prefix(&self.root)
-                .unwrap_or(&self.tree.nodes[idx].path)
-                .to_string_lossy()
-                .into_owned();
-            if do_match(match_mode, &query, re.as_ref(), &rel_path)
-                || do_match(match_mode, &query, re.as_ref(), &target_name)
+            let display_name = self.tree.compact_display_name_for(idx);
+            if let Some(positions) =
+                do_match_positions(match_mode, &query, re.as_ref(), &display_name)
             {
                 matches.push(idx);
+                self.search_state
+                    .match_char_positions
+                    .insert(idx, positions);
+            } else {
+                // Fall back to path match (no character positions — renderer uses FullName)
+                let rel_path = self.tree.nodes[idx]
+                    .path
+                    .strip_prefix(&self.root)
+                    .unwrap_or(&self.tree.nodes[idx].path)
+                    .to_string_lossy()
+                    .into_owned();
+                if do_match(match_mode, &query, re.as_ref(), &rel_path) {
+                    matches.push(idx);
+                }
             }
         }
 

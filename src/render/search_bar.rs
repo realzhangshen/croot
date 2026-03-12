@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use ratatui::{
@@ -55,6 +56,9 @@ pub struct SearchState {
     pub origin_scroll_offset: usize,
     /// Cached compiled regex for Regex match mode.
     pub compiled_regex: Option<regex::Regex>,
+    /// Per-node byte positions of matched characters (Find mode).
+    /// Keyed by node index; absent entry → full-name underline fallback.
+    pub match_char_positions: HashMap<usize, Vec<usize>>,
     // Global search fields
     pub global_results: Vec<GlobalSearchResult>,
     pub global_selected: usize,
@@ -77,6 +81,7 @@ impl SearchState {
             origin_cursor: 0,
             origin_scroll_offset: 0,
             compiled_regex: None,
+            match_char_positions: HashMap::new(),
             global_results: Vec::new(),
             global_selected: 0,
             global_scroll_offset: 0,
@@ -134,6 +139,7 @@ impl SearchState {
         self.current_match = 0;
         self.visible_indices.clear();
         self.compiled_regex = None;
+        self.match_char_positions.clear();
         self.global_results.clear();
         self.global_selected = 0;
         self.global_scroll_offset = 0;
@@ -345,6 +351,61 @@ pub fn do_match(
     }
 }
 
+/// Fuzzy match returning byte positions of each matched character.
+pub fn fuzzy_match_positions(query: &str, target: &str) -> Option<Vec<usize>> {
+    if query.is_empty() {
+        return Some(vec![]);
+    }
+    let mut positions = Vec::new();
+    let mut query_chars = query.chars();
+    let mut current = query_chars.next();
+
+    for (byte_idx, ch) in target.char_indices() {
+        if let Some(q) = current {
+            if ch.eq_ignore_ascii_case(&q) {
+                positions.push(byte_idx);
+                current = query_chars.next();
+            }
+        } else {
+            break;
+        }
+    }
+    if current.is_none() {
+        Some(positions)
+    } else {
+        None
+    }
+}
+
+/// Exact substring match returning byte positions of the matched range.
+pub fn exact_match_positions(query: &str, target: &str) -> Option<Vec<usize>> {
+    let target_lower = target.to_ascii_lowercase();
+    let query_lower = query.to_ascii_lowercase();
+    let start = target_lower.find(&query_lower)?;
+    let end = start + query.len();
+    Some((start..end).collect())
+}
+
+/// Regex match returning byte positions of the first match span.
+pub fn regex_match_positions(re: &regex::Regex, target: &str) -> Option<Vec<usize>> {
+    let m = re.find(target)?;
+    Some((m.start()..m.end()).collect())
+}
+
+/// Dispatch position-returning match based on mode.
+pub fn do_match_positions(
+    match_mode: MatchMode,
+    query: &str,
+    re: Option<&regex::Regex>,
+    target: &str,
+) -> Option<Vec<usize>> {
+    match match_mode {
+        MatchMode::Fuzzy => fuzzy_match_positions(query, target),
+        MatchMode::Regex => re.and_then(|r| regex_match_positions(r, target)),
+        MatchMode::Exact => exact_match_positions(query, target),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -445,5 +506,68 @@ mod tests {
         assert_eq!(state.match_count(), 0);
         state.match_indices = vec![1, 3, 5];
         assert_eq!(state.match_count(), 3);
+    }
+
+    // ── Position-returning match tests ──────────────────────────────────
+
+    #[test]
+    fn fuzzy_match_positions_subsequence() {
+        let pos = fuzzy_match_positions("ars", "app.rs");
+        assert_eq!(pos, Some(vec![0, 4, 5]));
+    }
+
+    #[test]
+    fn fuzzy_match_positions_case_insensitive() {
+        let pos = fuzzy_match_positions("ARS", "app.rs");
+        assert_eq!(pos, Some(vec![0, 4, 5]));
+    }
+
+    #[test]
+    fn fuzzy_match_positions_no_match() {
+        assert_eq!(fuzzy_match_positions("xyz", "app.rs"), None);
+    }
+
+    #[test]
+    fn fuzzy_match_positions_empty_query() {
+        assert_eq!(fuzzy_match_positions("", "anything"), Some(vec![]));
+    }
+
+    #[test]
+    fn exact_match_positions_substring() {
+        let pos = exact_match_positions("handler", "input_handler.rs");
+        assert_eq!(pos, Some(vec![6, 7, 8, 9, 10, 11, 12]));
+    }
+
+    #[test]
+    fn exact_match_positions_case_insensitive() {
+        let pos = exact_match_positions("Handler", "input_handler.rs");
+        assert_eq!(pos, Some(vec![6, 7, 8, 9, 10, 11, 12]));
+    }
+
+    #[test]
+    fn exact_match_positions_no_match() {
+        assert_eq!(exact_match_positions("xyz", "input_handler.rs"), None);
+    }
+
+    #[test]
+    fn regex_match_positions_anchored() {
+        let re = regex::Regex::new("^app").unwrap();
+        let pos = regex_match_positions(&re, "app.rs");
+        assert_eq!(pos, Some(vec![0, 1, 2]));
+    }
+
+    #[test]
+    fn regex_match_positions_no_match() {
+        let re = regex::Regex::new("^handler").unwrap();
+        assert_eq!(regex_match_positions(&re, "input_handler.rs"), None);
+    }
+
+    #[test]
+    fn do_match_positions_dispatches() {
+        let re = regex::Regex::new("^app").unwrap();
+        assert!(do_match_positions(MatchMode::Fuzzy, "ars", None, "app.rs").is_some());
+        assert!(do_match_positions(MatchMode::Regex, "^app", Some(&re), "app.rs").is_some());
+        assert!(do_match_positions(MatchMode::Regex, "^app", None, "app.rs").is_none());
+        assert!(do_match_positions(MatchMode::Exact, "app", None, "app.rs").is_some());
     }
 }

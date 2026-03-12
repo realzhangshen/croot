@@ -27,6 +27,7 @@ pub const STATUS_BAR_BG: Color = Color::DarkGray;
 pub const STATUS_BAR_FG: Color = Color::White;
 pub const DIR_COLOR: Color = Color::Yellow;
 pub const DEFAULT_FG: Color = Color::Reset;
+pub const FIND_MATCH: Color = Color::Cyan;
 
 // ── Adaptive style helpers (REVERSED-based, no hardcoded bg) ──────────
 
