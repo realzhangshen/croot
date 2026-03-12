@@ -42,10 +42,10 @@ impl StatefulWidget for PreviewView<'_> {
 
         match &state.kind {
             PreviewKind::Empty => {
-                render_centered_message(content_area, buf, "No file selected", Color::DarkGray);
+                render_centered_message(content_area, buf, "No file selected", Color::Gray);
             }
             PreviewKind::Loading => {
-                render_centered_message(content_area, buf, "Loading...", Color::DarkGray);
+                render_centered_message(content_area, buf, "Loading...", Color::Gray);
             }
             PreviewKind::Error(msg) => {
                 render_centered_message(content_area, buf, msg, Color::Red);

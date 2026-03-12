@@ -17,8 +17,8 @@ pub const GIT_STAGED_ADDED: Color = Color::Green;
 pub const GIT_STAGED_DELETED: Color = Color::Red;
 
 // Preview / UI accent colors
-pub const UNFOCUSED_HEADER_BG: Color = Color::DarkGray;
-pub const UNFOCUSED_HEADER_FG: Color = Color::Gray;
+pub const UNFOCUSED_HEADER_BG: Color = Color::Gray;
+pub const UNFOCUSED_HEADER_FG: Color = Color::White;
 pub const HEX_VALUES: Color = Color::LightBlue;
 pub const HEX_ASCII: Color = Color::Gray;
 pub const PREVIEW_DIR_NAME: Color = Color::LightYellow;
@@ -26,12 +26,13 @@ pub const INLINE_CODE: Color = Color::Yellow;
 
 // UI colors — ANSI / terminal-default so they adapt to any theme
 // Cursor row uses Modifier::REVERSED (no explicit bg) for maximum contrast
-pub const TREE_LINE: Color = Color::DarkGray;
-pub const STATUS_BAR_BG: Color = Color::DarkGray;
-pub const STATUS_BAR_FG: Color = Color::White;
-pub const DIR_COLOR: Color = Color::Yellow;
+pub const TREE_LINE: Color = Color::Gray;
+pub const STATUS_BAR_BG: Color = Color::Blue;
+pub const STATUS_BAR_FG: Color = Color::Indexed(15);
+pub const DIR_COLOR: Color = Color::Blue;
 pub const DEFAULT_FG: Color = Color::Reset;
-pub const FIND_MATCH: Color = Color::Cyan;
+pub const FIND_MATCH: Color = Color::Yellow;
+pub const SEARCH_BAR_BG: Color = Color::DarkGray;
 
 // Bright overlay colors — ANSI 15/12 for high-contrast popups
 pub const POPUP_WHITE: Color = Color::Indexed(15); // bright white (ANSI 15)
@@ -39,9 +40,9 @@ pub const POPUP_BLUE: Color = Color::Indexed(12); // bright blue  (ANSI 12)
 
 // ── Adaptive style helpers (REVERSED-based, no hardcoded bg) ──────────
 
-/// Tree-view hover row: subtle reverse + dim
+/// Tree-view hover row: subtle reverse
 pub fn hover_style() -> Style {
-    Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
+    Style::default().add_modifier(Modifier::REVERSED)
 }
 
 /// Popup / menu base: explicit White/Black + REVERSED → black text on white bg.
@@ -70,13 +71,13 @@ pub fn popup_selected_danger() -> Style {
         .add_modifier(Modifier::BOLD)
 }
 
-/// Popup dim text (separators, hints): explicit bright white/Black + REVERSED + DIM.
-/// Same explicit-color rationale as `popup_base()`.
+/// Popup dim text (separators, hints): Gray/Black + REVERSED for subdued contrast.
+/// Uses Gray fg instead of DIM modifier for consistent rendering across terminals.
 pub fn popup_dim() -> Style {
     Style::default()
-        .fg(POPUP_WHITE)
+        .fg(Color::Gray)
         .bg(Color::Black)
-        .add_modifier(Modifier::REVERSED | Modifier::DIM)
+        .add_modifier(Modifier::REVERSED)
 }
 
 /// Clear a rectangular region and apply a fresh style.

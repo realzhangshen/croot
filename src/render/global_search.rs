@@ -133,7 +133,7 @@ impl Widget for GlobalSearchOverlay<'_> {
                     results_y,
                     "No results",
                     Style::default()
-                        .fg(Color::DarkGray)
+                        .fg(Color::Gray)
                         .add_modifier(Modifier::REVERSED),
                 );
             }
@@ -185,7 +185,7 @@ impl Widget for GlobalSearchOverlay<'_> {
             help_y,
             help,
             Style::default()
-                .fg(Color::DarkGray)
+                .fg(Color::Gray)
                 .add_modifier(Modifier::REVERSED),
         );
 
