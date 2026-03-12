@@ -279,11 +279,11 @@ impl Widget for ContextMenuWidget<'_> {
             .menu_rect(area.x + area.width, area.y + area.height);
 
         let base = colors::popup_base();
-        let border_style = colors::popup_dim();
+        let border_style = colors::popup_border();
         let normal_style = base;
         let selected_style = colors::popup_selected();
         let selected_danger_style = colors::popup_selected_danger();
-        let separator_style = colors::popup_dim();
+        let separator_style = colors::popup_border();
 
         // Fill background with REVERSED base
         colors::clear_region(buf, menu_rect, base);
@@ -404,7 +404,7 @@ mod tests {
     }
 
     #[test]
-    fn normal_item_has_reversed() {
+    fn normal_item_has_popup_bg_fg() {
         let state = ContextMenuState::new_for_file(0, 0, 0);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
@@ -412,10 +412,19 @@ mod tests {
         let y = rect.y + 2; // second item row (index 1)
         let x = rect.x + 2;
         let cell = buf.cell((x, y)).unwrap();
+        assert_eq!(
+            cell.bg,
+            colors::POPUP_BG,
+            "normal menu item bg should be POPUP_BG"
+        );
+        assert_eq!(
+            cell.fg,
+            colors::POPUP_FG,
+            "normal menu item fg should be POPUP_FG"
+        );
         assert!(
-            cell.modifier.contains(Modifier::REVERSED),
-            "normal menu item at ({x},{y}) should have REVERSED, got {:?}",
-            cell.modifier
+            !cell.modifier.contains(Modifier::REVERSED),
+            "normal menu item should NOT have REVERSED"
         );
         assert!(
             !cell.modifier.contains(Modifier::BOLD),

@@ -135,7 +135,7 @@ impl Widget for InputDialogWidget<'_> {
         let dialog_rect = Rect::new(x, y, dialog_width, dialog_height);
 
         let base = colors::popup_base();
-        let border_style = base;
+        let border_style = colors::popup_border();
         let text_style = base;
         let title_style = base.add_modifier(Modifier::BOLD);
 
@@ -168,10 +168,12 @@ impl Widget for InputDialogWidget<'_> {
             let input_x = dialog_rect.x + 2;
             let input_width = dialog_rect.width.saturating_sub(4) as usize;
 
-            // Draw input background (reset clears REVERSED from the popup fill)
+            // Draw input background (sunken field)
+            let input_style = colors::popup_input();
             for dx in 0..input_width {
                 if let Some(cell) = buf.cell_mut((input_x + dx as u16, input_y)) {
                     cell.reset();
+                    cell.set_style(input_style);
                 }
             }
 
@@ -181,16 +183,20 @@ impl Widget for InputDialogWidget<'_> {
             } else {
                 &self.state.input
             };
-            buf.set_string(input_x, input_y, display_text, Style::default());
+            buf.set_string(input_x, input_y, display_text, input_style);
 
-            // Draw cursor
+            // Draw cursor (block cursor: swap fg/bg)
             let cursor_display_pos = if self.state.input.len() > input_width {
                 input_width
             } else {
                 self.state.cursor_pos
             };
             if let Some(cell) = buf.cell_mut((input_x + cursor_display_pos as u16, input_y)) {
-                cell.set_style(Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED));
+                cell.set_style(
+                    Style::default()
+                        .fg(colors::POPUP_INPUT_BG)
+                        .bg(colors::POPUP_FG),
+                );
             }
 
             // Buttons
@@ -265,7 +271,7 @@ mod tests {
     }
 
     #[test]
-    fn dialog_container_has_reversed() {
+    fn dialog_container_has_popup_bg() {
         let state = InputDialogState::new(
             DialogKind::NewFile,
             std::path::PathBuf::from("/tmp"),
@@ -277,15 +283,17 @@ mod tests {
         let mid_x = 30u16;
         let mid_y = 8u16;
         let cell = buf.cell((mid_x, mid_y)).unwrap();
+        assert_eq!(cell.bg, colors::POPUP_BG, "dialog bg should be POPUP_BG");
+        assert_eq!(cell.fg, colors::POPUP_FG, "dialog fg should be POPUP_FG");
         assert!(
-            cell.modifier.contains(Modifier::REVERSED),
-            "dialog container should have REVERSED, got {:?}",
+            !cell.modifier.contains(Modifier::REVERSED),
+            "dialog should NOT have REVERSED, got {:?}",
             cell.modifier
         );
     }
 
     #[test]
-    fn input_area_not_reversed() {
+    fn input_area_has_sunken_bg() {
         let state = InputDialogState::new(
             DialogKind::NewFile,
             std::path::PathBuf::from("/tmp"),
@@ -298,6 +306,11 @@ mod tests {
         let input_x = 8u16; // 5 + 2 + 1 (skip cursor at offset 0)
         let input_y = 9u16; // 7 + 2
         let cell = buf.cell((input_x, input_y)).unwrap();
+        assert_eq!(
+            cell.bg,
+            colors::POPUP_INPUT_BG,
+            "input area should have POPUP_INPUT_BG"
+        );
         assert!(
             !cell.modifier.contains(Modifier::REVERSED),
             "input area should NOT have REVERSED, got {:?}",
@@ -306,7 +319,7 @@ mod tests {
     }
 
     #[test]
-    fn title_has_reversed_and_bold() {
+    fn title_has_bold_no_reversed() {
         let state = InputDialogState::new(
             DialogKind::Rename,
             std::path::PathBuf::from("/tmp"),
@@ -320,8 +333,13 @@ mod tests {
         let title_y = 7u16;
         let cell = buf.cell((title_x + 1, title_y)).unwrap();
         assert!(
-            cell.modifier.contains(Modifier::REVERSED) && cell.modifier.contains(Modifier::BOLD),
-            "title should have REVERSED | BOLD, got {:?}",
+            cell.modifier.contains(Modifier::BOLD),
+            "title should have BOLD, got {:?}",
+            cell.modifier
+        );
+        assert!(
+            !cell.modifier.contains(Modifier::REVERSED),
+            "title should NOT have REVERSED, got {:?}",
             cell.modifier
         );
     }

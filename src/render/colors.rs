@@ -33,32 +33,33 @@ pub const DIR_COLOR: Color = Color::Yellow;
 pub const DEFAULT_FG: Color = Color::Reset;
 pub const FIND_MATCH: Color = Color::Cyan;
 
-// Bright overlay colors — ANSI 15/12 for high-contrast popups
-pub const POPUP_WHITE: Color = Color::Indexed(15); // bright white (ANSI 15)
-pub const POPUP_BLUE: Color = Color::Indexed(12); // bright blue  (ANSI 12)
+// ── Popup overlay colors — fixed 256-color for guaranteed contrast ────
+// Deliberately *not* theme-adaptive: popups need legible text regardless
+// of whether the terminal palette is light or dark.
+pub const POPUP_FG: Color = Color::Indexed(15); // #ffffff  bright white text
+pub const POPUP_BG: Color = Color::Indexed(238); // #444444  dark-gray background
+pub const POPUP_ACCENT: Color = Color::Indexed(12); // #5f87ff  selection highlight
+pub const POPUP_BORDER_FG: Color = Color::Indexed(246); // #949494  visible border gray
+pub const POPUP_DIM_FG: Color = Color::Indexed(249); // #b2b2b2  secondary text
+pub const POPUP_INPUT_BG: Color = Color::Indexed(235); // #262626  sunken input field
 
-// ── Adaptive style helpers (REVERSED-based, no hardcoded bg) ──────────
+// ── Style helpers ────────────────────────────────────────────────────
 
 /// Tree-view hover row: subtle reverse + dim
 pub fn hover_style() -> Style {
     Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
 }
 
-/// Popup / menu base: explicit White/Black + REVERSED → black text on white bg.
-/// Explicit colors force the backend to always emit SetColors, preventing
-/// color bleed when the terminal retains stale state from prior frames.
+/// Popup / menu base: bright white text on dark gray background.
 pub fn popup_base() -> Style {
-    Style::default()
-        .fg(POPUP_WHITE)
-        .bg(Color::Black)
-        .add_modifier(Modifier::REVERSED)
+    Style::default().fg(POPUP_FG).bg(POPUP_BG)
 }
 
 /// Popup selected item: bright blue background with bright white text
 pub fn popup_selected() -> Style {
     Style::reset()
-        .bg(POPUP_BLUE)
-        .fg(POPUP_WHITE)
+        .bg(POPUP_ACCENT)
+        .fg(POPUP_FG)
         .add_modifier(Modifier::BOLD)
 }
 
@@ -66,17 +67,23 @@ pub fn popup_selected() -> Style {
 pub fn popup_selected_danger() -> Style {
     Style::reset()
         .bg(Color::Red)
-        .fg(POPUP_WHITE)
+        .fg(POPUP_FG)
         .add_modifier(Modifier::BOLD)
 }
 
-/// Popup dim text (separators, hints): explicit bright white/Black + REVERSED + DIM.
-/// Same explicit-color rationale as `popup_base()`.
+/// Popup dim text (hints, separators, [Cancel]): readable secondary text.
 pub fn popup_dim() -> Style {
-    Style::default()
-        .fg(POPUP_WHITE)
-        .bg(Color::Black)
-        .add_modifier(Modifier::REVERSED | Modifier::DIM)
+    Style::default().fg(POPUP_DIM_FG).bg(POPUP_BG)
+}
+
+/// Popup border: visible gray on popup background.
+pub fn popup_border() -> Style {
+    Style::default().fg(POPUP_BORDER_FG).bg(POPUP_BG)
+}
+
+/// Popup input field: bright white text on sunken dark background.
+pub fn popup_input() -> Style {
+    Style::default().fg(POPUP_FG).bg(POPUP_INPUT_BG)
 }
 
 /// Clear a rectangular region and apply a fresh style.
@@ -119,11 +126,11 @@ mod tests {
             for col in 0..area.width {
                 let cell = buf.cell((col, row)).unwrap();
                 assert_eq!(cell.symbol(), " ", "symbol at ({col},{row})");
-                assert_eq!(cell.fg, POPUP_WHITE, "fg at ({col},{row})");
-                assert_eq!(cell.bg, Color::Black, "bg at ({col},{row})");
+                assert_eq!(cell.fg, POPUP_FG, "fg at ({col},{row})");
+                assert_eq!(cell.bg, POPUP_BG, "bg at ({col},{row})");
                 assert!(
-                    cell.modifier.contains(Modifier::REVERSED),
-                    "modifier at ({col},{row}): {:?}",
+                    !cell.modifier.contains(Modifier::REVERSED),
+                    "should NOT have REVERSED at ({col},{row}): {:?}",
                     cell.modifier
                 );
             }

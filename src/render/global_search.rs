@@ -29,7 +29,7 @@ impl Widget for GlobalSearchOverlay<'_> {
         let dialog = Rect::new(x, y, width, height);
 
         let base = colors::popup_base();
-        let border_style = colors::popup_dim();
+        let border_style = colors::popup_border();
 
         // Fill background
         colors::clear_region(buf, dialog, base);
@@ -47,13 +47,20 @@ impl Widget for GlobalSearchOverlay<'_> {
             title_x,
             dialog.y,
             title,
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD | Modifier::REVERSED),
+            colors::popup_border().add_modifier(Modifier::BOLD),
         );
 
-        // Input line
+        // Pre-fill input row with sunken input style
         let input_y = dialog.y + 1;
+        let input_style = colors::popup_input();
+        for col in (dialog.x + 1)..(dialog.x + dialog.width - 1) {
+            if let Some(cell) = buf.cell_mut((col, input_y)) {
+                cell.reset();
+                cell.set_style(input_style);
+            }
+        }
+
+        // Input line
         let prompt = " > ";
         buf.set_string(
             dialog.x + 1,
@@ -61,7 +68,8 @@ impl Widget for GlobalSearchOverlay<'_> {
             prompt,
             Style::default()
                 .fg(Color::Cyan)
-                .add_modifier(Modifier::REVERSED),
+                .bg(colors::POPUP_INPUT_BG)
+                .add_modifier(Modifier::BOLD),
         );
 
         let input_x = dialog.x + 1 + prompt.len() as u16;
@@ -71,23 +79,20 @@ impl Widget for GlobalSearchOverlay<'_> {
         } else {
             &self.state.query
         };
-        buf.set_string(
-            input_x,
-            input_y,
-            query_display,
-            Style::default()
-                .fg(Color::Indexed(15))
-                .add_modifier(Modifier::REVERSED),
-        );
+        buf.set_string(input_x, input_y, query_display, input_style);
 
-        // Cursor
+        // Cursor (block cursor: swap fg/bg)
         let cursor_pos = if self.state.query.len() > input_width {
             input_width
         } else {
             self.state.cursor_pos
         };
         if let Some(cell) = buf.cell_mut((input_x + cursor_pos as u16, input_y)) {
-            cell.set_style(Style::default().fg(Color::Black).bg(Color::Indexed(15)));
+            cell.set_style(
+                Style::default()
+                    .fg(colors::POPUP_INPUT_BG)
+                    .bg(colors::POPUP_FG),
+            );
             if cell.symbol() == " " || cell.symbol().is_empty() {
                 cell.set_symbol(" ");
             }
@@ -112,9 +117,7 @@ impl Widget for GlobalSearchOverlay<'_> {
                 dialog.x + 2,
                 results_y,
                 "Searching...",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::REVERSED),
+                Style::default().fg(Color::Yellow).bg(colors::POPUP_BG),
             );
         } else if let Some(ref err) = self.state.global_error {
             let display = truncate_str(err, content_width);
@@ -124,18 +127,12 @@ impl Widget for GlobalSearchOverlay<'_> {
                 display,
                 Style::default()
                     .fg(Color::Red)
-                    .add_modifier(Modifier::REVERSED),
+                    .bg(colors::POPUP_BG)
+                    .add_modifier(Modifier::BOLD),
             );
         } else if self.state.global_results.is_empty() {
             if !self.state.query.is_empty() {
-                buf.set_string(
-                    dialog.x + 2,
-                    results_y,
-                    "No results",
-                    Style::default()
-                        .fg(Color::DarkGray)
-                        .add_modifier(Modifier::REVERSED),
-                );
+                buf.set_string(dialog.x + 2, results_y, "No results", colors::popup_dim());
             }
         } else {
             let start = self.state.global_scroll_offset;
@@ -180,14 +177,7 @@ impl Widget for GlobalSearchOverlay<'_> {
         // Help line at bottom
         let help_y = dialog.y + dialog.height - 2;
         let help = "[Enter] go to  [Esc] cancel";
-        buf.set_string(
-            dialog.x + 2,
-            help_y,
-            help,
-            Style::default()
-                .fg(Color::DarkGray)
-                .add_modifier(Modifier::REVERSED),
-        );
+        buf.set_string(dialog.x + 2, help_y, help, colors::popup_dim());
 
         // Result count
         if !self.state.global_results.is_empty() {
@@ -202,9 +192,7 @@ impl Widget for GlobalSearchOverlay<'_> {
                     count_x,
                     help_y,
                     &count,
-                    Style::default()
-                        .fg(Color::Green)
-                        .add_modifier(Modifier::REVERSED),
+                    Style::default().fg(Color::Green).bg(colors::POPUP_BG),
                 );
             }
         }
@@ -227,5 +215,40 @@ fn truncate_str(s: &str, max_width: usize) -> String {
             width += cw;
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::render::search_bar::{SearchMode, SearchState};
+    use ratatui::style::Modifier;
+
+    #[test]
+    fn popup_body_has_popup_bg_and_no_reversed() {
+        let state = SearchState::new(SearchMode::Global);
+        let area = Rect::new(0, 0, 80, 24);
+        let mut buf = Buffer::empty(area);
+        let widget = GlobalSearchOverlay { state: &state };
+        widget.render(area, &mut buf);
+
+        // The dialog is centered; pick a cell in the results area
+        let width = (area.width * 3 / 5).max(40).min(area.width - 4);
+        let height = (area.height * 3 / 5).max(10).min(area.height - 4);
+        let dx = area.x + (area.width - width) / 2;
+        let dy = area.y + (area.height - height) / 2;
+
+        // Check a body cell (results area, row 4 from dialog top)
+        let cell = buf.cell((dx + 3, dy + 4)).unwrap();
+        assert_eq!(
+            cell.bg,
+            colors::POPUP_BG,
+            "popup body bg should be POPUP_BG"
+        );
+        assert!(
+            !cell.modifier.contains(Modifier::REVERSED),
+            "popup body should NOT have REVERSED, got {:?}",
+            cell.modifier
+        );
     }
 }

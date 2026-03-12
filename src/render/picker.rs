@@ -240,7 +240,7 @@ impl PickerWidget {
         // Fill background
         colors::clear_region(buf, dialog_rect, base);
 
-        draw_border(buf, dialog_rect, base);
+        draw_border(buf, dialog_rect, colors::popup_border());
 
         // Title
         let title = match state.kind {
@@ -255,10 +255,12 @@ impl PickerWidget {
         let input_x = dialog_rect.x + 2;
         let input_width = dialog_rect.width.saturating_sub(4) as usize;
 
-        // Clear input area of REVERSED
+        // Pre-fill input row with sunken input style
+        let input_style = colors::popup_input();
         for dx in 0..input_width {
             if let Some(cell) = buf.cell_mut((input_x + dx as u16, input_y)) {
                 cell.reset();
+                cell.set_style(input_style);
             }
         }
 
@@ -269,6 +271,7 @@ impl PickerWidget {
             "> ",
             Style::default()
                 .fg(Color::Cyan)
+                .bg(colors::POPUP_INPUT_BG)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -280,16 +283,20 @@ impl PickerWidget {
         } else {
             &state.query
         };
-        buf.set_string(query_x, input_y, display_text, Style::default());
+        buf.set_string(query_x, input_y, display_text, input_style);
 
-        // Draw cursor
+        // Draw cursor (block cursor: swap fg/bg)
         let cursor_display_pos = if state.query.len() > query_width {
             query_width
         } else {
             state.cursor_pos
         };
         if let Some(cell) = buf.cell_mut((query_x + cursor_display_pos as u16, input_y)) {
-            cell.set_style(Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED));
+            cell.set_style(
+                Style::default()
+                    .fg(colors::POPUP_INPUT_BG)
+                    .bg(colors::POPUP_FG),
+            );
         }
 
         // Item list
@@ -366,7 +373,10 @@ impl PickerWidget {
         // Error message
         if let Some(ref err) = state.error_message {
             let err_y = dialog_rect.y + dialog_rect.height - 2;
-            let err_style = Style::reset().fg(Color::Red).add_modifier(Modifier::BOLD);
+            let err_style = Style::reset()
+                .fg(Color::Red)
+                .bg(colors::POPUP_BG)
+                .add_modifier(Modifier::BOLD);
             let truncated = truncate_to_display_width(err, inner_width);
             buf.set_string(dialog_rect.x + 2, err_y, &truncated, err_style);
         }
@@ -568,5 +578,26 @@ mod tests {
                 render_picker(&state, w, h);
             }
         }
+    }
+
+    #[test]
+    fn selected_item_has_accent_bg() {
+        let state = PickerState::new_branch(&make_branches());
+        let buf = render_picker(&state, 60, 20);
+        // Find the dialog and list area; selected item (main) should have POPUP_ACCENT bg
+        let layout = state.layout(Rect::new(0, 0, 60, 20)).unwrap();
+        let selected_y = layout.list_y;
+        let x = layout.dialog_rect.x + 3;
+        let cell = buf.cell((x, selected_y)).unwrap();
+        assert_eq!(
+            cell.bg,
+            colors::POPUP_ACCENT,
+            "selected item should have POPUP_ACCENT bg"
+        );
+        assert_eq!(
+            cell.fg,
+            colors::POPUP_FG,
+            "selected item should have POPUP_FG fg"
+        );
     }
 }
