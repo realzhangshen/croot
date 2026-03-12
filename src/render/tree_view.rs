@@ -107,10 +107,14 @@ impl StatefulWidget for TreeView<'_> {
             let row_style = |base: Style| -> Style {
                 match &row_mode {
                     RowMode::Cursor => Style::default().add_modifier(
-                        Modifier::REVERSED | (base.add_modifier & (Modifier::BOLD | Modifier::DIM)),
+                        Modifier::REVERSED
+                            | (base.add_modifier
+                                & (Modifier::BOLD | Modifier::DIM | Modifier::UNDERLINED)),
                     ),
                     RowMode::Hover => Style::default().add_modifier(
-                        Modifier::REVERSED | Modifier::DIM | (base.add_modifier & Modifier::BOLD),
+                        Modifier::REVERSED
+                            | Modifier::DIM
+                            | (base.add_modifier & (Modifier::BOLD | Modifier::UNDERLINED)),
                     ),
                     RowMode::None => base,
                 }
@@ -202,7 +206,7 @@ impl StatefulWidget for TreeView<'_> {
             };
 
             // Determine highlight mode for this row's name
-            let name_highlight = if is_cursor || is_hovered || !is_highlighted {
+            let name_highlight = if !is_highlighted {
                 NameHighlight::None
             } else if let Some(positions) = self.highlight_char_positions.get(&absolute_idx) {
                 NameHighlight::Characters(positions)
@@ -405,7 +409,7 @@ fn precompute_filtered_guides(nodes: &[TreeNode], visible_indices: &[usize]) -> 
 
 #[derive(Clone, Copy)]
 enum NameHighlight<'a> {
-    /// No highlight (not a match, or cursor/hover row).
+    /// No highlight (not a match).
     None,
     /// Highlight specific matched characters (display-name match).
     Characters(&'a [usize]),
@@ -879,6 +883,79 @@ mod tests {
         assert!(!spans[1].style.add_modifier.contains(Modifier::UNDERLINED));
         assert_eq!(spans[2].content, "rs");
         assert!(spans[2].style.add_modifier.contains(Modifier::UNDERLINED));
+    }
+
+    /// Render a tree with find-mode highlights and return the buffer.
+    fn render_tree_with_highlights(
+        tree: &mut FileTree,
+        hover_row: Option<usize>,
+        highlight_indices: &[usize],
+        highlight_char_positions: &HashMap<usize, Vec<usize>>,
+    ) -> Buffer {
+        let config = tree.config.clone();
+        let area = ratatui::layout::Rect::new(0, 0, 40, 10);
+        let mut buf = Buffer::empty(area);
+        let widget = TreeView {
+            config: &config,
+            hover_row,
+            filter_indices: &[],
+            highlight_indices,
+            highlight_char_positions,
+        };
+        widget.render(area, &mut buf, tree);
+        buf
+    }
+
+    #[test]
+    fn cursor_row_shows_underline_on_find_match() {
+        let mut tree = make_test_tree(); // nodes: a.txt (idx 0), b.txt (idx 1)
+        tree.cursor = 0;
+        // Node 0 is a find match with character positions for "a" (byte 0)
+        let highlight_indices = vec![0];
+        let mut positions = HashMap::new();
+        positions.insert(0, vec![0]); // 'a' in "a.txt"
+        let buf = render_tree_with_highlights(&mut tree, None, &highlight_indices, &positions);
+
+        // Find the name area on row 0 — icon + space precedes the name.
+        // The name "a.txt" starts after the icon span. Check a cell in the name area.
+        // The first char 'a' should have UNDERLINED (it's a match char on the cursor row).
+        let mut found_underlined = false;
+        for x in 0..40 {
+            let cell = buf.cell((x, 0)).unwrap();
+            if cell.symbol() == "a" && cell.modifier.contains(Modifier::REVERSED) {
+                // This is likely the 'a' in "a.txt" on the cursor row
+                found_underlined = cell.modifier.contains(Modifier::UNDERLINED);
+                break;
+            }
+        }
+        assert!(
+            found_underlined,
+            "cursor row should show UNDERLINED on matched char 'a'"
+        );
+    }
+
+    #[test]
+    fn hover_row_shows_underline_on_find_match() {
+        let mut tree = make_test_tree();
+        tree.cursor = 1; // cursor elsewhere
+        let highlight_indices = vec![0];
+        let mut positions = HashMap::new();
+        positions.insert(0, vec![0]);
+        // Hover on row 0 which is node 0
+        let buf = render_tree_with_highlights(&mut tree, Some(0), &highlight_indices, &positions);
+
+        let mut found_underlined = false;
+        for x in 0..40 {
+            let cell = buf.cell((x, 0)).unwrap();
+            if cell.symbol() == "a" && cell.modifier.contains(Modifier::REVERSED) {
+                found_underlined = cell.modifier.contains(Modifier::UNDERLINED);
+                break;
+            }
+        }
+        assert!(
+            found_underlined,
+            "hover row should show UNDERLINED on matched char 'a'"
+        );
     }
 
     #[test]
