@@ -230,7 +230,7 @@ impl Widget for SearchBar<'_> {
             input_x,
             area.y,
             display_text,
-            Style::default().fg(Color::White).bg(bg),
+            Style::default().fg(Color::Indexed(15)).bg(bg),
         );
 
         // Draw cursor
@@ -240,7 +240,7 @@ impl Widget for SearchBar<'_> {
             self.state.cursor_pos
         };
         if let Some(cell) = buf.cell_mut((input_x + cursor_display_pos as u16, area.y)) {
-            cell.set_style(Style::default().fg(Color::Black).bg(Color::White));
+            cell.set_style(Style::default().fg(Color::Black).bg(Color::Indexed(15)));
             if cell.symbol() == " " || cell.symbol().is_empty() {
                 cell.set_symbol(" ");
             }

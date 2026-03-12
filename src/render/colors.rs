@@ -33,6 +33,10 @@ pub const DIR_COLOR: Color = Color::Yellow;
 pub const DEFAULT_FG: Color = Color::Reset;
 pub const FIND_MATCH: Color = Color::Cyan;
 
+// Bright overlay colors — ANSI 15/12 for high-contrast popups
+pub const POPUP_WHITE: Color = Color::Indexed(15); // bright white (ANSI 15)
+pub const POPUP_BLUE: Color = Color::Indexed(12); // bright blue  (ANSI 12)
+
 // ── Adaptive style helpers (REVERSED-based, no hardcoded bg) ──────────
 
 /// Tree-view hover row: subtle reverse + dim
@@ -45,32 +49,32 @@ pub fn hover_style() -> Style {
 /// color bleed when the terminal retains stale state from prior frames.
 pub fn popup_base() -> Style {
     Style::default()
-        .fg(Color::White)
+        .fg(POPUP_WHITE)
         .bg(Color::Black)
         .add_modifier(Modifier::REVERSED)
 }
 
-/// Popup selected item: blue background with bold white text
+/// Popup selected item: bright blue background with bright white text
 pub fn popup_selected() -> Style {
     Style::reset()
-        .bg(Color::Blue)
-        .fg(Color::White)
+        .bg(POPUP_BLUE)
+        .fg(POPUP_WHITE)
         .add_modifier(Modifier::BOLD)
 }
 
-/// Popup selected danger item (e.g. Delete): red background with bold white text
+/// Popup selected danger item (e.g. Delete): red background with bright white text
 pub fn popup_selected_danger() -> Style {
     Style::reset()
         .bg(Color::Red)
-        .fg(Color::White)
+        .fg(POPUP_WHITE)
         .add_modifier(Modifier::BOLD)
 }
 
-/// Popup dim text (separators, hints): explicit White/Black + REVERSED + DIM.
+/// Popup dim text (separators, hints): explicit bright white/Black + REVERSED + DIM.
 /// Same explicit-color rationale as `popup_base()`.
 pub fn popup_dim() -> Style {
     Style::default()
-        .fg(Color::White)
+        .fg(POPUP_WHITE)
         .bg(Color::Black)
         .add_modifier(Modifier::REVERSED | Modifier::DIM)
 }
@@ -115,7 +119,7 @@ mod tests {
             for col in 0..area.width {
                 let cell = buf.cell((col, row)).unwrap();
                 assert_eq!(cell.symbol(), " ", "symbol at ({col},{row})");
-                assert_eq!(cell.fg, Color::White, "fg at ({col},{row})");
+                assert_eq!(cell.fg, POPUP_WHITE, "fg at ({col},{row})");
                 assert_eq!(cell.bg, Color::Black, "bg at ({col},{row})");
                 assert!(
                     cell.modifier.contains(Modifier::REVERSED),

@@ -456,13 +456,13 @@ mod tests {
         );
         assert_eq!(
             cell.bg,
-            ratatui::style::Color::Blue,
-            "selected item should have Blue bg"
+            ratatui::style::Color::Indexed(12),
+            "selected item should have bright blue bg"
         );
         assert_eq!(
             cell.fg,
-            ratatui::style::Color::White,
-            "selected item should have White fg"
+            ratatui::style::Color::Indexed(15),
+            "selected item should have bright white fg"
         );
     }
 
@@ -565,8 +565,8 @@ mod tests {
         );
         assert_eq!(
             cell.fg,
-            ratatui::style::Color::White,
-            "selected Delete should have White fg"
+            ratatui::style::Color::Indexed(15),
+            "selected Delete should have bright white fg"
         );
         assert!(
             cell.modifier.contains(Modifier::BOLD),

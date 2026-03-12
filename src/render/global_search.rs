@@ -76,7 +76,7 @@ impl Widget for GlobalSearchOverlay<'_> {
             input_y,
             query_display,
             Style::default()
-                .fg(Color::White)
+                .fg(Color::Indexed(15))
                 .add_modifier(Modifier::REVERSED),
         );
 
@@ -87,7 +87,7 @@ impl Widget for GlobalSearchOverlay<'_> {
             self.state.cursor_pos
         };
         if let Some(cell) = buf.cell_mut((input_x + cursor_pos as u16, input_y)) {
-            cell.set_style(Style::default().fg(Color::Black).bg(Color::White));
+            cell.set_style(Style::default().fg(Color::Black).bg(Color::Indexed(15)));
             if cell.symbol() == " " || cell.symbol().is_empty() {
                 cell.set_symbol(" ");
             }
