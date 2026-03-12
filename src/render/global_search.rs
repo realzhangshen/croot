@@ -32,14 +32,7 @@ impl Widget for GlobalSearchOverlay<'_> {
         let border_style = colors::popup_dim();
 
         // Fill background
-        for row in dialog.y..dialog.y + dialog.height {
-            for col in dialog.x..dialog.x + dialog.width {
-                if let Some(cell) = buf.cell_mut((col, row)) {
-                    cell.set_style(base);
-                    cell.set_symbol(" ");
-                }
-            }
-        }
+        colors::clear_region(buf, dialog, base);
 
         // Draw border
         draw_border(buf, dialog, border_style);

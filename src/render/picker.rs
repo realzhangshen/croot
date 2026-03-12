@@ -238,14 +238,7 @@ impl PickerWidget {
         let title_style = base.add_modifier(Modifier::BOLD);
 
         // Fill background
-        for dy in 0..dialog_rect.height {
-            for dx in 0..dialog_rect.width {
-                if let Some(cell) = buf.cell_mut((dialog_rect.x + dx, dialog_rect.y + dy)) {
-                    cell.set_style(base);
-                    cell.set_symbol(" ");
-                }
-            }
-        }
+        colors::clear_region(buf, dialog_rect, base);
 
         draw_border(buf, dialog_rect, base);
 

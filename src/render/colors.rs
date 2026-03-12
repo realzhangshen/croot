@@ -1,4 +1,8 @@
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::{
+    buffer::Buffer,
+    layout::Rect,
+    style::{Color, Modifier, Style},
+};
 
 // Git status colors — ANSI 16 so they adapt to any terminal theme
 pub const GIT_MODIFIED: Color = Color::Yellow;
@@ -60,4 +64,56 @@ pub fn popup_selected_danger() -> Style {
 /// Popup dim text (separators, hints): reversed + dim
 pub fn popup_dim() -> Style {
     Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
+}
+
+/// Clear a rectangular region and apply a fresh style.
+/// Resets each cell first to prevent color bleed from underlying content.
+pub fn clear_region(buf: &mut Buffer, rect: Rect, style: Style) {
+    for row in rect.y..rect.y + rect.height {
+        for col in rect.x..rect.x + rect.width {
+            if let Some(cell) = buf.cell_mut((col, row)) {
+                cell.reset();
+                cell.set_style(style);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clear_region_wipes_preexisting_state() {
+        let area = Rect::new(0, 0, 4, 3);
+        let mut buf = Buffer::empty(area);
+
+        // Pre-fill with colored content
+        for row in 0..area.height {
+            for col in 0..area.width {
+                if let Some(cell) = buf.cell_mut((col, row)) {
+                    cell.set_symbol("X");
+                    cell.set_style(Style::default().fg(Color::Red).bg(Color::Green));
+                }
+            }
+        }
+
+        // Apply clear_region with popup_base()
+        clear_region(&mut buf, area, popup_base());
+
+        // Every cell should be fully reset + popup_base applied
+        for row in 0..area.height {
+            for col in 0..area.width {
+                let cell = buf.cell((col, row)).unwrap();
+                assert_eq!(cell.symbol(), " ", "symbol at ({col},{row})");
+                assert_eq!(cell.fg, Color::Reset, "fg at ({col},{row})");
+                assert_eq!(cell.bg, Color::Reset, "bg at ({col},{row})");
+                assert!(
+                    cell.modifier.contains(Modifier::REVERSED),
+                    "modifier at ({col},{row}): {:?}",
+                    cell.modifier
+                );
+            }
+        }
+    }
 }

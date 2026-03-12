@@ -286,14 +286,7 @@ impl Widget for ContextMenuWidget<'_> {
         let separator_style = colors::popup_dim();
 
         // Fill background with REVERSED base
-        for y in menu_rect.y..menu_rect.y + menu_rect.height {
-            for x in menu_rect.x..menu_rect.x + menu_rect.width {
-                if let Some(cell) = buf.cell_mut((x, y)) {
-                    cell.set_style(base);
-                    cell.set_symbol(" ");
-                }
-            }
-        }
+        colors::clear_region(buf, menu_rect, base);
 
         // Top border
         if let Some(cell) = buf.cell_mut((menu_rect.x, menu_rect.y)) {
@@ -499,6 +492,49 @@ mod tests {
             ratatui::style::Color::Red,
             "unselected Delete should not have red bg"
         );
+    }
+
+    #[test]
+    fn no_color_bleed_from_underlying_content() {
+        let state = ContextMenuState::new_for_file(0, 0, 0);
+        let area = ratatui::layout::Rect::new(0, 0, 40, 20);
+        let mut buf = ratatui::buffer::Buffer::empty(area);
+
+        // Pre-fill entire buffer with colored content (simulating syntax highlighting)
+        for row in 0..area.height {
+            for col in 0..area.width {
+                if let Some(cell) = buf.cell_mut((col, row)) {
+                    cell.set_symbol("X");
+                    cell.set_style(
+                        ratatui::style::Style::default()
+                            .fg(ratatui::style::Color::Red)
+                            .bg(ratatui::style::Color::Green),
+                    );
+                }
+            }
+        }
+
+        // Render menu on top
+        let widget = ContextMenuWidget { state: &state };
+        widget.render(area, &mut buf);
+
+        let rect = state.menu_rect(40, 20);
+        // Check interior cells (skip borders) for stale colors
+        for row in (rect.y + 1)..(rect.y + rect.height - 1) {
+            for col in (rect.x + 1)..(rect.x + rect.width - 1) {
+                let cell = buf.cell((col, row)).unwrap();
+                assert_ne!(
+                    cell.fg,
+                    ratatui::style::Color::Green,
+                    "stale Green fg at ({col},{row})"
+                );
+                assert_ne!(
+                    cell.bg,
+                    ratatui::style::Color::Green,
+                    "stale Green bg at ({col},{row})"
+                );
+            }
+        }
     }
 
     #[test]
