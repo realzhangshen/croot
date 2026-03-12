@@ -17,6 +17,38 @@ pub struct Config {
     pub open: OpenConfig,
     #[serde(default)]
     pub keybindings: KeybindingsConfig,
+    #[serde(default)]
+    pub search: SearchConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SearchConfig {
+    #[serde(default = "default_fd_command")]
+    pub fd_command: String,
+    #[serde(default = "default_rg_command")]
+    pub rg_command: String,
+    #[serde(default = "default_max_results")]
+    pub max_results: usize,
+}
+
+fn default_fd_command() -> String {
+    "fd".into()
+}
+fn default_rg_command() -> String {
+    "rg".into()
+}
+fn default_max_results() -> usize {
+    500
+}
+
+impl Default for SearchConfig {
+    fn default() -> Self {
+        Self {
+            fd_command: default_fd_command(),
+            rg_command: default_rg_command(),
+            max_results: default_max_results(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -38,6 +70,9 @@ pub struct KeybindingsConfig {
     pub open_externally: Option<String>,
     pub collapse_all: Option<String>,
     pub search: Option<String>,
+    pub filter: Option<String>,
+    pub global_search: Option<String>,
+    pub global_search_content: Option<String>,
     pub goto_top: Option<String>,
     pub goto_bottom: Option<String>,
     pub branch_picker: Option<String>,
@@ -299,6 +334,9 @@ auto_preview = false
 # open_externally = "x"
 # collapse_all = "W"
 # search = "/"
+# filter = "f"
+# global_search = "s"
+# global_search_content = "S"
 # goto_top = "g"
 # goto_bottom = "G"
 # branch_picker = "b"

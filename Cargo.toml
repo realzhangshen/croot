@@ -33,6 +33,7 @@ unicode-width = "0.2"
 arboard = "3"
 pulldown-cmark = { version = "0.12", default-features = false }
 globset = "0.4"
+regex = "1"
 shell-words = "1"
 
 [lints.rust]

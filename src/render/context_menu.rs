@@ -26,7 +26,7 @@ pub enum MenuAction {
     TogglePreview,
     Refresh,
     CollapseAll,
-    StartSearch,
+    StartFind,
 }
 
 /// State for the visible context menu.
@@ -124,8 +124,8 @@ impl ContextMenuState {
                     action: MenuAction::TogglePreview,
                 },
                 MenuItem {
-                    label: "Search".into(),
-                    action: MenuAction::StartSearch,
+                    label: "Find".into(),
+                    action: MenuAction::StartFind,
                 },
             ],
         }
@@ -440,7 +440,7 @@ mod tests {
         assert_eq!(state.items[3].action, MenuAction::Refresh);
         assert_eq!(state.items[4].action, MenuAction::CollapseAll);
         assert_eq!(state.items[5].action, MenuAction::TogglePreview);
-        assert_eq!(state.items[6].action, MenuAction::StartSearch);
+        assert_eq!(state.items[6].action, MenuAction::StartFind);
     }
 
     #[test]

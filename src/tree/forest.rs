@@ -385,6 +385,64 @@ impl FileTree {
         guides
     }
 
+    /// Build a list of node indices that are actually displayable on screen,
+    /// skipping intermediate nodes in compact chains.
+    pub fn build_displayable_indices(&self) -> Vec<usize> {
+        let mut indices = Vec::with_capacity(self.nodes.len());
+        let mut i = 0;
+        while i < self.nodes.len() {
+            indices.push(i);
+            let chain = self.compact_chain_len(i);
+            i += chain + 1;
+        }
+        indices
+    }
+
+    /// Get the display name for a node, using the compact chain name if applicable.
+    pub fn compact_display_name_for(&self, idx: usize) -> String {
+        let chain_len = self.compact_chain_len(idx);
+        if chain_len > 0 {
+            self.compact_display_name(idx, chain_len)
+        } else {
+            self.nodes[idx].name.clone()
+        }
+    }
+
+    /// Navigate the tree to a target path, expanding parent directories as needed.
+    /// Returns true if the path was found and cursor set.
+    pub fn navigate_to_path(&mut self, target: &std::path::Path) -> bool {
+        // First check if target is already visible in nodes
+        if let Some(idx) = self.nodes.iter().position(|n| n.path == target) {
+            self.cursor = idx;
+            return true;
+        }
+
+        // Expand parent directories along the path
+        let rel = match target.strip_prefix(&self.root) {
+            Ok(r) => r,
+            Err(_) => return false,
+        };
+
+        let mut current_path = self.root.clone();
+        for component in rel.components() {
+            current_path = current_path.join(component.as_os_str());
+
+            if let Some(idx) = self.nodes.iter().position(|n| n.path == current_path) {
+                if current_path == target {
+                    self.cursor = idx;
+                    return true;
+                }
+                if self.nodes[idx].is_dir() && !self.nodes[idx].is_expanded {
+                    self.expand(idx);
+                }
+            } else {
+                return false;
+            }
+        }
+
+        false
+    }
+
     /// Precompute connector guides for all nodes in O(N) total using a reverse scan.
     /// Returns a Vec where entry[i] is the guides Vec for node i.
     pub fn precompute_all_guides(&self) -> Vec<Vec<bool>> {

@@ -73,15 +73,17 @@ pub enum Action {
     DialogLeft,
     /// Dialog input: move cursor right.
     DialogRight,
-    /// Start search mode.
-    StartSearch,
+    /// Start Find mode (jump to match, no filtering).
+    StartFind,
+    /// Start Filter mode (reduce tree to matches + ancestors).
+    StartFilter,
     /// Search input: typed a character.
     SearchChar(char),
     /// Search input: backspace.
     SearchBackspace,
-    /// Search input: confirm search (keep filter, return to normal).
+    /// Search input: confirm search.
     SearchConfirm,
-    /// Search input: cancel search (clear filter).
+    /// Search input: cancel search.
     SearchCancel,
     /// Search input: move cursor.
     SearchLeft,
@@ -115,6 +117,22 @@ pub enum Action {
     PickerUp,
     /// Picker navigation: move down.
     PickerDown,
+    /// Start global search for file names (fd).
+    StartGlobalSearch,
+    /// Start global search for file contents (rg).
+    StartGlobalSearchContent,
+    /// Global search input: typed a character.
+    GlobalSearchChar(char),
+    /// Global search input: backspace.
+    GlobalSearchBackspace,
+    /// Global search: confirm selection (navigate to result).
+    GlobalSearchConfirm,
+    /// Global search: cancel.
+    GlobalSearchCancel,
+    /// Global search: move selection up.
+    GlobalSearchUp,
+    /// Global search: move selection down.
+    GlobalSearchDown,
     None,
 }
 
@@ -126,6 +144,7 @@ pub enum InputMode {
     Dialog,
     Search,
     Picker,
+    GlobalSearch,
 }
 
 /// A key binding: a key code plus modifiers.
@@ -159,11 +178,17 @@ pub fn build_keybinding_map(config: &KeybindingsConfig) -> KeybindingMap {
         (&config.open_in_editor, Action::OpenInEditor),
         (&config.open_externally, Action::OpenExternally),
         (&config.collapse_all, Action::CollapseAll),
-        (&config.search, Action::StartSearch),
+        (&config.search, Action::StartFind),
+        (&config.filter, Action::StartFilter),
         (&config.goto_top, Action::GotoTop),
         (&config.goto_bottom, Action::GotoBottom),
         (&config.branch_picker, Action::OpenBranchPicker),
         (&config.enter, Action::EnterKey),
+        (&config.global_search, Action::StartGlobalSearch),
+        (
+            &config.global_search_content,
+            Action::StartGlobalSearchContent,
+        ),
     ];
 
     for (opt, action) in entries {
@@ -279,6 +304,19 @@ pub fn handle_key_dialog(key: KeyEvent) -> Action {
         KeyCode::Left => Action::DialogLeft,
         KeyCode::Right => Action::DialogRight,
         KeyCode::Char(c) => Action::DialogChar(c),
+        _ => Action::None,
+    }
+}
+
+/// Map a keyboard event in global search mode.
+pub fn handle_key_global_search(key: KeyEvent) -> Action {
+    match key.code {
+        KeyCode::Esc => Action::GlobalSearchCancel,
+        KeyCode::Enter => Action::GlobalSearchConfirm,
+        KeyCode::Backspace => Action::GlobalSearchBackspace,
+        KeyCode::Up | KeyCode::BackTab => Action::GlobalSearchUp,
+        KeyCode::Down | KeyCode::Tab => Action::GlobalSearchDown,
+        KeyCode::Char(c) => Action::GlobalSearchChar(c),
         _ => Action::None,
     }
 }

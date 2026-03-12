@@ -10,7 +10,7 @@ use ratatui::{
 
 use crate::config::TreeConfig;
 use crate::tree::forest::FileTree;
-use crate::tree::node::GitStatus;
+use crate::tree::node::{GitStatus, TreeNode};
 
 use super::colors;
 use super::icons;
@@ -18,8 +18,10 @@ use super::icons;
 pub struct TreeView<'a> {
     pub config: &'a TreeConfig,
     pub hover_row: Option<usize>,
-    /// When non-empty, only show nodes at these indices (search filter).
+    /// When non-empty, only show nodes at these indices (filter mode).
     pub filter_indices: &'a [usize],
+    /// When non-empty, highlight (underline) nodes at these indices (find mode).
+    pub highlight_indices: &'a [usize],
 }
 
 impl StatefulWidget for TreeView<'_> {
@@ -39,20 +41,33 @@ impl StatefulWidget for TreeView<'_> {
         }
 
         let height = area.height as usize;
+        let is_filtered = !self.filter_indices.is_empty();
 
         // Build a list of visible node indices, skipping compacted intermediate dirs.
         // When filter is active, use filtered indices instead.
-        let visible_indices = if self.filter_indices.is_empty() {
-            build_visible_indices(state, height)
-        } else {
+        let visible_indices = if is_filtered {
             build_filtered_visible(state, self.filter_indices, height)
+        } else {
+            build_visible_indices(state, height)
         };
 
         // Store for mouse click resolution
         state.rendered_indices.clone_from(&visible_indices);
 
-        // Precompute all connector guides in O(N) instead of O(D×N) per node
-        let all_guides = state.precompute_all_guides();
+        // Precompute guides: use filtered guides when in filter mode
+        let filtered_guides = if is_filtered {
+            Some(precompute_filtered_guides(
+                &state.nodes,
+                self.filter_indices,
+            ))
+        } else {
+            Option::None
+        };
+        let all_guides = if filtered_guides.is_none() {
+            state.precompute_all_guides()
+        } else {
+            Vec::new()
+        };
 
         for (row, &absolute_idx) in visible_indices.iter().enumerate() {
             let y = area.y + row as u16;
@@ -64,8 +79,16 @@ impl StatefulWidget for TreeView<'_> {
             let is_cursor = absolute_idx == state.cursor;
             let is_hovered = self.hover_row == Some(row);
 
-            // Check if this node starts a compact chain
-            let chain_len = state.compact_chain_len(absolute_idx);
+            // Check if this node is highlighted (Find mode match)
+            let is_highlighted = !self.highlight_indices.is_empty()
+                && self.highlight_indices.binary_search(&absolute_idx).is_ok();
+
+            // In filter mode, disable compaction (semantics unclear after filtering)
+            let chain_len = if is_filtered {
+                0
+            } else {
+                state.compact_chain_len(absolute_idx)
+            };
 
             let mut spans = Vec::new();
 
@@ -90,8 +113,22 @@ impl StatefulWidget for TreeView<'_> {
                 }
             };
 
-            // Tree connectors (using precomputed guides)
-            let guides = &all_guides[absolute_idx];
+            // Tree connectors
+            let guides: &[bool] = if let Some(ref fg) = filtered_guides {
+                // Look up position in the full filter_indices list
+                let pos = self
+                    .filter_indices
+                    .binary_search(&absolute_idx)
+                    .unwrap_or(0);
+                if pos < fg.len() {
+                    &fg[pos]
+                } else {
+                    &[]
+                }
+            } else {
+                &all_guides[absolute_idx]
+            };
+
             for (d, &has_continuation) in guides.iter().enumerate() {
                 if d == 0 && node.depth == 0 {
                     continue;
@@ -105,7 +142,15 @@ impl StatefulWidget for TreeView<'_> {
 
             // Branch connector for this node
             if node.depth > 0 {
-                let is_last = state.is_last_sibling(absolute_idx);
+                let is_last = if is_filtered {
+                    let pos = self
+                        .filter_indices
+                        .binary_search(&absolute_idx)
+                        .unwrap_or(0);
+                    is_last_visible_sibling(&state.nodes, self.filter_indices, pos)
+                } else {
+                    state.is_last_sibling(absolute_idx)
+                };
                 let branch = if is_last { "└─" } else { "├─" };
                 spans.push(Span::styled(
                     branch,
@@ -149,6 +194,10 @@ impl StatefulWidget for TreeView<'_> {
                 }
                 if is_ignored {
                     s = s.add_modifier(Modifier::DIM);
+                }
+                // Add underline for highlighted matches (Find mode), but not on cursor row
+                if is_highlighted && !is_cursor {
+                    s = s.add_modifier(Modifier::UNDERLINED);
                 }
                 row_style(s)
             };
@@ -285,6 +334,57 @@ fn build_filtered_visible(
     filter_indices[start..end].to_vec()
 }
 
+/// Check if a node at `pos` in `visible_indices` is the last visible sibling at its depth.
+fn is_last_visible_sibling(nodes: &[TreeNode], visible_indices: &[usize], pos: usize) -> bool {
+    if pos >= visible_indices.len() {
+        return true;
+    }
+    let depth = nodes[visible_indices[pos]].depth;
+
+    for &next_idx in &visible_indices[pos + 1..] {
+        let next_depth = nodes[next_idx].depth;
+        if next_depth <= depth {
+            return next_depth < depth;
+        }
+    }
+    true
+}
+
+/// Precompute connector guides for a filtered subset of nodes.
+/// Returns one Vec<bool> per entry in `visible_indices`.
+fn precompute_filtered_guides(nodes: &[TreeNode], visible_indices: &[usize]) -> Vec<Vec<bool>> {
+    let n = visible_indices.len();
+    if n == 0 {
+        return Vec::new();
+    }
+
+    let max_depth = visible_indices
+        .iter()
+        .map(|&idx| nodes[idx].depth)
+        .max()
+        .unwrap_or(0);
+
+    let mut has_more = vec![false; max_depth + 1];
+    let mut rev_results: Vec<Vec<bool>> = Vec::with_capacity(n);
+
+    for &idx in visible_indices.iter().rev() {
+        let depth = nodes[idx].depth;
+        let mut guides = vec![false; depth];
+        for (d, guide) in guides.iter_mut().enumerate() {
+            *guide = has_more[d];
+        }
+        rev_results.push(guides);
+
+        has_more[depth] = true;
+        for item in &mut has_more[(depth + 1)..=max_depth] {
+            *item = false;
+        }
+    }
+
+    rev_results.reverse();
+    rev_results
+}
+
 fn git_status_style(status: GitStatus) -> Style {
     match status {
         GitStatus::Modified => Style::default().fg(colors::GIT_MODIFIED),
@@ -319,8 +419,6 @@ fn git_status_marker(status: GitStatus) -> &'static str {
 }
 
 // ── Info columns ─────────────────────────────────────────────────────────
-
-use crate::tree::node::TreeNode;
 
 /// Build the right-aligned info text combining size and/or modified time.
 fn build_info_text(node: &TreeNode, show_size: bool, show_modified: bool) -> String {
@@ -490,6 +588,7 @@ mod tests {
             config: &config,
             hover_row,
             filter_indices: &[],
+            highlight_indices: &[],
         };
         widget.render(area, &mut buf, tree);
         buf
@@ -550,5 +649,49 @@ mod tests {
         // 2024-01-18 = 1705536000
         let s = format_epoch_date(1_705_536_000);
         assert!(s.starts_with("Jan"), "got: {s}");
+    }
+
+    #[test]
+    fn is_last_visible_sibling_basic() {
+        let nodes = vec![
+            TreeNode::new(PathBuf::from("a"), NodeKind::File, 0),
+            TreeNode::new(PathBuf::from("b"), NodeKind::File, 0),
+            TreeNode::new(PathBuf::from("c"), NodeKind::File, 0),
+        ];
+        let visible = vec![0, 1, 2];
+        assert!(!is_last_visible_sibling(&nodes, &visible, 0));
+        assert!(!is_last_visible_sibling(&nodes, &visible, 1));
+        assert!(is_last_visible_sibling(&nodes, &visible, 2));
+    }
+
+    #[test]
+    fn is_last_visible_sibling_filtered() {
+        // Only nodes 0 and 2 are visible (1 is filtered out)
+        let nodes = vec![
+            TreeNode::new(PathBuf::from("a"), NodeKind::File, 0),
+            TreeNode::new(PathBuf::from("b"), NodeKind::File, 0),
+            TreeNode::new(PathBuf::from("c"), NodeKind::File, 0),
+        ];
+        let visible = vec![0, 2];
+        assert!(!is_last_visible_sibling(&nodes, &visible, 0));
+        assert!(is_last_visible_sibling(&nodes, &visible, 1));
+    }
+
+    #[test]
+    fn precompute_filtered_guides_basic() {
+        let nodes = vec![
+            TreeNode::new(PathBuf::from("dir"), NodeKind::Directory, 0),
+            TreeNode::new(PathBuf::from("dir/a"), NodeKind::File, 1),
+            TreeNode::new(PathBuf::from("dir/b"), NodeKind::File, 1),
+        ];
+        let visible = vec![0, 1, 2];
+        let guides = precompute_filtered_guides(&nodes, &visible);
+        assert_eq!(guides.len(), 3);
+        assert_eq!(guides[0], Vec::<bool>::new()); // depth 0 → no guides
+                                                   // guides[d] tracks whether depth d has a continuation below.
+                                                   // For depth-1 nodes, guides[0] = whether there's a depth-0 node below.
+                                                   // There isn't (node 0 is the only depth-0 node and it's above both), so [false].
+        assert_eq!(guides[1], vec![false]);
+        assert_eq!(guides[2], vec![false]);
     }
 }

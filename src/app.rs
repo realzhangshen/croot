@@ -20,8 +20,8 @@ use crate::cmux::bridge::CmuxBridge;
 use crate::config::Config;
 use crate::git::status::GitState;
 use crate::input::handler::{
-    build_keybinding_map, handle_key, handle_key_dialog, handle_key_menu, handle_key_picker,
-    handle_key_search, Action, InputMode, KeybindingMap,
+    build_keybinding_map, handle_key, handle_key_dialog, handle_key_global_search, handle_key_menu,
+    handle_key_picker, handle_key_search, Action, InputMode, KeybindingMap,
 };
 use crate::input::mouse::{handle_mouse, ClickTracker};
 use crate::layout::{self, FocusPane, PreviewLayout};
@@ -29,10 +29,13 @@ use crate::preview::loader::{load_preview, LoadedPreview};
 use crate::preview::state::{PreviewKind, PreviewState};
 use crate::render::colors;
 use crate::render::context_menu::{ContextMenuState, ContextMenuWidget, MenuAction};
+use crate::render::global_search::GlobalSearchOverlay;
 use crate::render::input_dialog::{DialogKind, InputDialogState, InputDialogWidget};
 use crate::render::picker::{PickerState, PickerWidget};
 use crate::render::preview_view::PreviewView;
-use crate::render::search_bar::{fuzzy_match, SearchBar, SearchState};
+use crate::render::search_bar::{
+    do_match, GlobalSearchResult, GlobalSearchType, SearchBar, SearchMode, SearchState,
+};
 use crate::render::status_bar::{HyperlinkRegion, StatusBar};
 use crate::render::tree_view::TreeView;
 use crate::tree::forest::FileTree;
@@ -71,8 +74,8 @@ pub struct App {
     picker_state: Option<PickerState>,
     // Search state
     search_state: SearchState,
-    /// Filtered node indices when search is active. Empty = no filter.
-    search_filtered: Vec<usize>,
+    /// Handle for the current async global search task.
+    global_search_handle: Option<JoinHandle<()>>,
     // Hyperlink regions for post-render OSC 8 emission
     hyperlink_regions: Vec<HyperlinkRegion>,
     // Whether Kitty keyboard enhancement protocol is active
@@ -130,8 +133,8 @@ impl App {
             context_menu: None,
             input_dialog: None,
             picker_state: None,
-            search_state: SearchState::new(),
-            search_filtered: Vec::new(),
+            search_state: SearchState::new(SearchMode::Find),
+            global_search_handle: None,
             hyperlink_regions: Vec::new(),
             enhanced_keyboard,
             click_tracker: ClickTracker::new(),
@@ -158,6 +161,10 @@ impl App {
 
         // Channel for receiving loaded preview results
         let (preview_tx, mut preview_rx) = mpsc::channel::<(PathBuf, LoadedPreview)>(4);
+
+        // Channel for receiving global search results
+        let (search_tx, mut search_rx) =
+            mpsc::channel::<(u64, Vec<GlobalSearchResult>, Option<String>)>(4);
 
         // Trigger initial preview load if auto_preview is on
         if self.preview_visible {
@@ -192,8 +199,9 @@ impl App {
                                 InputMode::Dialog => handle_key_dialog(key),
                                 InputMode::Search => handle_key_search(key),
                                 InputMode::Picker => handle_key_picker(key),
+                                InputMode::GlobalSearch => handle_key_global_search(key),
                             };
-                            post_action = self.handle_action(&action, &preview_tx);
+                            post_action = self.handle_action(&action, &preview_tx, &search_tx);
                         }
                         Some(Ok(Event::Mouse(mouse))) => {
                             use crossterm::event::{MouseButton, MouseEventKind};
@@ -205,6 +213,10 @@ impl App {
                             } else if self.input_mode == InputMode::Dialog {
                                 // R5: Click outside dialog cancels it
                                 post_action = self.handle_dialog_mouse(mouse);
+                            } else if self.input_mode == InputMode::GlobalSearch {
+                                // Click outside global search overlay cancels it
+                                self.search_state.clear();
+                                self.input_mode = InputMode::Normal;
                             } else {
                                 // Route by area priority: status > search > tree/preview
                                 let is_left_down = matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left));
@@ -215,7 +227,7 @@ impl App {
                                     post_action = self.handle_search_bar_click(mouse.column, &preview_tx);
                                 } else {
                                     let action = handle_mouse(mouse, self.tree_area_y, self.tree_area_height, self.preview_area_x, &mut self.click_tracker);
-                                    post_action = self.handle_action(&action, &preview_tx);
+                                    post_action = self.handle_action(&action, &preview_tx, &search_tx);
                                 }
                             }
                         }
@@ -241,8 +253,20 @@ impl App {
                         git.refresh();
                     }
                     self.reapply_git();
+                    self.refresh_search_state();
                     if self.preview_visible {
                         self.trigger_preview_load(&preview_tx);
+                    }
+                }
+                result = search_rx.recv() => {
+                    if let Some((id, results, error)) = result {
+                        if id == self.search_state.request_id {
+                            self.search_state.global_results = results;
+                            self.search_state.global_error = error;
+                            self.search_state.global_loading = false;
+                            self.search_state.global_selected = 0;
+                            self.search_state.global_scroll_offset = 0;
+                        }
                     }
                 }
                 result = preview_rx.recv() => {
@@ -304,7 +328,8 @@ impl App {
     fn draw(&mut self, frame: &mut ratatui::Frame) {
         let size = frame.area();
 
-        let show_search_bar = self.input_mode == InputMode::Search || !self.search_state.is_empty();
+        let show_search_bar = self.input_mode == InputMode::Search
+            || (!self.search_state.is_empty() && self.search_state.mode != SearchMode::Global);
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -367,7 +392,20 @@ impl App {
             TreeView {
                 config: &self.config.tree,
                 hover_row: self.hover_row,
-                filter_indices: &self.search_filtered,
+                filter_indices: if self.search_state.mode == SearchMode::Filter
+                    && !self.search_state.visible_indices.is_empty()
+                {
+                    &self.search_state.visible_indices
+                } else {
+                    &[]
+                },
+                highlight_indices: if self.search_state.mode == SearchMode::Find
+                    && !self.search_state.match_indices.is_empty()
+                {
+                    &self.search_state.match_indices
+                } else {
+                    &[]
+                },
             }
             .render(tree_area, frame.buffer_mut(), &mut self.tree);
 
@@ -414,7 +452,20 @@ impl App {
             TreeView {
                 config: &self.config.tree,
                 hover_row: self.hover_row,
-                filter_indices: &self.search_filtered,
+                filter_indices: if self.search_state.mode == SearchMode::Filter
+                    && !self.search_state.visible_indices.is_empty()
+                {
+                    &self.search_state.visible_indices
+                } else {
+                    &[]
+                },
+                highlight_indices: if self.search_state.mode == SearchMode::Find
+                    && !self.search_state.match_indices.is_empty()
+                {
+                    &self.search_state.match_indices
+                } else {
+                    &[]
+                },
             }
             .render(content_area, frame.buffer_mut(), &mut self.tree);
         }
@@ -500,12 +551,21 @@ impl App {
         if let Some(ref mut picker) = self.picker_state {
             PickerWidget::render_mut(picker, size, frame.buffer_mut());
         }
+
+        // Global search overlay
+        if self.input_mode == InputMode::GlobalSearch {
+            let overlay = GlobalSearchOverlay {
+                state: &self.search_state,
+            };
+            overlay.render(size, frame.buffer_mut());
+        }
     }
 
     fn handle_action(
         &mut self,
         action: &Action,
         preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        search_tx: &mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)>,
     ) -> PostAction {
         let mut post = PostAction::None;
         match *action {
@@ -651,19 +711,35 @@ impl App {
                 self.input_mode = InputMode::Normal;
             }
 
-            // Search actions
-            Action::StartSearch => {
+            // Search actions — Find mode
+            Action::StartFind => {
+                self.search_state = SearchState::new(SearchMode::Find);
+                self.search_state.origin_cursor = self.tree.cursor;
+                self.search_state.origin_scroll_offset = self.tree.scroll_offset;
                 self.input_mode = InputMode::Search;
-                self.search_state.clear();
-                self.search_filtered.clear();
+            }
+            // Search actions — Filter mode
+            Action::StartFilter => {
+                self.search_state = SearchState::new(SearchMode::Filter);
+                self.search_state.origin_cursor = self.tree.cursor;
+                self.search_state.origin_scroll_offset = self.tree.scroll_offset;
+                self.input_mode = InputMode::Search;
             }
             Action::SearchChar(ch) => {
                 self.search_state.insert_char(ch);
-                self.update_search_filter();
+                match self.search_state.mode {
+                    SearchMode::Find => self.update_find_matches(),
+                    SearchMode::Filter => self.update_filter_view(),
+                    SearchMode::Global => {}
+                }
             }
             Action::SearchBackspace => {
                 self.search_state.delete_char();
-                self.update_search_filter();
+                match self.search_state.mode {
+                    SearchMode::Find => self.update_find_matches(),
+                    SearchMode::Filter => self.update_filter_view(),
+                    SearchMode::Global => {}
+                }
             }
             Action::SearchLeft => {
                 self.search_state.move_left();
@@ -672,19 +748,93 @@ impl App {
                 self.search_state.move_right();
             }
             Action::SearchConfirm => {
-                self.input_mode = InputMode::Normal;
-                // Keep the filter active
+                match self.search_state.mode {
+                    SearchMode::Find => {
+                        // Exit search, clear highlights, cursor stays
+                        self.input_mode = InputMode::Normal;
+                        self.search_state.clear();
+                    }
+                    SearchMode::Filter => {
+                        // Exit input but keep filter active
+                        self.input_mode = InputMode::Normal;
+                    }
+                    SearchMode::Global => {}
+                }
             }
             Action::SearchCancel => {
+                // Restore cursor and clear all search state
+                self.tree.cursor = self.search_state.origin_cursor;
+                self.tree.scroll_offset = self.search_state.origin_scroll_offset;
                 self.input_mode = InputMode::Normal;
                 self.search_state.clear();
-                self.search_filtered.clear();
             }
             Action::SearchNext => {
                 self.search_navigate_next();
             }
             Action::SearchPrev => {
                 self.search_navigate_prev();
+            }
+            // Global search actions
+            Action::StartGlobalSearch => {
+                self.search_state = SearchState::new(SearchMode::Global);
+                self.search_state.global_search_type = GlobalSearchType::FileName;
+                self.input_mode = InputMode::GlobalSearch;
+            }
+            Action::StartGlobalSearchContent => {
+                self.search_state = SearchState::new(SearchMode::Global);
+                self.search_state.global_search_type = GlobalSearchType::Content;
+                self.input_mode = InputMode::GlobalSearch;
+            }
+            Action::GlobalSearchChar(ch) => {
+                self.search_state.insert_char(ch);
+                self.spawn_global_search(search_tx);
+            }
+            Action::GlobalSearchBackspace => {
+                self.search_state.delete_char();
+                if self.search_state.query.is_empty() {
+                    self.search_state.global_results.clear();
+                    self.search_state.global_error = None;
+                    self.search_state.global_loading = false;
+                } else {
+                    self.spawn_global_search(search_tx);
+                }
+            }
+            Action::GlobalSearchUp => {
+                if self.search_state.global_selected > 0 {
+                    self.search_state.global_selected -= 1;
+                    if self.search_state.global_selected < self.search_state.global_scroll_offset {
+                        self.search_state.global_scroll_offset = self.search_state.global_selected;
+                    }
+                }
+            }
+            Action::GlobalSearchDown => {
+                if !self.search_state.global_results.is_empty()
+                    && self.search_state.global_selected + 1
+                        < self.search_state.global_results.len()
+                {
+                    self.search_state.global_selected += 1;
+                }
+            }
+            Action::GlobalSearchConfirm => {
+                if let Some(result) = self
+                    .search_state
+                    .global_results
+                    .get(self.search_state.global_selected)
+                    .cloned()
+                {
+                    self.input_mode = InputMode::Normal;
+                    self.search_state.clear();
+                    let path = result.path;
+                    self.tree.navigate_to_path(&path);
+                    self.reapply_git();
+                }
+            }
+            Action::GlobalSearchCancel => {
+                self.search_state.clear();
+                self.input_mode = InputMode::Normal;
+                if let Some(handle) = self.global_search_handle.take() {
+                    handle.abort();
+                }
             }
 
             // Open file in editor
@@ -707,15 +857,14 @@ impl App {
             Action::CollapseAll => {
                 self.tree.collapse_all();
                 self.reapply_git();
-                self.update_search_filter();
+                self.refresh_search_state();
                 if self.preview_visible {
                     self.trigger_preview_load(preview_tx);
                 }
             }
-            // Focus search bar without clearing query (R3)
+            // Focus search bar without clearing query
             Action::FocusSearch => {
                 self.input_mode = InputMode::Search;
-                // Don't clear search_state or search_filtered
             }
 
             Action::DoubleClick(row) => {
@@ -773,6 +922,7 @@ impl App {
                     let idx = self.tree.cursor;
                     self.tree.toggle(idx);
                     self.reapply_git();
+                    self.refresh_search_state();
                 } else if let Some(path) = self.tree.selected().map(|n| n.path.clone()) {
                     post = PostAction::OpenEditor(path);
                 }
@@ -808,12 +958,14 @@ impl App {
                 if self.focus == FocusPane::Tree {
                     self.tree.cursor_right();
                     self.reapply_git();
+                    self.refresh_search_state();
                 }
             }
             Action::Toggle => {
                 let idx = self.tree.cursor;
                 self.tree.toggle(idx);
                 self.reapply_git();
+                self.refresh_search_state();
             }
             Action::Refresh => {
                 self.tree.refresh();
@@ -821,7 +973,7 @@ impl App {
                     git.refresh();
                 }
                 self.reapply_git();
-                self.update_search_filter();
+                self.refresh_search_state();
             }
             Action::ScrollUp(n) => {
                 for _ in 0..*n {
@@ -1209,17 +1361,18 @@ impl App {
                     git.refresh();
                 }
                 self.reapply_git();
-                self.update_search_filter();
+                self.refresh_search_state();
             }
             MenuAction::CollapseAll => {
                 self.tree.collapse_all();
                 self.reapply_git();
-                self.update_search_filter();
+                self.refresh_search_state();
             }
-            MenuAction::StartSearch => {
+            MenuAction::StartFind => {
+                self.search_state = SearchState::new(SearchMode::Find);
+                self.search_state.origin_cursor = self.tree.cursor;
+                self.search_state.origin_scroll_offset = self.tree.scroll_offset;
                 self.input_mode = InputMode::Search;
-                self.search_state.clear();
-                self.search_filtered.clear();
             }
         }
 
@@ -1297,17 +1450,18 @@ impl App {
                     git.refresh();
                 }
                 self.reapply_git();
-                self.update_search_filter();
+                self.refresh_search_state();
             }
             MenuAction::CollapseAll => {
                 self.tree.collapse_all();
                 self.reapply_git();
-                self.update_search_filter();
+                self.refresh_search_state();
             }
-            MenuAction::StartSearch => {
+            MenuAction::StartFind => {
+                self.search_state = SearchState::new(SearchMode::Find);
+                self.search_state.origin_cursor = self.tree.cursor;
+                self.search_state.origin_scroll_offset = self.tree.scroll_offset;
                 self.input_mode = InputMode::Search;
-                self.search_state.clear();
-                self.search_filtered.clear();
             }
         }
         PostAction::None
@@ -1400,13 +1554,12 @@ impl App {
                 // Close button clicked → cancel search
                 self.input_mode = InputMode::Normal;
                 self.search_state.clear();
-                self.search_filtered.clear();
                 let _ = (search_y, rows);
                 return PostAction::None;
             }
         }
 
-        // Click elsewhere on search bar → focus search (R3: preserve query)
+        // Click elsewhere on search bar → focus search (preserve query)
         self.input_mode = InputMode::Search;
         PostAction::None
     }
@@ -1601,67 +1754,284 @@ impl App {
 
     // ── Search ───────────────────────────────────────────────────────────
 
-    fn update_search_filter(&mut self) {
+    /// Re-compute search state after structural changes (expand/collapse/refresh).
+    fn refresh_search_state(&mut self) {
         if self.search_state.query.is_empty() {
-            self.search_filtered.clear();
-            self.search_state.match_count = 0;
+            self.search_state.match_indices.clear();
+            self.search_state.visible_indices.clear();
+            self.search_state.current_match = 0;
+            return;
+        }
+        match self.search_state.mode {
+            SearchMode::Find => self.update_find_matches(),
+            SearchMode::Filter => self.update_filter_view(),
+            SearchMode::Global => {} // global search doesn't depend on tree structure
+        }
+    }
+
+    /// Find mode: compute `match_indices` (highlight only, no filtering).
+    fn update_find_matches(&mut self) {
+        if self.search_state.query.is_empty() {
+            self.search_state.match_indices.clear();
+            self.search_state.current_match = 0;
             return;
         }
 
-        self.search_filtered = self
-            .tree
-            .nodes
-            .iter()
-            .enumerate()
-            .filter(|(_, node)| {
-                // Match against the node name or its relative path
-                let rel_path = node
-                    .path
-                    .strip_prefix(&self.root)
-                    .unwrap_or(&node.path)
-                    .to_string_lossy();
-                fuzzy_match(&self.search_state.query, &rel_path)
-                    || fuzzy_match(&self.search_state.query, &node.name)
-            })
-            .map(|(i, _)| i)
-            .collect();
+        let (query, match_mode) = self.search_state.effective_query();
+        let re = self.search_state.compiled_regex.take();
+        let displayable = self.tree.build_displayable_indices();
 
-        self.search_state.match_count = self.search_filtered.len();
+        let mut matches = Vec::new();
+        for idx in displayable {
+            let target_name = self.tree.compact_display_name_for(idx);
+            let rel_path = self.tree.nodes[idx]
+                .path
+                .strip_prefix(&self.root)
+                .unwrap_or(&self.tree.nodes[idx].path)
+                .to_string_lossy()
+                .into_owned();
+            if do_match(match_mode, &query, re.as_ref(), &rel_path)
+                || do_match(match_mode, &query, re.as_ref(), &target_name)
+            {
+                matches.push(idx);
+            }
+        }
 
-        // Move cursor to first match if current cursor isn't in results
-        if !self.search_filtered.is_empty() && !self.search_filtered.contains(&self.tree.cursor) {
-            self.tree.cursor = self.search_filtered[0];
+        self.search_state.compiled_regex = re;
+        self.search_state.match_indices = matches;
+
+        // Jump cursor to the closest match to origin_cursor
+        if self.search_state.match_indices.is_empty() {
+            self.search_state.current_match = 0;
+        } else {
+            let origin = self.search_state.origin_cursor;
+            #[allow(clippy::cast_possible_wrap)]
+            let closest = self
+                .search_state
+                .match_indices
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, &idx)| (idx as isize - origin as isize).unsigned_abs())
+                .map_or(0, |(i, _)| i);
+            self.search_state.current_match = closest;
+            self.tree.cursor = self.search_state.match_indices[closest];
+        }
+    }
+
+    /// Filter mode: compute `match_indices` and `visible_indices` (matches + ancestors).
+    fn update_filter_view(&mut self) {
+        if self.search_state.query.is_empty() {
+            self.search_state.match_indices.clear();
+            self.search_state.visible_indices.clear();
+            self.search_state.current_match = 0;
+            return;
+        }
+
+        let (query, match_mode) = self.search_state.effective_query();
+        let re = self.search_state.compiled_regex.take();
+        let displayable = self.tree.build_displayable_indices();
+
+        // Step 1: find matching displayable nodes
+        let mut matches = Vec::new();
+        for idx in displayable {
+            let target_name = self.tree.compact_display_name_for(idx);
+            let rel_path = self.tree.nodes[idx]
+                .path
+                .strip_prefix(&self.root)
+                .unwrap_or(&self.tree.nodes[idx].path)
+                .to_string_lossy()
+                .into_owned();
+            if do_match(match_mode, &query, re.as_ref(), &rel_path)
+                || do_match(match_mode, &query, re.as_ref(), &target_name)
+            {
+                matches.push(idx);
+            }
+        }
+
+        self.search_state.compiled_regex = re;
+
+        // Step 2: collect ancestors for each match
+        let mut visible_set = std::collections::HashSet::new();
+        for &match_idx in &matches {
+            visible_set.insert(match_idx);
+            // Walk up the tree to find ancestors (nodes with decreasing depth)
+            let match_depth = self.tree.nodes[match_idx].depth;
+            if match_depth > 0 {
+                let mut target_depth = match_depth - 1;
+                for i in (0..match_idx).rev() {
+                    if self.tree.nodes[i].depth == target_depth {
+                        visible_set.insert(i);
+                        if target_depth == 0 {
+                            break;
+                        }
+                        target_depth -= 1;
+                    }
+                }
+            }
+        }
+
+        // Step 3: sort visible set
+        let mut visible: Vec<usize> = visible_set.into_iter().collect();
+        visible.sort_unstable();
+
+        self.search_state.match_indices = matches;
+        self.search_state.visible_indices = visible;
+
+        // Move cursor to first match if not already on one
+        if !self.search_state.match_indices.is_empty()
+            && !self.search_state.match_indices.contains(&self.tree.cursor)
+        {
+            self.tree.cursor = self.search_state.match_indices[0];
+            self.search_state.current_match = 0;
         }
     }
 
     fn search_navigate_next(&mut self) {
-        if self.search_filtered.is_empty() {
+        if self.search_state.match_indices.is_empty() {
             return;
         }
-        // Find the next filtered index after current cursor
-        let next = self
-            .search_filtered
-            .iter()
-            .find(|&&idx| idx > self.tree.cursor)
-            .or_else(|| self.search_filtered.first());
-        if let Some(&idx) = next {
-            self.tree.cursor = idx;
-        }
+        let len = self.search_state.match_indices.len();
+        let next = (self.search_state.current_match + 1) % len;
+        self.search_state.current_match = next;
+        self.tree.cursor = self.search_state.match_indices[next];
     }
 
     fn search_navigate_prev(&mut self) {
-        if self.search_filtered.is_empty() {
+        if self.search_state.match_indices.is_empty() {
             return;
         }
-        let prev = self
-            .search_filtered
-            .iter()
-            .rev()
-            .find(|&&idx| idx < self.tree.cursor)
-            .or_else(|| self.search_filtered.last());
-        if let Some(&idx) = prev {
-            self.tree.cursor = idx;
+        let len = self.search_state.match_indices.len();
+        let prev = if self.search_state.current_match == 0 {
+            len - 1
+        } else {
+            self.search_state.current_match - 1
+        };
+        self.search_state.current_match = prev;
+        self.tree.cursor = self.search_state.match_indices[prev];
+    }
+
+    /// Spawn an async global search (fd or rg) with debounce.
+    fn spawn_global_search(
+        &mut self,
+        search_tx: &mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)>,
+    ) {
+        // Abort previous search
+        if let Some(handle) = self.global_search_handle.take() {
+            handle.abort();
         }
+
+        if self.search_state.query.is_empty() {
+            return;
+        }
+
+        self.search_state.request_id += 1;
+        self.search_state.global_loading = true;
+        let id = self.search_state.request_id;
+        let query = self.search_state.query.clone();
+        let search_type = self.search_state.global_search_type;
+        let root = self.root.clone();
+        let fd_cmd = self.config.search.fd_command.clone();
+        let rg_cmd = self.config.search.rg_command.clone();
+        let max_results = self.config.search.max_results;
+        let tx = search_tx.clone();
+
+        self.global_search_handle = Some(tokio::spawn(async move {
+            // Debounce: wait 200ms before executing
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+            let output = match search_type {
+                GlobalSearchType::FileName => {
+                    tokio::process::Command::new(&fd_cmd)
+                        .args(["--type", "f", "--color", "never", &query])
+                        .current_dir(&root)
+                        .output()
+                        .await
+                }
+                GlobalSearchType::Content => {
+                    tokio::process::Command::new(&rg_cmd)
+                        .args([
+                            "--line-number",
+                            "--no-heading",
+                            "--color",
+                            "never",
+                            "--max-count",
+                            "1",
+                            &query,
+                        ])
+                        .current_dir(&root)
+                        .output()
+                        .await
+                }
+            };
+
+            match output {
+                Ok(out) => {
+                    let stdout = String::from_utf8_lossy(&out.stdout);
+                    let mut results = Vec::new();
+
+                    for line in stdout.lines().take(max_results) {
+                        if line.is_empty() {
+                            continue;
+                        }
+                        match search_type {
+                            GlobalSearchType::FileName => {
+                                let path = root.join(line);
+                                results.push(GlobalSearchResult {
+                                    path,
+                                    display: line.to_string(),
+                                    line: None,
+                                    context: None,
+                                });
+                            }
+                            GlobalSearchType::Content => {
+                                // Format: path:line:content
+                                let mut parts = line.splitn(3, ':');
+                                let file = parts.next().unwrap_or("");
+                                let line_num: Option<usize> =
+                                    parts.next().and_then(|s| s.parse().ok());
+                                let context = parts.next().map(std::string::ToString::to_string);
+                                let path = root.join(file);
+                                results.push(GlobalSearchResult {
+                                    path,
+                                    display: file.to_string(),
+                                    line: line_num,
+                                    context,
+                                });
+                            }
+                        }
+                    }
+
+                    let error = if !out.status.success() && results.is_empty() {
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        if stderr.contains("not found")
+                            || stderr.contains("No such file")
+                            || out.status.code() == Some(127)
+                        {
+                            let cmd_name = match search_type {
+                                GlobalSearchType::FileName => &fd_cmd,
+                                GlobalSearchType::Content => &rg_cmd,
+                            };
+                            Some(format!("{cmd_name} not found"))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    let _ = tx.send((id, results, error)).await;
+                }
+                Err(e) => {
+                    let cmd_name = match search_type {
+                        GlobalSearchType::FileName => &fd_cmd,
+                        GlobalSearchType::Content => &rg_cmd,
+                    };
+                    let _ = tx
+                        .send((id, Vec::new(), Some(format!("{cmd_name}: {e}"))))
+                        .await;
+                }
+            }
+        }));
     }
 
     // ── Utility ─────────────────────────────────────────────────────────

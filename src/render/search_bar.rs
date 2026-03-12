@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -7,21 +9,86 @@ use ratatui::{
 
 use super::colors;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchMode {
+    Find,
+    Filter,
+    Global,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchMode {
+    Fuzzy,
+    Regex,
+    Exact,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GlobalSearchType {
+    FileName,
+    Content,
+}
+
+#[derive(Debug, Clone)]
+pub struct GlobalSearchResult {
+    pub path: PathBuf,
+    pub display: String,
+    pub line: Option<usize>,
+    pub context: Option<String>,
+}
+
 /// State for the search/filter bar.
 #[derive(Debug, Clone)]
 pub struct SearchState {
     pub query: String,
     pub cursor_pos: usize,
-    pub match_count: usize,
+    pub mode: SearchMode,
+    /// Indices of nodes that match the query (sorted).
+    pub match_indices: Vec<usize>,
+    /// Index into `match_indices` for the current match position.
+    pub current_match: usize,
+    /// Indices of nodes visible in filter mode (matches + ancestors, sorted).
+    pub visible_indices: Vec<usize>,
+    /// Cursor position before search started.
+    pub origin_cursor: usize,
+    /// Scroll offset before search started.
+    pub origin_scroll_offset: usize,
+    /// Cached compiled regex for Regex match mode.
+    pub compiled_regex: Option<regex::Regex>,
+    // Global search fields
+    pub global_results: Vec<GlobalSearchResult>,
+    pub global_selected: usize,
+    pub global_scroll_offset: usize,
+    pub global_loading: bool,
+    pub global_error: Option<String>,
+    pub global_search_type: GlobalSearchType,
+    pub request_id: u64,
 }
 
 impl SearchState {
-    pub fn new() -> Self {
+    pub fn new(mode: SearchMode) -> Self {
         Self {
             query: String::new(),
             cursor_pos: 0,
-            match_count: 0,
+            mode,
+            match_indices: Vec::new(),
+            current_match: 0,
+            visible_indices: Vec::new(),
+            origin_cursor: 0,
+            origin_scroll_offset: 0,
+            compiled_regex: None,
+            global_results: Vec::new(),
+            global_selected: 0,
+            global_scroll_offset: 0,
+            global_loading: false,
+            global_error: None,
+            global_search_type: GlobalSearchType::FileName,
+            request_id: 0,
         }
+    }
+
+    pub fn match_count(&self) -> usize {
+        self.match_indices.len()
     }
 
     pub fn insert_char(&mut self, ch: char) {
@@ -63,11 +130,41 @@ impl SearchState {
     pub fn clear(&mut self) {
         self.query.clear();
         self.cursor_pos = 0;
-        self.match_count = 0;
+        self.match_indices.clear();
+        self.current_match = 0;
+        self.visible_indices.clear();
+        self.compiled_regex = None;
+        self.global_results.clear();
+        self.global_selected = 0;
+        self.global_scroll_offset = 0;
+        self.global_loading = false;
+        self.global_error = None;
     }
 
     pub fn is_empty(&self) -> bool {
         self.query.is_empty()
+    }
+
+    /// Parse the query to determine match mode and effective query string.
+    /// Compiles and caches regex when in Regex mode.
+    pub fn effective_query(&mut self) -> (String, MatchMode) {
+        if self.query.starts_with('/') && self.query.len() > 1 {
+            let pattern = self.query[1..].to_string();
+            let needs_recompile = self
+                .compiled_regex
+                .as_ref()
+                .is_none_or(|r| r.as_str() != pattern);
+            if needs_recompile {
+                self.compiled_regex = regex::Regex::new(&pattern).ok();
+            }
+            (pattern, MatchMode::Regex)
+        } else if self.query.starts_with('\'') && self.query.len() > 1 {
+            self.compiled_regex = None;
+            (self.query[1..].to_string(), MatchMode::Exact)
+        } else {
+            self.compiled_regex = None;
+            (self.query.clone(), MatchMode::Fuzzy)
+        }
     }
 }
 
@@ -80,7 +177,6 @@ impl SearchBar<'_> {
     /// Returns the x coordinate where the close button `[×]` starts.
     /// Returns None if close button is not shown.
     pub fn close_button_x(area_x: u16, area_width: u16) -> u16 {
-        // Close button is rendered at the far right: " [×]"
         area_x + area_width.saturating_sub(4)
     }
 }
@@ -98,14 +194,19 @@ impl Widget for SearchBar<'_> {
             }
         }
 
-        // Search icon and prompt
-        let prompt = " / ";
+        // Mode-specific prompt
+        let (prompt, prompt_color) = match self.state.mode {
+            SearchMode::Find => (" / ", Color::Cyan),
+            SearchMode::Filter => (" F ", Color::Yellow),
+            SearchMode::Global => (" S ", Color::Magenta),
+        };
+
         buf.set_string(
             area.x,
             area.y,
             prompt,
             Style::default()
-                .fg(Color::Cyan)
+                .fg(prompt_color)
                 .bg(bg)
                 .add_modifier(Modifier::BOLD),
         );
@@ -147,16 +248,32 @@ impl Widget for SearchBar<'_> {
             0
         };
 
-        // Match count on the right (before close button)
+        // Match info (mode-specific)
         let match_info = if self.state.query.is_empty() {
             String::new()
         } else {
-            format!(" {} matches ", self.state.match_count)
+            match self.state.mode {
+                SearchMode::Find => {
+                    if self.state.match_count() > 0 {
+                        format!(
+                            " {}/{} ",
+                            self.state.current_match + 1,
+                            self.state.match_count()
+                        )
+                    } else {
+                        " 0/0 ".to_string()
+                    }
+                }
+                SearchMode::Filter => {
+                    format!(" {} matches ", self.state.match_count())
+                }
+                SearchMode::Global => String::new(),
+            }
         };
         let right_reserved = match_info.len() as u16 + close_reserve;
         if !match_info.is_empty() && area.width > right_reserved {
             let info_x = area.x + area.width - right_reserved;
-            let info_style = if self.state.match_count > 0 {
+            let info_style = if self.state.match_count() > 0 {
                 Style::default().fg(Color::Green).bg(bg)
             } else {
                 Style::default().fg(Color::Red).bg(bg)
@@ -202,6 +319,32 @@ pub fn fuzzy_match(query: &str, target: &str) -> bool {
     current.is_none()
 }
 
+/// Regex match using a pre-compiled regex.
+pub fn regex_match(re: &regex::Regex, target: &str) -> bool {
+    re.is_match(target)
+}
+
+/// Exact substring match (case-insensitive).
+pub fn exact_match(query: &str, target: &str) -> bool {
+    target
+        .to_ascii_lowercase()
+        .contains(&query.to_ascii_lowercase())
+}
+
+/// Dispatch matching based on mode.
+pub fn do_match(
+    match_mode: MatchMode,
+    query: &str,
+    re: Option<&regex::Regex>,
+    target: &str,
+) -> bool {
+    match match_mode {
+        MatchMode::Fuzzy => fuzzy_match(query, target),
+        MatchMode::Regex => re.is_some_and(|r| regex_match(r, target)),
+        MatchMode::Exact => exact_match(query, target),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,5 +377,73 @@ mod tests {
     #[test]
     fn fuzzy_partial_no_match() {
         assert!(!fuzzy_match("apz", "app.rs"));
+    }
+
+    #[test]
+    fn exact_match_substring() {
+        assert!(exact_match("handler", "input_handler.rs"));
+        assert!(exact_match("Handler", "input_handler.rs"));
+        assert!(!exact_match("xyz", "input_handler.rs"));
+    }
+
+    #[test]
+    fn regex_match_pattern() {
+        let re = regex::Regex::new("^handler").unwrap();
+        assert!(regex_match(&re, "handler.rs"));
+        assert!(!regex_match(&re, "input_handler.rs"));
+    }
+
+    #[test]
+    fn effective_query_fuzzy() {
+        let mut state = SearchState::new(SearchMode::Find);
+        state.query = "handler".to_string();
+        let (q, mode) = state.effective_query();
+        assert_eq!(q, "handler");
+        assert_eq!(mode, MatchMode::Fuzzy);
+    }
+
+    #[test]
+    fn effective_query_regex() {
+        let mut state = SearchState::new(SearchMode::Find);
+        state.query = "/^handler".to_string();
+        let (q, mode) = state.effective_query();
+        assert_eq!(q, "^handler");
+        assert_eq!(mode, MatchMode::Regex);
+        assert!(state.compiled_regex.is_some());
+    }
+
+    #[test]
+    fn effective_query_exact() {
+        let mut state = SearchState::new(SearchMode::Find);
+        state.query = "'handler.rs".to_string();
+        let (q, mode) = state.effective_query();
+        assert_eq!(q, "handler.rs");
+        assert_eq!(mode, MatchMode::Exact);
+    }
+
+    #[test]
+    fn effective_query_invalid_regex_no_panic() {
+        let mut state = SearchState::new(SearchMode::Find);
+        state.query = "/[".to_string();
+        let (_, mode) = state.effective_query();
+        assert_eq!(mode, MatchMode::Regex);
+        assert!(state.compiled_regex.is_none());
+    }
+
+    #[test]
+    fn do_match_dispatches_correctly() {
+        let re = regex::Regex::new("^app").unwrap();
+        assert!(do_match(MatchMode::Fuzzy, "ars", None, "app.rs"));
+        assert!(do_match(MatchMode::Regex, "^app", Some(&re), "app.rs"));
+        assert!(!do_match(MatchMode::Regex, "^app", None, "app.rs"));
+        assert!(do_match(MatchMode::Exact, "app", None, "app.rs"));
+    }
+
+    #[test]
+    fn match_count_reflects_indices() {
+        let mut state = SearchState::new(SearchMode::Find);
+        assert_eq!(state.match_count(), 0);
+        state.match_indices = vec![1, 3, 5];
+        assert_eq!(state.match_count(), 3);
     }
 }

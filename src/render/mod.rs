@@ -1,5 +1,6 @@
 pub mod colors;
 pub mod context_menu;
+pub mod global_search;
 pub mod icons;
 pub mod input_dialog;
 pub mod picker;

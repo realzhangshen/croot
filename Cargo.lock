@@ -354,6 +354,7 @@ dependencies = [
  "notify-debouncer-mini",
  "pulldown-cmark",
  "ratatui",
+ "regex",
  "serde",
  "serde_json",
  "shell-words",
