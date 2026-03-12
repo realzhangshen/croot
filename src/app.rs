@@ -218,9 +218,7 @@ impl App {
                                 // R5: Click outside dialog cancels it
                                 post_action = self.handle_dialog_mouse(mouse);
                             } else if self.input_mode == InputMode::GlobalSearch {
-                                // Click outside global search overlay cancels it
-                                self.search_state.clear();
-                                self.input_mode = InputMode::Normal;
+                                post_action = self.handle_global_search_mouse(mouse);
                             } else {
                                 // Route by area priority: status > search > tree/preview
                                 let is_left_down = matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left));
@@ -2207,5 +2205,142 @@ impl App {
         terminal.clear()?;
 
         Ok(())
+    }
+
+    /// Handle mouse events while in GlobalSearch mode.
+    /// Only left-clicks are meaningful; all other mouse events (moves, scrolls) are ignored.
+    fn handle_global_search_mouse(&mut self, mouse: crossterm::event::MouseEvent) -> PostAction {
+        use crossterm::event::{MouseButton, MouseEventKind};
+
+        // Only respond to left-click; ignore hover, scroll, drag, etc.
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return PostAction::None;
+        }
+
+        // Compute overlay rect (same formula as GlobalSearchOverlay::render)
+        let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+        let area = ratatui::layout::Rect::new(0, 0, cols, rows);
+        let width = (area.width * 3 / 5)
+            .max(40)
+            .min(area.width.saturating_sub(4));
+        let height = (area.height * 3 / 5)
+            .max(10)
+            .min(area.height.saturating_sub(4));
+        let x = area.x + (area.width.saturating_sub(width)) / 2;
+        let y = area.y + (area.height.saturating_sub(height)) / 2;
+
+        let inside = mouse.column >= x
+            && mouse.column < x + width
+            && mouse.row >= y
+            && mouse.row < y + height;
+
+        if !inside {
+            // Click outside overlay → cancel
+            self.search_state.clear();
+            self.input_mode = InputMode::Normal;
+            if let Some(handle) = self.global_search_handle.take() {
+                handle.abort();
+            }
+            return PostAction::None;
+        }
+
+        // Click inside the results area → select + confirm that result
+        let results_y = y + 3;
+        let results_end_y = y + height.saturating_sub(2);
+        if mouse.row >= results_y && mouse.row < results_end_y {
+            let scroll = self.search_state.global_scroll_offset;
+            let clicked_index = scroll + (mouse.row - results_y) as usize;
+            if clicked_index < self.search_state.global_results.len() {
+                self.search_state.global_selected = clicked_index;
+                // Confirm the selection
+                if let Some(result) = self
+                    .search_state
+                    .global_results
+                    .get(self.search_state.global_selected)
+                    .cloned()
+                {
+                    self.input_mode = InputMode::Normal;
+                    self.search_state.clear();
+                    let path = result.path;
+                    self.tree.navigate_to_path(&path);
+                    self.reapply_git();
+                }
+            }
+        }
+
+        // Click on input area or border → no-op
+        PostAction::None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::render::search_bar::{GlobalSearchType, SearchMode, SearchState};
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+
+    /// Helper to create a minimal App rooted in a temp directory.
+    fn test_app() -> App {
+        let dir = std::env::temp_dir().join("croot_test_app");
+        let _ = std::fs::create_dir_all(&dir);
+        App::new(dir, false, Config::default()).expect("test app creation")
+    }
+
+    #[test]
+    fn test_global_search_mouse_move_does_not_cancel() {
+        let mut app = test_app();
+        // Enter GlobalSearch mode
+        app.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.global_search_type = GlobalSearchType::FileName;
+
+        // Simulate a mouse move event
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Moved,
+            column: 10,
+            row: 10,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        app.handle_global_search_mouse(mouse);
+
+        // Mode should still be GlobalSearch
+        assert_eq!(app.input_mode, InputMode::GlobalSearch);
+    }
+
+    #[test]
+    fn test_global_search_scroll_does_not_cancel() {
+        let mut app = test_app();
+        app.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+
+        let mouse = MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 10,
+            row: 10,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        app.handle_global_search_mouse(mouse);
+
+        assert_eq!(app.input_mode, InputMode::GlobalSearch);
+    }
+
+    #[test]
+    fn test_global_search_click_outside_cancels() {
+        let mut app = test_app();
+        app.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.global_search_type = GlobalSearchType::FileName;
+
+        // Click at (0, 0) — guaranteed outside the centered overlay
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 0,
+            row: 0,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        app.handle_global_search_mouse(mouse);
+
+        assert_eq!(app.input_mode, InputMode::Normal);
     }
 }
