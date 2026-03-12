@@ -1,7 +1,7 @@
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::Widget,
 };
@@ -97,10 +97,7 @@ impl StatusBar<'_> {
 
 impl Widget for StatusBar<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let style = Style::default()
-            .fg(colors::STATUS_BAR_FG)
-            .bg(colors::STATUS_BAR_BG)
-            .add_modifier(Modifier::BOLD);
+        let style = Style::default().add_modifier(Modifier::REVERSED);
 
         // Fill background
         for x in area.x..area.x + area.width {
@@ -142,9 +139,8 @@ impl Widget for StatusBar<'_> {
             spans.push(Span::styled(
                 format!(" {status} "),
                 Style::default()
-                    .fg(Color::Black)
-                    .bg(colors::GIT_ADDED)
-                    .add_modifier(Modifier::BOLD),
+                    .fg(colors::GIT_ADDED)
+                    .add_modifier(Modifier::REVERSED),
             ));
         }
 
@@ -216,19 +212,17 @@ mod tests {
     }
 
     #[test]
-    fn test_status_bar_uses_bold_style_with_explicit_colors() {
+    fn test_status_bar_uses_reversed_style() {
         let bar = make_status_bar(Some("main"), "croot", "/tmp", None, None, 0, 0);
         let buf = render_to_buffer(bar, 80);
 
-        // Check a few cells have BOLD modifier and explicit fg/bg
+        // Check a few cells have REVERSED modifier
         for x in 0..5 {
             let cell = buf.cell((x, 0)).unwrap();
             assert!(
-                cell.modifier.contains(Modifier::BOLD),
-                "Cell at x={x} missing BOLD modifier"
+                cell.modifier.contains(Modifier::REVERSED),
+                "Cell at x={x} missing REVERSED modifier"
             );
-            assert_eq!(cell.fg, colors::STATUS_BAR_FG, "Cell at x={x} has wrong fg");
-            assert_eq!(cell.bg, colors::STATUS_BAR_BG, "Cell at x={x} has wrong bg");
         }
     }
 

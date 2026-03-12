@@ -113,6 +113,7 @@ impl StatefulWidget for TreeView<'_> {
                     ),
                     RowMode::Hover => Style::default().add_modifier(
                         Modifier::REVERSED
+                            | Modifier::DIM
                             | (base.add_modifier & (Modifier::BOLD | Modifier::UNDERLINED)),
                     ),
                     RowMode::None => base,
@@ -441,7 +442,7 @@ fn build_name_spans(
             let highlight_style = row_style_fn(
                 base_style
                     .fg(highlight_color)
-                    .add_modifier(Modifier::UNDERLINED | Modifier::BOLD),
+                    .add_modifier(Modifier::UNDERLINED),
             );
             let normal_style = row_style_fn(base_style);
 
@@ -706,19 +707,14 @@ mod tests {
     }
 
     #[test]
-    fn hover_row_has_reversed() {
+    fn hover_row_has_reversed_and_dim() {
         let mut tree = make_test_tree();
         tree.cursor = 0; // cursor on row 0
         let buf = render_tree(&mut tree, Some(1)); // hover on row 1
         let cell = buf.cell((5, 1)).unwrap();
         assert!(
-            cell.modifier.contains(Modifier::REVERSED),
-            "hover row should have REVERSED, got {:?}",
-            cell.modifier
-        );
-        assert!(
-            !cell.modifier.contains(Modifier::DIM),
-            "hover row should NOT have DIM, got {:?}",
+            cell.modifier.contains(Modifier::REVERSED) && cell.modifier.contains(Modifier::DIM),
+            "hover row should have REVERSED | DIM, got {:?}",
             cell.modifier
         );
     }

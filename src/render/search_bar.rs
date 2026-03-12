@@ -189,7 +189,7 @@ impl SearchBar<'_> {
 
 impl Widget for SearchBar<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let bg = colors::SEARCH_BAR_BG;
+        let bg = colors::STATUS_BAR_BG;
         let style = Style::default().fg(Color::Reset).bg(bg);
 
         // Fill background
