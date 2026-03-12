@@ -93,10 +93,18 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
+    // Load config before terminal setup so we know whether to enable mouse
+    let cfg = config::Config::load();
+    let mouse_enabled = cfg.mouse.enabled;
+
     // Terminal setup
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    if mouse_enabled {
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    } else {
+        execute!(stdout, EnterAlternateScreen)?;
+    }
 
     // Enable Kitty keyboard protocol so we can receive Super (Command) modifier
     let enhanced_keyboard = crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false);
@@ -111,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Run app
-    let mut app = App::new(path, enhanced_keyboard)?;
+    let mut app = App::new(path, enhanced_keyboard, cfg)?;
     let result = app.run(&mut terminal).await;
 
     // Terminal teardown
@@ -119,11 +127,15 @@ async fn main() -> anyhow::Result<()> {
         execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags)?;
     }
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    if mouse_enabled {
+        execute!(
+            terminal.backend_mut(),
+            LeaveAlternateScreen,
+            DisableMouseCapture
+        )?;
+    } else {
+        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    }
     terminal.show_cursor()?;
 
     result

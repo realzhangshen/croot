@@ -84,6 +84,8 @@ pub struct App {
     click_tracker: ClickTracker,
     // User-configured keybindings
     keybinding_map: KeybindingMap,
+    // Whether mouse capture is enabled
+    mouse_enabled: bool,
     // Status/search bar y-coordinates for mouse routing
     status_bar_y: u16,
     search_bar_y: Option<u16>,
@@ -92,8 +94,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(root: PathBuf, enhanced_keyboard: bool) -> anyhow::Result<Self> {
-        let config = Config::load();
+    pub fn new(root: PathBuf, enhanced_keyboard: bool, config: Config) -> anyhow::Result<Self> {
         let mut tree = FileTree::new(root.clone(), config.tree.clone());
         let git = GitState::load(&root);
         let cmux = CmuxBridge::detect();
@@ -104,6 +105,7 @@ impl App {
 
         let preview_visible = config.preview.auto_preview;
         let render_markdown = config.preview.render_markdown;
+        let mouse_enabled = config.mouse.enabled;
         let keybinding_map = build_keybinding_map(&config.keybindings);
 
         Ok(Self {
@@ -139,6 +141,7 @@ impl App {
             enhanced_keyboard,
             click_tracker: ClickTracker::new(),
             keybinding_map,
+            mouse_enabled,
             status_bar_y: 0,
             search_bar_y: None,
             status_bar_branch_region: None,
@@ -203,7 +206,7 @@ impl App {
                             };
                             post_action = self.handle_action(&action, &preview_tx, &search_tx);
                         }
-                        Some(Ok(Event::Mouse(mouse))) => {
+                        Some(Ok(Event::Mouse(mouse))) if self.mouse_enabled => {
                             use crossterm::event::{MouseButton, MouseEventKind};
 
                             if self.input_mode == InputMode::ContextMenu {
@@ -2152,7 +2155,11 @@ impl App {
         if self.enhanced_keyboard {
             let _ = crossterm::execute!(stdout, PopKeyboardEnhancementFlags);
         }
-        let _ = crossterm::execute!(stdout, LeaveAlternateScreen, DisableMouseCapture);
+        if self.mouse_enabled {
+            let _ = crossterm::execute!(stdout, LeaveAlternateScreen, DisableMouseCapture);
+        } else {
+            let _ = crossterm::execute!(stdout, LeaveAlternateScreen);
+        }
         let _ = crossterm::terminal::disable_raw_mode();
 
         // Resolve editor and split into command + args (e.g. "code --wait")
@@ -2172,7 +2179,11 @@ impl App {
         // Restore terminal
         let _ = crossterm::terminal::enable_raw_mode();
         let mut stdout = std::io::stdout();
-        let _ = crossterm::execute!(stdout, EnterAlternateScreen, EnableMouseCapture);
+        if self.mouse_enabled {
+            let _ = crossterm::execute!(stdout, EnterAlternateScreen, EnableMouseCapture);
+        } else {
+            let _ = crossterm::execute!(stdout, EnterAlternateScreen);
+        }
         if self.enhanced_keyboard {
             let _ = crossterm::execute!(
                 stdout,

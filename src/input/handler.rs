@@ -157,16 +157,52 @@ pub struct KeyBinding {
 /// Maps key bindings to actions.
 pub type KeybindingMap = HashMap<KeyBinding, Action>;
 
-/// Build the keybinding map from user config. Only keys the user has set will be active.
+/// Build the keybinding map using a two-phase algorithm:
+/// 1. Actions with built-in defaults get their default key unless the user overrides or disables.
+/// 2. Opt-in actions (no default) are added only if the user configures them.
+///
+/// User override semantics:
+/// - `None` → use built-in default (if any)
+/// - `Some("")` → disabled (no key bound)
+/// - `Some("key")` → use that key
 pub fn build_keybinding_map(config: &KeybindingsConfig) -> KeybindingMap {
     let mut map = KeybindingMap::new();
 
-    let entries: &[(&Option<String>, Action)] = &[
+    // Phase 1: Actions with built-in defaults
+    let defaults: &[(Action, &str, &Option<String>)] = &[
+        (Action::CursorUp, "Up", &config.cursor_up),
+        (Action::CursorDown, "Down", &config.cursor_down),
+        (Action::CursorLeft, "Left", &config.cursor_left),
+        (Action::CursorRight, "Right", &config.cursor_right),
+        (Action::GotoTop, "Home", &config.goto_top),
+        (Action::GotoBottom, "End", &config.goto_bottom),
+        (Action::StartFind, "/", &config.search),
+        (Action::StartFilter, "f", &config.filter),
+        (Action::StartGlobalSearch, "s", &config.global_search),
+        (
+            Action::StartGlobalSearchContent,
+            "S",
+            &config.global_search_content,
+        ),
+        (Action::ToggleRender, "m", &config.toggle_render),
+    ];
+
+    for (action, default_key, user_override) in defaults {
+        let key_str = match user_override {
+            None => Some(*default_key),
+            Some(s) if s.is_empty() => None,
+            Some(s) => Some(s.as_str()),
+        };
+        if let Some(key_str) = key_str {
+            if let Some((code, modifiers)) = parse_key(key_str) {
+                map.insert(KeyBinding { code, modifiers }, action.clone());
+            }
+        }
+    }
+
+    // Phase 2: Opt-in actions (no built-in default)
+    let opt_ins: &[(&Option<String>, Action)] = &[
         (&config.quit, Action::Quit),
-        (&config.cursor_up, Action::CursorUp),
-        (&config.cursor_down, Action::CursorDown),
-        (&config.cursor_left, Action::CursorLeft),
-        (&config.cursor_right, Action::CursorRight),
         (&config.toggle, Action::Toggle),
         (&config.refresh, Action::Refresh),
         (&config.new_file, Action::NewFile),
@@ -174,24 +210,14 @@ pub fn build_keybinding_map(config: &KeybindingsConfig) -> KeybindingMap {
         (&config.rename, Action::RenameNode),
         (&config.delete, Action::DeleteNode),
         (&config.toggle_preview, Action::TogglePreview),
-        (&config.toggle_render, Action::ToggleRender),
         (&config.open_in_editor, Action::OpenInEditor),
         (&config.open_externally, Action::OpenExternally),
         (&config.collapse_all, Action::CollapseAll),
-        (&config.search, Action::StartFind),
-        (&config.filter, Action::StartFilter),
-        (&config.goto_top, Action::GotoTop),
-        (&config.goto_bottom, Action::GotoBottom),
         (&config.branch_picker, Action::OpenBranchPicker),
         (&config.enter, Action::EnterKey),
-        (&config.global_search, Action::StartGlobalSearch),
-        (
-            &config.global_search_content,
-            Action::StartGlobalSearchContent,
-        ),
     ];
 
-    for (opt, action) in entries {
+    for (opt, action) in opt_ins {
         if let Some(ref s) = opt {
             if let Some((code, modifiers)) = parse_key(s) {
                 map.insert(KeyBinding { code, modifiers }, action.clone());

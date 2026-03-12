@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use crossterm::event::{KeyCode, KeyModifiers};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
     #[serde(default)]
     pub tree: TreeConfig,
@@ -16,9 +16,23 @@ pub struct Config {
     #[serde(default)]
     pub open: OpenConfig,
     #[serde(default)]
+    pub mouse: MouseConfig,
+    #[serde(default)]
     pub keybindings: KeybindingsConfig,
     #[serde(default)]
     pub search: SearchConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MouseConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl Default for MouseConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -77,6 +91,68 @@ pub struct KeybindingsConfig {
     pub goto_bottom: Option<String>,
     pub branch_picker: Option<String>,
     pub enter: Option<String>,
+}
+
+/// Built-in default key for a keybinding field. Returns `None` for opt-in-only fields.
+pub fn default_key_for(field: &str) -> Option<&'static str> {
+    match field {
+        "cursor_up" => Some("Up"),
+        "cursor_down" => Some("Down"),
+        "cursor_left" => Some("Left"),
+        "cursor_right" => Some("Right"),
+        "goto_top" => Some("Home"),
+        "goto_bottom" => Some("End"),
+        "search" => Some("/"),
+        "filter" => Some("f"),
+        "global_search" => Some("s"),
+        "global_search_content" => Some("S"),
+        "toggle_render" => Some("m"),
+        _ => None,
+    }
+}
+
+impl KeybindingsConfig {
+    /// Return a copy with `None` fields filled in with built-in defaults.
+    /// Fields the user explicitly set (including `""` to disable) are kept as-is.
+    pub fn resolved(&self) -> Self {
+        fn resolve(field: Option<&String>, name: &str) -> Option<String> {
+            match field {
+                Some(s) => Some(s.clone()),
+                None => default_key_for(name).map(String::from),
+            }
+        }
+
+        Self {
+            cursor_up: resolve(self.cursor_up.as_ref(), "cursor_up"),
+            cursor_down: resolve(self.cursor_down.as_ref(), "cursor_down"),
+            cursor_left: resolve(self.cursor_left.as_ref(), "cursor_left"),
+            cursor_right: resolve(self.cursor_right.as_ref(), "cursor_right"),
+            goto_top: resolve(self.goto_top.as_ref(), "goto_top"),
+            goto_bottom: resolve(self.goto_bottom.as_ref(), "goto_bottom"),
+            search: resolve(self.search.as_ref(), "search"),
+            filter: resolve(self.filter.as_ref(), "filter"),
+            global_search: resolve(self.global_search.as_ref(), "global_search"),
+            global_search_content: resolve(
+                self.global_search_content.as_ref(),
+                "global_search_content",
+            ),
+            toggle_render: resolve(self.toggle_render.as_ref(), "toggle_render"),
+            // Opt-in fields: no defaults, keep as-is
+            quit: self.quit.clone(),
+            toggle: self.toggle.clone(),
+            refresh: self.refresh.clone(),
+            new_file: self.new_file.clone(),
+            new_dir: self.new_dir.clone(),
+            rename: self.rename.clone(),
+            delete: self.delete.clone(),
+            toggle_preview: self.toggle_preview.clone(),
+            open_in_editor: self.open_in_editor.clone(),
+            open_externally: self.open_externally.clone(),
+            collapse_all: self.collapse_all.clone(),
+            branch_picker: self.branch_picker.clone(),
+            enter: self.enter.clone(),
+        }
+    }
 }
 
 /// Parse a key binding string like `"q"`, `"Enter"`, `"Ctrl+c"`, `"Shift+a"`.
@@ -276,14 +352,21 @@ impl Config {
     }
 
     /// Serialize the resolved config to a TOML string.
+    /// Keybinding defaults are filled in so the output shows effective bindings.
     pub fn to_toml_string(&self) -> String {
-        toml::to_string_pretty(self).unwrap_or_default()
+        let mut resolved = self.clone();
+        resolved.keybindings = resolved.keybindings.resolved();
+        toml::to_string_pretty(&resolved).unwrap_or_default()
     }
 
     /// Return a hand-written default config template with comments.
     pub fn default_toml_with_comments() -> String {
         r#"# croot configuration
 # Full reference: croot config (shows all resolved values)
+
+# ── Layer 1: Zero-config (works out of box) ──────────────
+# Mouse enabled, basic keyboard shortcuts work.
+# Arrow keys, /, f, s, S, m, Home/End, Esc, Ctrl+C all work.
 
 [tree]
 show_hidden = true
@@ -312,16 +395,27 @@ auto_preview = false
 # pattern = "*.pdf"
 # command = "zathura"
 
-# [keybindings]
-# Keyboard shortcuts are disabled by default.
-# Uncomment any line below to enable that shortcut.
-# Supports: single chars ("q", "j"), named keys ("Enter", "Esc", "Space"),
-#           modifiers ("Ctrl+c", "Shift+a", "Alt+x")
+# ── Layer 2: Simple toggles ──────────────────────────────
+
+[mouse]
+# enabled = true          # Set false to disable mouse capture
+
+[keybindings]
+# Built-in defaults (override or disable with ""):
+# cursor_up = "Up"        # default
+# cursor_down = "Down"    # default
+# cursor_left = "Left"    # default
+# cursor_right = "Right"  # default
+# goto_top = "Home"       # default
+# goto_bottom = "End"     # default
+# search = "/"            # default — find/jump to match
+# filter = "f"            # default — filter tree to matches
+# global_search = "s"     # default — fd file name search
+# global_search_content = "S"  # default — rg content search
+# toggle_render = "m"     # default — toggle markdown rendered/raw
+#
+# Opt-in (no default, uncomment to enable):
 # quit = "q"
-# cursor_up = "k"
-# cursor_down = "j"
-# cursor_left = "h"
-# cursor_right = "l"
 # toggle = "o"
 # refresh = "r"
 # new_file = "a"
@@ -329,16 +423,9 @@ auto_preview = false
 # rename = "R"
 # delete = "D"
 # toggle_preview = "p"
-# toggle_render = "m"
 # open_in_editor = "e"
 # open_externally = "x"
 # collapse_all = "W"
-# search = "/"
-# filter = "f"
-# global_search = "s"
-# global_search_content = "S"
-# goto_top = "g"
-# goto_bottom = "G"
 # branch_picker = "b"
 # enter = "Enter"
 "#
@@ -380,13 +467,15 @@ pub fn resolve_editor(config: &Config) -> String {
     "vi".to_string()
 }
 
-/// Read a dotted key (e.g. `tree.show_hidden`) from the config file.
+/// Read a dotted key (e.g. `tree.show_hidden`) from the resolved config.
+/// Always returns effective values, including built-in defaults for keybindings.
 pub fn get_value(key: &str) -> Result<String, String> {
-    let path = config_path();
-    let content = std::fs::read_to_string(&path)
-        .map_err(|_| format!("Config file not found: {}", path.display()))?;
+    let mut config = Config::load();
+    config.keybindings = config.keybindings.resolved();
+    let serialized =
+        toml::to_string(&config).map_err(|e| format!("Failed to serialize config: {e}"))?;
     let table: toml::Value =
-        toml::from_str(&content).map_err(|e| format!("Failed to parse config: {e}"))?;
+        toml::from_str(&serialized).map_err(|e| format!("Failed to parse config: {e}"))?;
 
     let val = navigate(&table, key)?;
     Ok(format_value(val))
