@@ -179,7 +179,9 @@ impl App {
 
         loop {
             terminal.draw(|frame| self.draw(frame))?;
-            self.emit_osc8_hyperlinks()?;
+            if self.input_mode == InputMode::Normal {
+                self.emit_osc8_hyperlinks()?;
+            }
 
             tokio::select! {
                 event = reader.next() => {

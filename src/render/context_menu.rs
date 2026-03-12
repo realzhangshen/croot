@@ -519,19 +519,26 @@ mod tests {
         widget.render(area, &mut buf);
 
         let rect = state.menu_rect(40, 20);
-        // Check interior cells (skip borders) for stale colors
+        // Check interior cells (skip borders) for stale colors.
+        // With explicit White/Black in popup_base(), no cell should retain
+        // the pre-filled Red fg or Green bg.
         for row in (rect.y + 1)..(rect.y + rect.height - 1) {
             for col in (rect.x + 1)..(rect.x + rect.width - 1) {
                 let cell = buf.cell((col, row)).unwrap();
                 assert_ne!(
                     cell.fg,
-                    ratatui::style::Color::Green,
-                    "stale Green fg at ({col},{row})"
+                    ratatui::style::Color::Red,
+                    "stale Red fg at ({col},{row})"
                 );
                 assert_ne!(
                     cell.bg,
                     ratatui::style::Color::Green,
                     "stale Green bg at ({col},{row})"
+                );
+                assert_ne!(
+                    cell.fg,
+                    ratatui::style::Color::Green,
+                    "stale Green fg at ({col},{row})"
                 );
             }
         }

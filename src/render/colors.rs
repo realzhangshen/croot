@@ -40,9 +40,14 @@ pub fn hover_style() -> Style {
     Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
 }
 
-/// Popup / menu base: reversed foreground ↔ background
+/// Popup / menu base: explicit White/Black + REVERSED → black text on white bg.
+/// Explicit colors force the backend to always emit SetColors, preventing
+/// color bleed when the terminal retains stale state from prior frames.
 pub fn popup_base() -> Style {
-    Style::default().add_modifier(Modifier::REVERSED)
+    Style::default()
+        .fg(Color::White)
+        .bg(Color::Black)
+        .add_modifier(Modifier::REVERSED)
 }
 
 /// Popup selected item: blue background with bold white text
@@ -61,9 +66,13 @@ pub fn popup_selected_danger() -> Style {
         .add_modifier(Modifier::BOLD)
 }
 
-/// Popup dim text (separators, hints): reversed + dim
+/// Popup dim text (separators, hints): explicit White/Black + REVERSED + DIM.
+/// Same explicit-color rationale as `popup_base()`.
 pub fn popup_dim() -> Style {
-    Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
+    Style::default()
+        .fg(Color::White)
+        .bg(Color::Black)
+        .add_modifier(Modifier::REVERSED | Modifier::DIM)
 }
 
 /// Clear a rectangular region and apply a fresh style.
@@ -106,8 +115,8 @@ mod tests {
             for col in 0..area.width {
                 let cell = buf.cell((col, row)).unwrap();
                 assert_eq!(cell.symbol(), " ", "symbol at ({col},{row})");
-                assert_eq!(cell.fg, Color::Reset, "fg at ({col},{row})");
-                assert_eq!(cell.bg, Color::Reset, "bg at ({col},{row})");
+                assert_eq!(cell.fg, Color::White, "fg at ({col},{row})");
+                assert_eq!(cell.bg, Color::Black, "bg at ({col},{row})");
                 assert!(
                     cell.modifier.contains(Modifier::REVERSED),
                     "modifier at ({col},{row}): {:?}",
