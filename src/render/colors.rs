@@ -37,11 +37,11 @@ pub const FIND_MATCH: Color = Color::Cyan;
 // Deliberately *not* theme-adaptive: popups need legible text regardless
 // of whether the terminal palette is light or dark.
 pub const POPUP_FG: Color = Color::Indexed(15); // #ffffff  bright white text
-pub const POPUP_BG: Color = Color::Indexed(238); // #444444  dark-gray background
+pub const POPUP_BG: Color = Color::Indexed(240); // #585858  dark-gray background
 pub const POPUP_ACCENT: Color = Color::Indexed(12); // #5f87ff  selection highlight
-pub const POPUP_BORDER_FG: Color = Color::Indexed(246); // #949494  visible border gray
-pub const POPUP_DIM_FG: Color = Color::Indexed(249); // #b2b2b2  secondary text
-pub const POPUP_INPUT_BG: Color = Color::Indexed(235); // #262626  sunken input field
+pub const POPUP_BORDER_FG: Color = Color::Indexed(252); // #d0d0d0  visible border gray
+pub const POPUP_DIM_FG: Color = Color::Indexed(253); // #dadada  secondary text
+pub const POPUP_INPUT_BG: Color = Color::Indexed(236); // #303030  sunken input field
 
 // ── Style helpers ────────────────────────────────────────────────────
 
