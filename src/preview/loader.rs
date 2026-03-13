@@ -177,7 +177,7 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
 
     let dim = Style::default().fg(Color::DarkGray);
     let dir_style = Style::default()
-        .fg(colors::PREVIEW_DIR_NAME)
+        .fg(colors::preview_dir_name())
         .add_modifier(Modifier::BOLD);
     let file_style = Style::default();
 
@@ -223,8 +223,8 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
 /// Format: `00000000  48 65 6c 6c 6f 20 57 6f  72 6c 64 21 0a ...  |Hello World!.|`
 pub fn generate_hex_dump(data: &[u8]) -> Vec<Vec<StyledSpan>> {
     let offset_style = Style::default().fg(Color::DarkGray);
-    let hex_style = Style::default().fg(colors::HEX_VALUES);
-    let ascii_style = Style::default().fg(colors::HEX_ASCII);
+    let hex_style = Style::default().fg(colors::hex_values());
+    let ascii_style = Style::default().fg(colors::hex_ascii());
     let separator_style = Style::default().fg(Color::DarkGray);
 
     let mut lines = Vec::new();

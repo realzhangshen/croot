@@ -12,7 +12,7 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
     if is_dir {
         return IconInfo {
             icon: "\u{f024b}",
-            color: colors::DIR_COLOR,
+            color: colors::dir_color(),
         };
     }
 
@@ -212,7 +212,7 @@ fn default_icon(name: &str) -> IconInfo {
         },
         _ => IconInfo {
             icon: "\u{f0214}",
-            color: colors::DEFAULT_FG,
+            color: colors::default_fg(),
         },
     }
 }

@@ -414,7 +414,7 @@ impl App {
             }
             .render(tree_area, frame.buffer_mut(), &mut self.tree);
 
-            let sep_style = Style::default().fg(colors::TREE_LINE);
+            let sep_style = Style::default().fg(colors::tree_line());
             for y in separator_area.y..separator_area.y + separator_area.height {
                 frame
                     .buffer_mut()

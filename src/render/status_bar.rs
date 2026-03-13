@@ -139,7 +139,7 @@ impl Widget for StatusBar<'_> {
             spans.push(Span::styled(
                 format!(" {status} "),
                 Style::default()
-                    .fg(colors::GIT_ADDED)
+                    .fg(colors::git_added())
                     .add_modifier(Modifier::REVERSED),
             ));
         }

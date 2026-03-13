@@ -309,7 +309,7 @@ impl MdRenderer {
             self.current_cell_text.push('`');
             return;
         }
-        let style = Style::default().fg(colors::INLINE_CODE);
+        let style = Style::default().fg(colors::inline_code());
         self.current_line.push((format!("`{code}`"), style));
     }
 

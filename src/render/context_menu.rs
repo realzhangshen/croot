@@ -414,12 +414,12 @@ mod tests {
         let cell = buf.cell((x, y)).unwrap();
         assert_eq!(
             cell.bg,
-            colors::POPUP_BG,
+            colors::popup_bg(),
             "normal menu item bg should be POPUP_BG"
         );
         assert_eq!(
             cell.fg,
-            colors::POPUP_FG,
+            colors::popup_fg(),
             "normal menu item fg should be POPUP_FG"
         );
         assert!(
@@ -465,12 +465,12 @@ mod tests {
         );
         assert_eq!(
             cell.bg,
-            ratatui::style::Color::Indexed(12),
+            colors::popup_accent(),
             "selected item should have bright blue bg"
         );
         assert_eq!(
             cell.fg,
-            ratatui::style::Color::Indexed(15),
+            colors::popup_fg(),
             "selected item should have bright white fg"
         );
     }
@@ -569,12 +569,12 @@ mod tests {
         let cell = buf.cell((x, y)).unwrap();
         assert_eq!(
             cell.bg,
-            ratatui::style::Color::Red,
+            colors::popup_selected_danger_bg(),
             "selected Delete should have Red bg"
         );
         assert_eq!(
             cell.fg,
-            ratatui::style::Color::Indexed(15),
+            colors::popup_fg(),
             "selected Delete should have bright white fg"
         );
         assert!(

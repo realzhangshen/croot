@@ -66,14 +66,14 @@ impl StatefulWidget for PreviewView<'_> {
 impl PreviewView<'_> {
     fn render_header(&self, area: Rect, buf: &mut Buffer, state: &PreviewState) {
         let bg = if self.focused {
-            colors::STATUS_BAR_BG
+            colors::status_bar_bg()
         } else {
-            colors::UNFOCUSED_HEADER_BG
+            colors::unfocused_header_bg()
         };
         let fg = if self.focused {
-            colors::STATUS_BAR_FG
+            colors::status_bar_fg()
         } else {
-            colors::UNFOCUSED_HEADER_FG
+            colors::unfocused_header_fg()
         };
 
         // Fill header background

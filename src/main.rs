@@ -95,6 +95,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Load config before terminal setup so we know whether to enable mouse
     let cfg = config::Config::load();
+    render::colors::init(&cfg.colors);
     let mouse_enabled = cfg.mouse.enabled;
 
     // Terminal setup

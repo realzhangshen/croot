@@ -194,8 +194,8 @@ impl Widget for InputDialogWidget<'_> {
             if let Some(cell) = buf.cell_mut((input_x + cursor_display_pos as u16, input_y)) {
                 cell.set_style(
                     Style::default()
-                        .fg(colors::POPUP_INPUT_BG)
-                        .bg(colors::POPUP_FG),
+                        .fg(colors::popup_input_bg())
+                        .bg(colors::popup_fg()),
                 );
             }
 
@@ -283,8 +283,8 @@ mod tests {
         let mid_x = 30u16;
         let mid_y = 8u16;
         let cell = buf.cell((mid_x, mid_y)).unwrap();
-        assert_eq!(cell.bg, colors::POPUP_BG, "dialog bg should be POPUP_BG");
-        assert_eq!(cell.fg, colors::POPUP_FG, "dialog fg should be POPUP_FG");
+        assert_eq!(cell.bg, colors::popup_bg(), "dialog bg should be POPUP_BG");
+        assert_eq!(cell.fg, colors::popup_fg(), "dialog fg should be POPUP_FG");
         assert!(
             !cell.modifier.contains(Modifier::REVERSED),
             "dialog should NOT have REVERSED, got {:?}",
@@ -308,7 +308,7 @@ mod tests {
         let cell = buf.cell((input_x, input_y)).unwrap();
         assert_eq!(
             cell.bg,
-            colors::POPUP_INPUT_BG,
+            colors::popup_input_bg(),
             "input area should have POPUP_INPUT_BG"
         );
         assert!(

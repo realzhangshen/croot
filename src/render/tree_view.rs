@@ -143,7 +143,7 @@ impl StatefulWidget for TreeView<'_> {
                 let connector = if has_continuation { "│ " } else { "  " };
                 spans.push(Span::styled(
                     connector,
-                    row_style(Style::default().fg(colors::TREE_LINE)),
+                    row_style(Style::default().fg(colors::tree_line())),
                 ));
             }
 
@@ -161,7 +161,7 @@ impl StatefulWidget for TreeView<'_> {
                 let branch = if is_last { "└─" } else { "├─" };
                 spans.push(Span::styled(
                     branch,
-                    row_style(Style::default().fg(colors::TREE_LINE)),
+                    row_style(Style::default().fg(colors::tree_line())),
                 ));
             }
 
@@ -171,7 +171,7 @@ impl StatefulWidget for TreeView<'_> {
                 let dir_icon = icons::dir_icon(last_in_chain.is_expanded);
                 icons::IconInfo {
                     icon: dir_icon,
-                    color: colors::DIR_COLOR,
+                    color: colors::dir_color(),
                 }
             } else {
                 icons::icon_for_file(&node.name, false)
@@ -218,7 +218,7 @@ impl StatefulWidget for TreeView<'_> {
                 &display_name,
                 git_name_base,
                 name_highlight,
-                colors::FIND_MATCH,
+                colors::find_match(),
                 &row_style,
             );
             spans.extend(name_spans);
@@ -265,7 +265,7 @@ impl StatefulWidget for TreeView<'_> {
                 if line_width + min_gap + info_width < area.width {
                     let info_x = area.x + area.width - info_width;
                     let info_style =
-                        row_style(Style::default().fg(colors::GIT_IGNORED).add_modifier(
+                        row_style(Style::default().fg(colors::git_ignored()).add_modifier(
                             if row_mode == RowMode::Cursor {
                                 Modifier::DIM
                             } else {
@@ -497,23 +497,23 @@ fn build_name_spans(
 
 fn git_status_style(status: GitStatus) -> Style {
     match status {
-        GitStatus::Modified => Style::default().fg(colors::GIT_MODIFIED),
-        GitStatus::Added | GitStatus::Untracked => Style::default().fg(colors::GIT_ADDED),
-        GitStatus::Deleted => Style::default().fg(colors::GIT_DELETED),
-        GitStatus::Ignored => Style::default().fg(colors::GIT_IGNORED),
+        GitStatus::Modified => Style::default().fg(colors::git_modified()),
+        GitStatus::Added | GitStatus::Untracked => Style::default().fg(colors::git_added()),
+        GitStatus::Deleted => Style::default().fg(colors::git_deleted()),
+        GitStatus::Ignored => Style::default().fg(colors::git_ignored()),
         GitStatus::Conflicted => Style::default()
-            .fg(colors::GIT_CONFLICTED)
+            .fg(colors::git_conflicted())
             .add_modifier(Modifier::BOLD),
         GitStatus::StagedModified => Style::default()
-            .fg(colors::GIT_STAGED_MODIFIED)
+            .fg(colors::git_staged_modified())
             .add_modifier(Modifier::DIM),
         GitStatus::StagedAdded => Style::default()
-            .fg(colors::GIT_STAGED_ADDED)
+            .fg(colors::git_staged_added())
             .add_modifier(Modifier::DIM),
         GitStatus::StagedDeleted => Style::default()
-            .fg(colors::GIT_STAGED_DELETED)
+            .fg(colors::git_staged_deleted())
             .add_modifier(Modifier::DIM),
-        GitStatus::Clean => Style::default().fg(colors::DEFAULT_FG),
+        GitStatus::Clean => Style::default().fg(colors::default_fg()),
     }
 }
 
@@ -811,13 +811,13 @@ mod tests {
 
     #[test]
     fn name_spans_none_single_span() {
-        let base = Style::default().fg(colors::DEFAULT_FG);
+        let base = Style::default().fg(colors::default_fg());
         let identity = |s: Style| s;
         let spans = build_name_spans(
             "app.rs",
             base,
             NameHighlight::None,
-            colors::FIND_MATCH,
+            colors::find_match(),
             &identity,
         );
         assert_eq!(spans.len(), 1);
@@ -827,13 +827,13 @@ mod tests {
 
     #[test]
     fn name_spans_full_name_underlined() {
-        let base = Style::default().fg(colors::DEFAULT_FG);
+        let base = Style::default().fg(colors::default_fg());
         let identity = |s: Style| s;
         let spans = build_name_spans(
             "app.rs",
             base,
             NameHighlight::FullName,
-            colors::FIND_MATCH,
+            colors::find_match(),
             &identity,
         );
         assert_eq!(spans.len(), 1);
@@ -843,21 +843,21 @@ mod tests {
 
     #[test]
     fn name_spans_characters_at_start() {
-        let base = Style::default().fg(colors::DEFAULT_FG);
+        let base = Style::default().fg(colors::default_fg());
         let identity = |s: Style| s;
         let positions = vec![0, 1, 2]; // "app" in "app.rs"
         let spans = build_name_spans(
             "app.rs",
             base,
             NameHighlight::Characters(&positions),
-            colors::FIND_MATCH,
+            colors::find_match(),
             &identity,
         );
         assert_eq!(spans.len(), 2);
         // First span: highlighted "app"
         assert_eq!(spans[0].content, "app");
         assert!(spans[0].style.add_modifier.contains(Modifier::UNDERLINED));
-        assert_eq!(spans[0].style.fg, Some(colors::FIND_MATCH));
+        assert_eq!(spans[0].style.fg, Some(colors::find_match()));
         // Second span: ".rs"
         assert_eq!(spans[1].content, ".rs");
         assert!(!spans[1].style.add_modifier.contains(Modifier::UNDERLINED));
@@ -865,14 +865,14 @@ mod tests {
 
     #[test]
     fn name_spans_characters_scattered() {
-        let base = Style::default().fg(colors::DEFAULT_FG);
+        let base = Style::default().fg(colors::default_fg());
         let identity = |s: Style| s;
         let positions = vec![0, 4, 5]; // "a", "r", "s" in "app.rs"
         let spans = build_name_spans(
             "app.rs",
             base,
             NameHighlight::Characters(&positions),
-            colors::FIND_MATCH,
+            colors::find_match(),
             &identity,
         );
         // "a" (match), "pp." (no match), "rs" (match)
@@ -961,7 +961,7 @@ mod tests {
     #[test]
     fn name_spans_preserves_bold_on_highlight() {
         let base = Style::default()
-            .fg(colors::DEFAULT_FG)
+            .fg(colors::default_fg())
             .add_modifier(Modifier::BOLD);
         let identity = |s: Style| s;
         let positions = vec![0];
@@ -969,7 +969,7 @@ mod tests {
             "src/",
             base,
             NameHighlight::Characters(&positions),
-            colors::FIND_MATCH,
+            colors::find_match(),
             &identity,
         );
         // Highlighted span should have BOLD + UNDERLINED

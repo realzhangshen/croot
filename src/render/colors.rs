@@ -1,89 +1,215 @@
+use std::sync::OnceLock;
+
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
     style::{Color, Modifier, Style},
 };
 
-// Git status colors — ANSI 16 so they adapt to any terminal theme
-pub const GIT_MODIFIED: Color = Color::Yellow;
-pub const GIT_ADDED: Color = Color::Green;
-pub const GIT_DELETED: Color = Color::Red;
-pub const GIT_IGNORED: Color = Color::DarkGray;
-pub const GIT_CONFLICTED: Color = Color::Red;
+use crate::config::{parse_color, ColorConfig, DEFAULT_COLORS};
 
-// Staged variants — same ANSI color, distinguished via DIM modifier in tree_view
-pub const GIT_STAGED_MODIFIED: Color = Color::Yellow;
-pub const GIT_STAGED_ADDED: Color = Color::Green;
-pub const GIT_STAGED_DELETED: Color = Color::Red;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ResolvedColors {
+    git_modified: Color,
+    git_added: Color,
+    git_deleted: Color,
+    git_ignored: Color,
+    git_conflicted: Color,
+    git_staged_modified: Color,
+    git_staged_added: Color,
+    git_staged_deleted: Color,
+    unfocused_header_bg: Color,
+    unfocused_header_fg: Color,
+    hex_values: Color,
+    hex_ascii: Color,
+    preview_dir_name: Color,
+    inline_code: Color,
+    tree_line: Color,
+    status_bar_bg: Color,
+    status_bar_fg: Color,
+    dir_color: Color,
+    default_fg: Color,
+    find_match: Color,
+    popup_fg: Color,
+    popup_bg: Color,
+    popup_accent: Color,
+    popup_border_fg: Color,
+    popup_dim_fg: Color,
+    popup_input_bg: Color,
+    popup_selected_danger_bg: Color,
+}
 
-// Preview / UI accent colors
-pub const UNFOCUSED_HEADER_BG: Color = Color::DarkGray;
-pub const UNFOCUSED_HEADER_FG: Color = Color::Gray;
-pub const HEX_VALUES: Color = Color::LightBlue;
-pub const HEX_ASCII: Color = Color::Gray;
-pub const PREVIEW_DIR_NAME: Color = Color::LightYellow;
-pub const INLINE_CODE: Color = Color::Yellow;
+impl Default for ResolvedColors {
+    fn default() -> Self {
+        Self::from_config(&ColorConfig::default())
+    }
+}
 
-// UI colors — ANSI / terminal-default so they adapt to any theme
-// Cursor row uses Modifier::REVERSED (no explicit bg) for maximum contrast
-pub const TREE_LINE: Color = Color::DarkGray;
-pub const STATUS_BAR_BG: Color = Color::DarkGray;
-pub const STATUS_BAR_FG: Color = Color::White;
-pub const DIR_COLOR: Color = Color::Yellow;
-pub const DEFAULT_FG: Color = Color::Reset;
-pub const FIND_MATCH: Color = Color::Cyan;
+impl ResolvedColors {
+    fn from_config(config: &ColorConfig) -> Self {
+        fn resolve(value: Option<&String>, default: &'static str) -> Color {
+            value
+                .map(String::as_str)
+                .and_then(parse_color)
+                .unwrap_or_else(|| parse_color(default).expect("default color should parse"))
+        }
 
-// ── Popup overlay colors — fixed 256-color for guaranteed contrast ────
-// Deliberately *not* theme-adaptive: popups need legible text regardless
-// of whether the terminal palette is light or dark.
-pub const POPUP_FG: Color = Color::Indexed(15); // #ffffff  bright white text
-pub const POPUP_BG: Color = Color::Indexed(240); // #585858  dark-gray background
-pub const POPUP_ACCENT: Color = Color::Indexed(12); // #5f87ff  selection highlight
-pub const POPUP_BORDER_FG: Color = Color::Indexed(252); // #d0d0d0  visible border gray
-pub const POPUP_DIM_FG: Color = Color::Indexed(253); // #dadada  secondary text
-pub const POPUP_INPUT_BG: Color = Color::Indexed(236); // #303030  sunken input field
+        Self {
+            git_modified: resolve(config.git_modified.as_ref(), DEFAULT_COLORS.git_modified),
+            git_added: resolve(config.git_added.as_ref(), DEFAULT_COLORS.git_added),
+            git_deleted: resolve(config.git_deleted.as_ref(), DEFAULT_COLORS.git_deleted),
+            git_ignored: resolve(config.git_ignored.as_ref(), DEFAULT_COLORS.git_ignored),
+            git_conflicted: resolve(
+                config.git_conflicted.as_ref(),
+                DEFAULT_COLORS.git_conflicted,
+            ),
+            git_staged_modified: resolve(
+                config.git_staged_modified.as_ref(),
+                DEFAULT_COLORS.git_staged_modified,
+            ),
+            git_staged_added: resolve(
+                config.git_staged_added.as_ref(),
+                DEFAULT_COLORS.git_staged_added,
+            ),
+            git_staged_deleted: resolve(
+                config.git_staged_deleted.as_ref(),
+                DEFAULT_COLORS.git_staged_deleted,
+            ),
+            unfocused_header_bg: resolve(
+                config.unfocused_header_bg.as_ref(),
+                DEFAULT_COLORS.unfocused_header_bg,
+            ),
+            unfocused_header_fg: resolve(
+                config.unfocused_header_fg.as_ref(),
+                DEFAULT_COLORS.unfocused_header_fg,
+            ),
+            hex_values: resolve(config.hex_values.as_ref(), DEFAULT_COLORS.hex_values),
+            hex_ascii: resolve(config.hex_ascii.as_ref(), DEFAULT_COLORS.hex_ascii),
+            preview_dir_name: resolve(
+                config.preview_dir_name.as_ref(),
+                DEFAULT_COLORS.preview_dir_name,
+            ),
+            inline_code: resolve(config.inline_code.as_ref(), DEFAULT_COLORS.inline_code),
+            tree_line: resolve(config.tree_line.as_ref(), DEFAULT_COLORS.tree_line),
+            status_bar_bg: resolve(config.status_bar_bg.as_ref(), DEFAULT_COLORS.status_bar_bg),
+            status_bar_fg: resolve(config.status_bar_fg.as_ref(), DEFAULT_COLORS.status_bar_fg),
+            dir_color: resolve(config.dir_color.as_ref(), DEFAULT_COLORS.dir_color),
+            default_fg: resolve(config.default_fg.as_ref(), DEFAULT_COLORS.default_fg),
+            find_match: resolve(config.find_match.as_ref(), DEFAULT_COLORS.find_match),
+            popup_fg: resolve(config.popup_fg.as_ref(), DEFAULT_COLORS.popup_fg),
+            popup_bg: resolve(config.popup_bg.as_ref(), DEFAULT_COLORS.popup_bg),
+            popup_accent: resolve(config.popup_accent.as_ref(), DEFAULT_COLORS.popup_accent),
+            popup_border_fg: resolve(
+                config.popup_border_fg.as_ref(),
+                DEFAULT_COLORS.popup_border_fg,
+            ),
+            popup_dim_fg: resolve(config.popup_dim_fg.as_ref(), DEFAULT_COLORS.popup_dim_fg),
+            popup_input_bg: resolve(
+                config.popup_input_bg.as_ref(),
+                DEFAULT_COLORS.popup_input_bg,
+            ),
+            popup_selected_danger_bg: resolve(
+                config.popup_selected_danger_bg.as_ref(),
+                DEFAULT_COLORS.popup_selected_danger_bg,
+            ),
+        }
+    }
+}
 
-// ── Style helpers ────────────────────────────────────────────────────
+static COLORS: OnceLock<ResolvedColors> = OnceLock::new();
 
-/// Tree-view hover row: subtle reverse + dim
+fn palette() -> &'static ResolvedColors {
+    COLORS.get_or_init(ResolvedColors::default)
+}
+
+pub fn init(config: &ColorConfig) {
+    let _ = COLORS.set(ResolvedColors::from_config(config));
+}
+
+#[cfg(test)]
+pub fn init_default_for_tests() {
+    let _ = palette();
+}
+
+macro_rules! color_getters {
+    ($($name:ident),+ $(,)?) => {
+        $(
+            pub fn $name() -> Color {
+                palette().$name
+            }
+        )+
+    };
+}
+
+color_getters!(
+    git_modified,
+    git_added,
+    git_deleted,
+    git_ignored,
+    git_conflicted,
+    git_staged_modified,
+    git_staged_added,
+    git_staged_deleted,
+    unfocused_header_bg,
+    unfocused_header_fg,
+    hex_values,
+    hex_ascii,
+    preview_dir_name,
+    inline_code,
+    tree_line,
+    status_bar_bg,
+    status_bar_fg,
+    dir_color,
+    default_fg,
+    find_match,
+    popup_fg,
+    popup_bg,
+    popup_accent,
+    popup_border_fg,
+    popup_dim_fg,
+    popup_input_bg,
+    popup_selected_danger_bg,
+);
+
+/// Tree-view hover row: subtle reverse + dim.
 pub fn hover_style() -> Style {
     Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
 }
 
-/// Popup / menu base: bright white text on dark gray background.
+/// Popup / menu base: foreground on popup background.
 pub fn popup_base() -> Style {
-    Style::default().fg(POPUP_FG).bg(POPUP_BG)
+    Style::default().fg(popup_fg()).bg(popup_bg())
 }
 
-/// Popup selected item: bright blue background with bright white text
+/// Popup selected item: accent background with popup foreground.
 pub fn popup_selected() -> Style {
     Style::reset()
-        .bg(POPUP_ACCENT)
-        .fg(POPUP_FG)
+        .bg(popup_accent())
+        .fg(popup_fg())
         .add_modifier(Modifier::BOLD)
 }
 
-/// Popup selected danger item (e.g. Delete): red background with bright white text
+/// Popup selected danger item (e.g. Delete).
 pub fn popup_selected_danger() -> Style {
     Style::reset()
-        .bg(Color::Red)
-        .fg(POPUP_FG)
+        .bg(popup_selected_danger_bg())
+        .fg(popup_fg())
         .add_modifier(Modifier::BOLD)
 }
 
-/// Popup dim text (hints, separators, [Cancel]): readable secondary text.
+/// Popup dim text (hints, separators, [Cancel]).
 pub fn popup_dim() -> Style {
-    Style::default().fg(POPUP_DIM_FG).bg(POPUP_BG)
+    Style::default().fg(popup_dim_fg()).bg(popup_bg())
 }
 
-/// Popup border: visible gray on popup background.
+/// Popup border.
 pub fn popup_border() -> Style {
-    Style::default().fg(POPUP_BORDER_FG).bg(POPUP_BG)
+    Style::default().fg(popup_border_fg()).bg(popup_bg())
 }
 
-/// Popup input field: bright white text on sunken dark background.
+/// Popup input field.
 pub fn popup_input() -> Style {
-    Style::default().fg(POPUP_FG).bg(POPUP_INPUT_BG)
+    Style::default().fg(popup_fg()).bg(popup_input_bg())
 }
 
 /// Clear a rectangular region and apply a fresh style.
@@ -104,11 +230,40 @@ mod tests {
     use super::*;
 
     #[test]
+    fn resolved_colors_use_existing_defaults() {
+        let colors = ResolvedColors::from_config(&ColorConfig::default());
+
+        assert_eq!(colors.popup_fg, Color::Indexed(15));
+        assert_eq!(colors.popup_bg, Color::Indexed(240));
+        assert_eq!(colors.dir_color, Color::Yellow);
+        assert_eq!(colors.default_fg, Color::Reset);
+        assert_eq!(colors.popup_selected_danger_bg, Color::Red);
+    }
+
+    #[test]
+    fn resolved_colors_apply_valid_overrides_and_ignore_invalid_ones() {
+        let config = ColorConfig {
+            popup_bg: Some("#101010".to_string()),
+            popup_fg: Some("indexed:254".to_string()),
+            dir_color: Some("light-blue".to_string()),
+            popup_dim_fg: Some("nope".to_string()),
+            ..ColorConfig::default()
+        };
+        let colors = ResolvedColors::from_config(&config);
+
+        assert_eq!(colors.popup_bg, Color::Rgb(16, 16, 16));
+        assert_eq!(colors.popup_fg, Color::Indexed(254));
+        assert_eq!(colors.dir_color, Color::LightBlue);
+        assert_eq!(colors.popup_dim_fg, Color::Indexed(253));
+    }
+
+    #[test]
     fn clear_region_wipes_preexisting_state() {
+        init_default_for_tests();
+
         let area = Rect::new(0, 0, 4, 3);
         let mut buf = Buffer::empty(area);
 
-        // Pre-fill with colored content
         for row in 0..area.height {
             for col in 0..area.width {
                 if let Some(cell) = buf.cell_mut((col, row)) {
@@ -118,16 +273,14 @@ mod tests {
             }
         }
 
-        // Apply clear_region with popup_base()
         clear_region(&mut buf, area, popup_base());
 
-        // Every cell should be fully reset + popup_base applied
         for row in 0..area.height {
             for col in 0..area.width {
                 let cell = buf.cell((col, row)).unwrap();
                 assert_eq!(cell.symbol(), " ", "symbol at ({col},{row})");
-                assert_eq!(cell.fg, POPUP_FG, "fg at ({col},{row})");
-                assert_eq!(cell.bg, POPUP_BG, "bg at ({col},{row})");
+                assert_eq!(cell.fg, popup_fg(), "fg at ({col},{row})");
+                assert_eq!(cell.bg, popup_bg(), "bg at ({col},{row})");
                 assert!(
                     !cell.modifier.contains(Modifier::REVERSED),
                     "should NOT have REVERSED at ({col},{row}): {:?}",

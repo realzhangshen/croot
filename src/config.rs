@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use crossterm::event::{KeyCode, KeyModifiers};
+use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
@@ -21,6 +22,216 @@ pub struct Config {
     pub keybindings: KeybindingsConfig,
     #[serde(default)]
     pub search: SearchConfig,
+    #[serde(default)]
+    pub colors: ColorConfig,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct ColorConfig {
+    pub git_modified: Option<String>,
+    pub git_added: Option<String>,
+    pub git_deleted: Option<String>,
+    pub git_ignored: Option<String>,
+    pub git_conflicted: Option<String>,
+    pub git_staged_modified: Option<String>,
+    pub git_staged_added: Option<String>,
+    pub git_staged_deleted: Option<String>,
+    pub unfocused_header_bg: Option<String>,
+    pub unfocused_header_fg: Option<String>,
+    pub hex_values: Option<String>,
+    pub hex_ascii: Option<String>,
+    pub preview_dir_name: Option<String>,
+    pub inline_code: Option<String>,
+    pub tree_line: Option<String>,
+    pub status_bar_bg: Option<String>,
+    pub status_bar_fg: Option<String>,
+    pub dir_color: Option<String>,
+    pub default_fg: Option<String>,
+    pub find_match: Option<String>,
+    pub popup_fg: Option<String>,
+    pub popup_bg: Option<String>,
+    pub popup_accent: Option<String>,
+    pub popup_border_fg: Option<String>,
+    pub popup_dim_fg: Option<String>,
+    pub popup_input_bg: Option<String>,
+    pub popup_selected_danger_bg: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ColorDefaults {
+    pub git_modified: &'static str,
+    pub git_added: &'static str,
+    pub git_deleted: &'static str,
+    pub git_ignored: &'static str,
+    pub git_conflicted: &'static str,
+    pub git_staged_modified: &'static str,
+    pub git_staged_added: &'static str,
+    pub git_staged_deleted: &'static str,
+    pub unfocused_header_bg: &'static str,
+    pub unfocused_header_fg: &'static str,
+    pub hex_values: &'static str,
+    pub hex_ascii: &'static str,
+    pub preview_dir_name: &'static str,
+    pub inline_code: &'static str,
+    pub tree_line: &'static str,
+    pub status_bar_bg: &'static str,
+    pub status_bar_fg: &'static str,
+    pub dir_color: &'static str,
+    pub default_fg: &'static str,
+    pub find_match: &'static str,
+    pub popup_fg: &'static str,
+    pub popup_bg: &'static str,
+    pub popup_accent: &'static str,
+    pub popup_border_fg: &'static str,
+    pub popup_dim_fg: &'static str,
+    pub popup_input_bg: &'static str,
+    pub popup_selected_danger_bg: &'static str,
+}
+
+pub const DEFAULT_COLORS: ColorDefaults = ColorDefaults {
+    git_modified: "yellow",
+    git_added: "green",
+    git_deleted: "red",
+    git_ignored: "dark_gray",
+    git_conflicted: "red",
+    git_staged_modified: "yellow",
+    git_staged_added: "green",
+    git_staged_deleted: "red",
+    unfocused_header_bg: "dark_gray",
+    unfocused_header_fg: "gray",
+    hex_values: "light_blue",
+    hex_ascii: "gray",
+    preview_dir_name: "light_yellow",
+    inline_code: "yellow",
+    tree_line: "dark_gray",
+    status_bar_bg: "dark_gray",
+    status_bar_fg: "white",
+    dir_color: "yellow",
+    default_fg: "reset",
+    find_match: "cyan",
+    popup_fg: "indexed:15",
+    popup_bg: "indexed:240",
+    popup_accent: "indexed:12",
+    popup_border_fg: "indexed:252",
+    popup_dim_fg: "indexed:253",
+    popup_input_bg: "indexed:236",
+    popup_selected_danger_bg: "red",
+};
+
+impl ColorConfig {
+    /// Return a copy with `None` fields filled in with built-in defaults.
+    pub fn resolved(&self) -> Self {
+        Self {
+            git_modified: self
+                .git_modified
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.git_modified.to_string())),
+            git_added: self
+                .git_added
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.git_added.to_string())),
+            git_deleted: self
+                .git_deleted
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.git_deleted.to_string())),
+            git_ignored: self
+                .git_ignored
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.git_ignored.to_string())),
+            git_conflicted: self
+                .git_conflicted
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.git_conflicted.to_string())),
+            git_staged_modified: self
+                .git_staged_modified
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.git_staged_modified.to_string())),
+            git_staged_added: self
+                .git_staged_added
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.git_staged_added.to_string())),
+            git_staged_deleted: self
+                .git_staged_deleted
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.git_staged_deleted.to_string())),
+            unfocused_header_bg: self
+                .unfocused_header_bg
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.unfocused_header_bg.to_string())),
+            unfocused_header_fg: self
+                .unfocused_header_fg
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.unfocused_header_fg.to_string())),
+            hex_values: self
+                .hex_values
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.hex_values.to_string())),
+            hex_ascii: self
+                .hex_ascii
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.hex_ascii.to_string())),
+            preview_dir_name: self
+                .preview_dir_name
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.preview_dir_name.to_string())),
+            inline_code: self
+                .inline_code
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.inline_code.to_string())),
+            tree_line: self
+                .tree_line
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.tree_line.to_string())),
+            status_bar_bg: self
+                .status_bar_bg
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.status_bar_bg.to_string())),
+            status_bar_fg: self
+                .status_bar_fg
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.status_bar_fg.to_string())),
+            dir_color: self
+                .dir_color
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.dir_color.to_string())),
+            default_fg: self
+                .default_fg
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.default_fg.to_string())),
+            find_match: self
+                .find_match
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.find_match.to_string())),
+            popup_fg: self
+                .popup_fg
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.popup_fg.to_string())),
+            popup_bg: self
+                .popup_bg
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.popup_bg.to_string())),
+            popup_accent: self
+                .popup_accent
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.popup_accent.to_string())),
+            popup_border_fg: self
+                .popup_border_fg
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.popup_border_fg.to_string())),
+            popup_dim_fg: self
+                .popup_dim_fg
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.popup_dim_fg.to_string())),
+            popup_input_bg: self
+                .popup_input_bg
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.popup_input_bg.to_string())),
+            popup_selected_danger_bg: self
+                .popup_selected_danger_bg
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.popup_selected_danger_bg.to_string())),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -215,6 +426,58 @@ pub fn parse_key(s: &str) -> Option<(KeyCode, KeyModifiers)> {
     Some((code, modifiers))
 }
 
+/// Parse a color string from config.
+///
+/// Supports ANSI names (`red`, `dark_gray`, `light-blue`, `reset`),
+/// indexed colors (`indexed:240` or `240`), and RGB hex (`#ff0000`).
+pub fn parse_color(s: &str) -> Option<Color> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Ok(index) = trimmed.parse::<u8>() {
+        return Some(Color::Indexed(index));
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    if let Some(index) = lower.strip_prefix("indexed:") {
+        return index.trim().parse::<u8>().ok().map(Color::Indexed);
+    }
+
+    if let Some(hex) = trimmed.strip_prefix('#') {
+        if hex.len() != 6 {
+            return None;
+        }
+        let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+        let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+        let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+        return Some(Color::Rgb(r, g, b));
+    }
+
+    let normalized = lower.replace(['_', '-'], "");
+    match normalized.as_str() {
+        "reset" => Some(Color::Reset),
+        "black" => Some(Color::Black),
+        "darkgray" => Some(Color::DarkGray),
+        "red" => Some(Color::Red),
+        "lightred" => Some(Color::LightRed),
+        "green" => Some(Color::Green),
+        "lightgreen" => Some(Color::LightGreen),
+        "yellow" => Some(Color::Yellow),
+        "lightyellow" => Some(Color::LightYellow),
+        "blue" => Some(Color::Blue),
+        "lightblue" => Some(Color::LightBlue),
+        "magenta" => Some(Color::Magenta),
+        "lightmagenta" => Some(Color::LightMagenta),
+        "cyan" => Some(Color::Cyan),
+        "lightcyan" => Some(Color::LightCyan),
+        "gray" | "grey" => Some(Color::Gray),
+        "white" => Some(Color::White),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct EditorConfig {
     #[serde(default)]
@@ -356,12 +619,13 @@ impl Config {
     pub fn to_toml_string(&self) -> String {
         let mut resolved = self.clone();
         resolved.keybindings = resolved.keybindings.resolved();
+        resolved.colors = resolved.colors.resolved();
         toml::to_string_pretty(&resolved).unwrap_or_default()
     }
 
     /// Return a hand-written default config template with comments.
     pub fn default_toml_with_comments() -> String {
-        r#"# croot configuration
+        r##"# croot configuration
 # Full reference: croot config (shows all resolved values)
 
 # ── Layer 1: Zero-config (works out of box) ──────────────
@@ -428,7 +692,19 @@ auto_preview = false
 # collapse_all = "W"
 # branch_picker = "b"
 # enter = "Enter"
-"#
+
+[colors]
+# Format: ANSI name ("red"), indexed ("indexed:240" or "240"), or hex ("#ff0000")
+# Run `croot config` to see the full resolved palette.
+# popup_bg = "indexed:240"
+# popup_fg = "indexed:15"
+# popup_accent = "indexed:12"
+# popup_input_bg = "indexed:236"
+# popup_selected_danger_bg = "red"
+# dir_color = "yellow"
+# default_fg = "reset"
+# find_match = "cyan"
+"##
         .to_string()
     }
 }
@@ -472,6 +748,7 @@ pub fn resolve_editor(config: &Config) -> String {
 pub fn get_value(key: &str) -> Result<String, String> {
     let mut config = Config::load();
     config.keybindings = config.keybindings.resolved();
+    config.colors = config.colors.resolved();
     let serialized =
         toml::to_string(&config).map_err(|e| format!("Failed to serialize config: {e}"))?;
     let table: toml::Value =
@@ -598,5 +875,81 @@ fn format_value(val: &toml::Value) -> String {
             format!("[{}]", items.join(", "))
         }
         toml::Value::Table(_) | toml::Value::Datetime(_) => val.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_color_supports_ansi_names() {
+        assert_eq!(parse_color("red"), Some(Color::Red));
+        assert_eq!(parse_color("Dark_Gray"), Some(Color::DarkGray));
+        assert_eq!(parse_color("light-blue"), Some(Color::LightBlue));
+        assert_eq!(parse_color("reset"), Some(Color::Reset));
+    }
+
+    #[test]
+    fn parse_color_supports_indexed_forms() {
+        assert_eq!(parse_color("240"), Some(Color::Indexed(240)));
+        assert_eq!(parse_color("indexed:15"), Some(Color::Indexed(15)));
+        assert_eq!(parse_color("INDEXED:252"), Some(Color::Indexed(252)));
+    }
+
+    #[test]
+    fn parse_color_supports_hex_rgb() {
+        assert_eq!(parse_color("#ff0000"), Some(Color::Rgb(255, 0, 0)));
+        assert_eq!(parse_color("#00FF88"), Some(Color::Rgb(0, 255, 136)));
+    }
+
+    #[test]
+    fn parse_color_rejects_invalid_values() {
+        assert_eq!(parse_color("indexed:999"), None);
+        assert_eq!(parse_color("#12"), None);
+        assert_eq!(parse_color("not-a-color"), None);
+    }
+
+    #[test]
+    fn color_config_resolved_fills_missing_defaults() {
+        let resolved = ColorConfig::default().resolved();
+
+        assert_eq!(resolved.popup_bg.as_deref(), Some(DEFAULT_COLORS.popup_bg));
+        assert_eq!(resolved.popup_fg.as_deref(), Some(DEFAULT_COLORS.popup_fg));
+        assert_eq!(
+            resolved.dir_color.as_deref(),
+            Some(DEFAULT_COLORS.dir_color)
+        );
+    }
+
+    #[test]
+    fn color_config_resolved_preserves_user_values() {
+        let config = ColorConfig {
+            popup_bg: Some("#101010".to_string()),
+            dir_color: Some("cyan".to_string()),
+            ..ColorConfig::default()
+        };
+        let resolved = config.resolved();
+
+        assert_eq!(resolved.popup_bg.as_deref(), Some("#101010"));
+        assert_eq!(resolved.dir_color.as_deref(), Some("cyan"));
+        assert_eq!(resolved.popup_fg.as_deref(), Some(DEFAULT_COLORS.popup_fg));
+    }
+
+    #[test]
+    fn resolved_toml_includes_color_defaults() {
+        let toml = Config::default().to_toml_string();
+
+        assert!(toml.contains("[colors]"));
+        assert!(toml.contains("popup_bg = \"indexed:240\""));
+        assert!(toml.contains("dir_color = \"yellow\""));
+    }
+
+    #[test]
+    fn default_template_mentions_colors_section() {
+        let template = Config::default_toml_with_comments();
+
+        assert!(template.contains("[colors]"));
+        assert!(template.contains("popup_bg"));
     }
 }

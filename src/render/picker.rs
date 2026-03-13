@@ -271,7 +271,7 @@ impl PickerWidget {
             "> ",
             Style::default()
                 .fg(Color::Cyan)
-                .bg(colors::POPUP_INPUT_BG)
+                .bg(colors::popup_input_bg())
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -294,8 +294,8 @@ impl PickerWidget {
         if let Some(cell) = buf.cell_mut((query_x + cursor_display_pos as u16, input_y)) {
             cell.set_style(
                 Style::default()
-                    .fg(colors::POPUP_INPUT_BG)
-                    .bg(colors::POPUP_FG),
+                    .fg(colors::popup_input_bg())
+                    .bg(colors::popup_fg()),
             );
         }
 
@@ -375,7 +375,7 @@ impl PickerWidget {
             let err_y = dialog_rect.y + dialog_rect.height - 2;
             let err_style = Style::reset()
                 .fg(Color::Red)
-                .bg(colors::POPUP_BG)
+                .bg(colors::popup_bg())
                 .add_modifier(Modifier::BOLD);
             let truncated = truncate_to_display_width(err, inner_width);
             buf.set_string(dialog_rect.x + 2, err_y, &truncated, err_style);
@@ -591,12 +591,12 @@ mod tests {
         let cell = buf.cell((x, selected_y)).unwrap();
         assert_eq!(
             cell.bg,
-            colors::POPUP_ACCENT,
+            colors::popup_accent(),
             "selected item should have POPUP_ACCENT bg"
         );
         assert_eq!(
             cell.fg,
-            colors::POPUP_FG,
+            colors::popup_fg(),
             "selected item should have POPUP_FG fg"
         );
     }

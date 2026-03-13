@@ -68,7 +68,7 @@ impl Widget for GlobalSearchOverlay<'_> {
             prompt,
             Style::default()
                 .fg(Color::Cyan)
-                .bg(colors::POPUP_INPUT_BG)
+                .bg(colors::popup_input_bg())
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -90,8 +90,8 @@ impl Widget for GlobalSearchOverlay<'_> {
         if let Some(cell) = buf.cell_mut((input_x + cursor_pos as u16, input_y)) {
             cell.set_style(
                 Style::default()
-                    .fg(colors::POPUP_INPUT_BG)
-                    .bg(colors::POPUP_FG),
+                    .fg(colors::popup_input_bg())
+                    .bg(colors::popup_fg()),
             );
             if cell.symbol() == " " || cell.symbol().is_empty() {
                 cell.set_symbol(" ");
@@ -117,7 +117,7 @@ impl Widget for GlobalSearchOverlay<'_> {
                 dialog.x + 2,
                 results_y,
                 "Searching...",
-                Style::default().fg(Color::Yellow).bg(colors::POPUP_BG),
+                Style::default().fg(Color::Yellow).bg(colors::popup_bg()),
             );
         } else if let Some(ref err) = self.state.global_error {
             let display = truncate_str(err, content_width);
@@ -127,7 +127,7 @@ impl Widget for GlobalSearchOverlay<'_> {
                 display,
                 Style::default()
                     .fg(Color::Red)
-                    .bg(colors::POPUP_BG)
+                    .bg(colors::popup_bg())
                     .add_modifier(Modifier::BOLD),
             );
         } else if self.state.global_results.is_empty() {
@@ -192,7 +192,7 @@ impl Widget for GlobalSearchOverlay<'_> {
                     count_x,
                     help_y,
                     &count,
-                    Style::default().fg(Color::Green).bg(colors::POPUP_BG),
+                    Style::default().fg(Color::Green).bg(colors::popup_bg()),
                 );
             }
         }
@@ -242,7 +242,7 @@ mod tests {
         let cell = buf.cell((dx + 3, dy + 4)).unwrap();
         assert_eq!(
             cell.bg,
-            colors::POPUP_BG,
+            colors::popup_bg(),
             "popup body bg should be POPUP_BG"
         );
         assert!(
