@@ -234,7 +234,7 @@ mod tests {
         let colors = ResolvedColors::from_config(&ColorConfig::default());
 
         assert_eq!(colors.popup_fg, Color::White);
-        assert_eq!(colors.popup_bg, Color::DarkGray);
+        assert_eq!(colors.popup_bg, Color::Black);
         assert_eq!(colors.dir_color, Color::Yellow);
         assert_eq!(colors.default_fg, Color::Reset);
         assert_eq!(colors.popup_selected_danger_bg, Color::Red);

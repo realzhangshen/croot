@@ -110,7 +110,7 @@ pub const DEFAULT_COLORS: ColorDefaults = ColorDefaults {
     default_fg: "reset",
     find_match: "cyan",
     popup_fg: "white",
-    popup_bg: "dark_gray",
+    popup_bg: "black",
     popup_accent: "light_blue",
     popup_border_fg: "gray",
     popup_dim_fg: "gray",
@@ -696,7 +696,7 @@ auto_preview = false
 [colors]
 # Format: ANSI name ("red"), indexed ("indexed:240" or "240"), or hex ("#ff0000")
 # Run `croot config` to see the full resolved palette.
-# popup_bg = "dark_gray"
+# popup_bg = "black"
 # popup_fg = "white"
 # popup_accent = "light_blue"
 # popup_input_bg = "black"
@@ -941,7 +941,7 @@ mod tests {
         let toml = Config::default().to_toml_string();
 
         assert!(toml.contains("[colors]"));
-        assert!(toml.contains("popup_bg = \"dark_gray\""));
+        assert!(toml.contains("popup_bg = \"black\""));
         assert!(toml.contains("dir_color = \"yellow\""));
     }
 
