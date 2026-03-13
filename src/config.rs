@@ -109,12 +109,12 @@ pub const DEFAULT_COLORS: ColorDefaults = ColorDefaults {
     dir_color: "yellow",
     default_fg: "reset",
     find_match: "cyan",
-    popup_fg: "#eeeeee",
-    popup_bg: "indexed:240",
-    popup_accent: "#5f87d7",
-    popup_border_fg: "indexed:252",
-    popup_dim_fg: "indexed:253",
-    popup_input_bg: "indexed:236",
+    popup_fg: "white",
+    popup_bg: "dark_gray",
+    popup_accent: "light_blue",
+    popup_border_fg: "gray",
+    popup_dim_fg: "gray",
+    popup_input_bg: "black",
     popup_selected_danger_bg: "red",
 };
 
@@ -696,10 +696,10 @@ auto_preview = false
 [colors]
 # Format: ANSI name ("red"), indexed ("indexed:240" or "240"), or hex ("#ff0000")
 # Run `croot config` to see the full resolved palette.
-# popup_bg = "indexed:240"
-# popup_fg = "#eeeeee"
-# popup_accent = "#5f87d7"
-# popup_input_bg = "indexed:236"
+# popup_bg = "dark_gray"
+# popup_fg = "white"
+# popup_accent = "light_blue"
+# popup_input_bg = "black"
 # popup_selected_danger_bg = "red"
 # dir_color = "yellow"
 # default_fg = "reset"
@@ -941,7 +941,7 @@ mod tests {
         let toml = Config::default().to_toml_string();
 
         assert!(toml.contains("[colors]"));
-        assert!(toml.contains("popup_bg = \"indexed:240\""));
+        assert!(toml.contains("popup_bg = \"dark_gray\""));
         assert!(toml.contains("dir_color = \"yellow\""));
     }
 

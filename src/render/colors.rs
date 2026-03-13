@@ -233,8 +233,8 @@ mod tests {
     fn resolved_colors_use_existing_defaults() {
         let colors = ResolvedColors::from_config(&ColorConfig::default());
 
-        assert_eq!(colors.popup_fg, Color::Rgb(0xee, 0xee, 0xee));
-        assert_eq!(colors.popup_bg, Color::Indexed(240));
+        assert_eq!(colors.popup_fg, Color::White);
+        assert_eq!(colors.popup_bg, Color::DarkGray);
         assert_eq!(colors.dir_color, Color::Yellow);
         assert_eq!(colors.default_fg, Color::Reset);
         assert_eq!(colors.popup_selected_danger_bg, Color::Red);
@@ -254,7 +254,7 @@ mod tests {
         assert_eq!(colors.popup_bg, Color::Rgb(16, 16, 16));
         assert_eq!(colors.popup_fg, Color::Indexed(254));
         assert_eq!(colors.dir_color, Color::LightBlue);
-        assert_eq!(colors.popup_dim_fg, Color::Indexed(253));
+        assert_eq!(colors.popup_dim_fg, Color::Gray);
     }
 
     #[test]
