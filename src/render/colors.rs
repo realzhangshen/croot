@@ -233,7 +233,7 @@ mod tests {
     fn resolved_colors_use_existing_defaults() {
         let colors = ResolvedColors::from_config(&ColorConfig::default());
 
-        assert_eq!(colors.popup_fg, Color::Indexed(15));
+        assert_eq!(colors.popup_fg, Color::Rgb(0xee, 0xee, 0xee));
         assert_eq!(colors.popup_bg, Color::Indexed(240));
         assert_eq!(colors.dir_color, Color::Yellow);
         assert_eq!(colors.default_fg, Color::Reset);

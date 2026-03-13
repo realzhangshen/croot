@@ -109,9 +109,9 @@ pub const DEFAULT_COLORS: ColorDefaults = ColorDefaults {
     dir_color: "yellow",
     default_fg: "reset",
     find_match: "cyan",
-    popup_fg: "indexed:15",
+    popup_fg: "#eeeeee",
     popup_bg: "indexed:240",
-    popup_accent: "indexed:12",
+    popup_accent: "#5f87d7",
     popup_border_fg: "indexed:252",
     popup_dim_fg: "indexed:253",
     popup_input_bg: "indexed:236",
@@ -697,8 +697,8 @@ auto_preview = false
 # Format: ANSI name ("red"), indexed ("indexed:240" or "240"), or hex ("#ff0000")
 # Run `croot config` to see the full resolved palette.
 # popup_bg = "indexed:240"
-# popup_fg = "indexed:15"
-# popup_accent = "indexed:12"
+# popup_fg = "#eeeeee"
+# popup_accent = "#5f87d7"
 # popup_input_bg = "indexed:236"
 # popup_selected_danger_bg = "red"
 # dir_color = "yellow"
