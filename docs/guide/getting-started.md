@@ -1,4 +1,4 @@
-# Getting Started
+# Quickstart
 
 Get up and running with croot in under 5 minutes.
 

@@ -49,6 +49,7 @@
   --croot-text-secondary: rgba(38, 37, 30, 0.7);
   --croot-text-muted: rgba(38, 37, 30, 0.55);
   --croot-accent: #26251e;
+  --croot-accent-orange: #c85a00;
   --croot-accent-white: #f7f7f4;
 
   --croot-font-sans: CursorGothic, "CursorGothic Fallback", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -67,7 +68,7 @@
   --croot-shadow-elevated: 0 2px 6px rgba(38, 37, 30, 0.08), 0 8px 24px rgba(38, 37, 30, 0.08);
 
   /* ── VitePress theme overrides ── */
-  --vp-c-bg: #f7f7f4;
+  --vp-c-bg: #ffffff;
   --vp-c-bg-soft: #ffffff;
   --vp-c-bg-mute: #eeeee8;
   --vp-c-bg-alt: #f7f7f4;
@@ -89,7 +90,7 @@
   --vp-font-family-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, Consolas, monospace;
 
   --vp-sidebar-bg-color: #f7f7f4;
-  --vp-nav-bg-color: rgba(247, 247, 244, 0.96);
+  --vp-nav-bg-color: rgba(255, 255, 255, 0.96);
 }
 
 /* ── Animations ──────────────────────────────── */
@@ -115,10 +116,38 @@
 /* ── VitePress nav glassmorphism ─────────────── */
 
 .VPNav .VPNavBar {
-  background: rgba(247, 247, 244, 0.96) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(38, 37, 30, 0.18) !important;
+}
+
+/* ── Sidebar border separation ─────────────── */
+
+@media (min-width: 960px) {
+  .VPSidebar {
+    border-right: 1px solid var(--croot-border);
+  }
+}
+
+/* ── Active link orange accent ─────────────── */
+
+.VPNavBarMenuLink.active {
+  color: var(--croot-accent-orange) !important;
+}
+
+.VPNavBarMenuLink.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--croot-accent-orange);
+}
+
+.VPNavBarMenuLink:hover {
+  color: var(--croot-accent-orange) !important;
 }
 
 /* ── Shared section styles ───────────────────── */
@@ -298,8 +327,8 @@
 /* ── Step 6: Sidebar styling ─────────────────── */
 
 .VPSidebar .VPSidebarItem.is-active > .item > .link > .text {
-  font-weight: 700;
-  color: var(--croot-text);
+  font-weight: 600;
+  color: var(--croot-accent-orange) !important;
 }
 
 .VPSidebar .VPSidebarItem .text {
@@ -307,7 +336,7 @@
 }
 
 .VPSidebar .VPSidebarItem .link:hover .text {
-  color: var(--croot-text) !important;
+  color: var(--croot-accent-orange) !important;
 }
 
 .VPSidebar .group-title,

@@ -3,9 +3,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 const docsSidebar = [
   {
-    text: 'Guide',
+    text: 'Get Started',
     items: [
-      { text: 'Getting Started', link: '/guide/getting-started' },
+      { text: 'Quickstart', link: '/guide/getting-started' },
       { text: 'Installation', link: '/guide/installation' },
       { text: 'Configuration', link: '/guide/configuration' },
       { text: 'Keybindings', link: '/guide/keybindings' },
@@ -23,7 +23,7 @@ const docsSidebar = [
     ],
   },
   {
-    text: 'Advanced',
+    text: 'Workflow',
     items: [
       { text: 'Pair with cmux', link: '/advanced/cmux-workflow' },
       { text: 'Development', link: '/advanced/development' },
@@ -55,7 +55,8 @@ export default defineConfig({
     siteTitle: 'croot',
 
     nav: [
-      { text: 'Docs', link: '/guide/getting-started' },
+      { text: 'Docs', link: '/guide/getting-started', activeMatch: '/guide/|/advanced/' },
+      { text: 'Features', link: '/features/git-integration', activeMatch: '/features/' },
     ],
 
     sidebar: {
