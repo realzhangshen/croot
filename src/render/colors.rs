@@ -212,7 +212,7 @@ pub fn popup_dim() -> Style {
     Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
 }
 
-/// Popup border: REVERSED to match popup_base for consistent appearance.
+/// Popup border: REVERSED to match `popup_base` for consistent appearance.
 pub fn popup_border() -> Style {
     Style::default().add_modifier(Modifier::REVERSED)
 }

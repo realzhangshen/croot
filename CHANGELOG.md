@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-14
+
+### Added
+- Branch picker UI (`b` to switch branches) with mouse support
+- Character-level find highlighting (Yazi-style)
+- Find / Filter / Global Search modes (redesigned search)
+- Clickable Confirm/Cancel buttons in dialogs
+- User-configurable color system via `[colors]` config section
+- Match highlighting on cursor/hover rows in Find mode
+
+### Changed
+- Redesign interaction model: mouse-first with sensible keyboard defaults
+- Keybindings now opt-in via config (toolbar removed)
+- Popup styling: REVERSED-based adaptive styles with BOLD for light theme contrast
+- Redesign file tree visuals: ANSI 16 icon colors, DIM hierarchy, status bar icons
+
+### Removed
+- Multi-select feature (select, clear, delete-selected)
+- Toolbar (keybindings are opt-in via config)
+
+### Fixed
+- Branch picker panic on multi-byte UTF-8 truncation
+- GlobalSearch overlay closing on mouse movement
+- Overlay color bleed with explicit colors and hyperlink guard
+- Popup text contrast for light terminal themes
+- Unused Color import warning in picker.rs
+
 ## [0.4.1] - 2026-03-11
 
 ### Added
@@ -142,7 +169,8 @@ _Release-only commit (CI/packaging fix). No user-facing changes._
 - Git ignored file display: removed redundant status marker, fixed directory lookup
 - macOS x86_64 CI build using correct runner (macos-14)
 
-[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/realzhangshen/croot/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/realzhangshen/croot/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/realzhangshen/croot/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/realzhangshen/croot/compare/v0.2.5...v0.3.0
