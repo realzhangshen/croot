@@ -1,6 +1,7 @@
 ---
 layout: page
 title: croot — The VS Code sidebar for your terminal
+sidebar: false
 ---
 
 <script setup>
@@ -32,8 +33,5 @@ import HomeFooter from './.vitepress/theme/components/HomeFooter.vue'
 }
 .VPDoc {
   padding: 0 !important;
-}
-.VPDoc .aside {
-  display: none !important;
 }
 </style>

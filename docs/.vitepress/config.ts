@@ -1,6 +1,36 @@
 import { defineConfig } from 'vitepress'
 import tailwindcss from '@tailwindcss/vite'
 
+const docsSidebar = [
+  {
+    text: 'Guide',
+    items: [
+      { text: 'Getting Started', link: '/guide/getting-started' },
+      { text: 'Installation', link: '/guide/installation' },
+      { text: 'Configuration', link: '/guide/configuration' },
+      { text: 'Keybindings', link: '/guide/keybindings' },
+    ],
+  },
+  {
+    text: 'Features',
+    items: [
+      { text: 'Git Integration', link: '/features/git-integration' },
+      { text: 'File Preview', link: '/features/file-preview' },
+      { text: 'Fuzzy Search', link: '/features/fuzzy-search' },
+      { text: 'Mouse Support', link: '/features/mouse-support' },
+      { text: 'File Operations', link: '/features/file-operations' },
+      { text: 'Context Menus', link: '/features/context-menus' },
+    ],
+  },
+  {
+    text: 'Advanced',
+    items: [
+      { text: 'Pair with cmux', link: '/advanced/cmux-workflow' },
+      { text: 'Development', link: '/advanced/development' },
+    ],
+  },
+]
+
 export default defineConfig({
   title: 'croot',
   description: 'The VS Code sidebar for your terminal',
@@ -19,39 +49,14 @@ export default defineConfig({
     siteTitle: 'croot',
 
     nav: [
-      { text: 'Guide', link: '/guide/getting-started' },
-      { text: 'Features', link: '/features/git-integration' },
+      { text: 'Docs', link: '/guide/getting-started' },
     ],
 
-    sidebar: [
-      {
-        text: 'Guide',
-        items: [
-          { text: 'Getting Started', link: '/guide/getting-started' },
-          { text: 'Installation', link: '/guide/installation' },
-          { text: 'Configuration', link: '/guide/configuration' },
-          { text: 'Keybindings', link: '/guide/keybindings' },
-        ],
-      },
-      {
-        text: 'Features',
-        items: [
-          { text: 'Git Integration', link: '/features/git-integration' },
-          { text: 'File Preview', link: '/features/file-preview' },
-          { text: 'Fuzzy Search', link: '/features/fuzzy-search' },
-          { text: 'Mouse Support', link: '/features/mouse-support' },
-          { text: 'File Operations', link: '/features/file-operations' },
-          { text: 'Context Menus', link: '/features/context-menus' },
-        ],
-      },
-      {
-        text: 'Advanced',
-        items: [
-          { text: 'Pair with cmux', link: '/advanced/cmux-workflow' },
-          { text: 'Development', link: '/advanced/development' },
-        ],
-      },
-    ],
+    sidebar: {
+      '/guide/': docsSidebar,
+      '/features/': docsSidebar,
+      '/advanced/': docsSidebar,
+    },
 
     socialLinks: [
       { icon: 'github', link: 'https://github.com/realzhangshen/croot' },
