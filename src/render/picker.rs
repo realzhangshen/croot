@@ -1,8 +1,4 @@
-use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    style::{Color, Modifier, Style},
-};
+use ratatui::{buffer::Buffer, layout::Rect, style::Modifier};
 use unicode_width::UnicodeWidthStr;
 
 use super::colors;
@@ -265,15 +261,7 @@ impl PickerWidget {
         }
 
         // Draw prompt
-        buf.set_string(
-            input_x,
-            input_y,
-            "> ",
-            Style::default()
-                .fg(Color::Cyan)
-                .bg(colors::popup_input_bg())
-                .add_modifier(Modifier::BOLD),
-        );
+        buf.set_string(input_x, input_y, "> ", colors::popup_prompt());
 
         // Draw query
         let query_x = input_x + 2;
@@ -292,11 +280,7 @@ impl PickerWidget {
             state.cursor_pos
         };
         if let Some(cell) = buf.cell_mut((query_x + cursor_display_pos as u16, input_y)) {
-            cell.set_style(
-                Style::default()
-                    .fg(colors::popup_input_bg())
-                    .bg(colors::popup_fg()),
-            );
+            cell.set_style(colors::popup_cursor());
         }
 
         // Item list
@@ -373,12 +357,8 @@ impl PickerWidget {
         // Error message
         if let Some(ref err) = state.error_message {
             let err_y = dialog_rect.y + dialog_rect.height - 2;
-            let err_style = Style::reset()
-                .fg(Color::Red)
-                .bg(colors::popup_bg())
-                .add_modifier(Modifier::BOLD);
             let truncated = truncate_to_display_width(err, inner_width);
-            buf.set_string(dialog_rect.x + 2, err_y, &truncated, err_style);
+            buf.set_string(dialog_rect.x + 2, err_y, &truncated, colors::popup_error());
         }
 
         // Hint
@@ -581,23 +561,19 @@ mod tests {
     }
 
     #[test]
-    fn selected_item_has_accent_bg() {
+    fn selected_item_matches_tree_cursor_treatment() {
         let state = PickerState::new_branch(&make_branches());
         let buf = render_picker(&state, 60, 20);
-        // Find the dialog and list area; selected item (main) should have POPUP_ACCENT bg
+        // Find the dialog and list area; selected item (main) should match the
+        // file-tree cursor treatment.
         let layout = state.layout(Rect::new(0, 0, 60, 20)).unwrap();
         let selected_y = layout.list_y;
         let x = layout.dialog_rect.x + 3;
         let cell = buf.cell((x, selected_y)).unwrap();
-        assert_eq!(
-            cell.bg,
-            colors::popup_accent(),
-            "selected item should have POPUP_ACCENT bg"
-        );
-        assert_eq!(
-            cell.fg,
-            colors::popup_fg(),
-            "selected item should have POPUP_FG fg"
+        assert!(
+            cell.modifier.contains(Modifier::REVERSED),
+            "selected item should use REVERSED like the tree cursor, got {:?}",
+            cell.modifier
         );
     }
 }

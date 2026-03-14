@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     widgets::Widget,
 };
 
@@ -190,7 +190,7 @@ impl SearchBar<'_> {
 impl Widget for SearchBar<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let bg = colors::status_bar_bg();
-        let style = Style::default().fg(Color::Reset).bg(bg);
+        let style = colors::status_input();
 
         // Fill background
         for x in area.x..area.x + area.width {
@@ -202,9 +202,9 @@ impl Widget for SearchBar<'_> {
 
         // Mode-specific prompt
         let (prompt, prompt_color) = match self.state.mode {
-            SearchMode::Find => (" / ", Color::Cyan),
-            SearchMode::Filter => (" F ", Color::Yellow),
-            SearchMode::Global => (" S ", Color::Magenta),
+            SearchMode::Find => (" / ", colors::find_match()),
+            SearchMode::Filter => (" F ", colors::git_modified()),
+            SearchMode::Global => (" S ", colors::popup_accent()),
         };
 
         buf.set_string(
@@ -226,12 +226,7 @@ impl Widget for SearchBar<'_> {
         } else {
             &self.state.query
         };
-        buf.set_string(
-            input_x,
-            area.y,
-            display_text,
-            Style::default().fg(Color::Indexed(15)).bg(bg),
-        );
+        buf.set_string(input_x, area.y, display_text, colors::status_input());
 
         // Draw cursor
         let cursor_display_pos = if self.state.query.len() > input_width {
@@ -240,7 +235,7 @@ impl Widget for SearchBar<'_> {
             self.state.cursor_pos
         };
         if let Some(cell) = buf.cell_mut((input_x + cursor_display_pos as u16, area.y)) {
-            cell.set_style(Style::default().fg(Color::Black).bg(Color::Indexed(15)));
+            cell.set_style(colors::status_cursor());
             if cell.symbol() == " " || cell.symbol().is_empty() {
                 cell.set_symbol(" ");
             }
@@ -280,9 +275,9 @@ impl Widget for SearchBar<'_> {
         if !match_info.is_empty() && area.width > right_reserved {
             let info_x = area.x + area.width - right_reserved;
             let info_style = if self.state.match_count() > 0 {
-                Style::default().fg(Color::Green).bg(bg)
+                colors::status_success()
             } else {
-                Style::default().fg(Color::Red).bg(bg)
+                colors::status_error()
             };
             buf.set_string(info_x, area.y, &match_info, info_style);
         }
@@ -294,10 +289,7 @@ impl Widget for SearchBar<'_> {
                 close_x,
                 area.y,
                 close_btn,
-                Style::default()
-                    .fg(Color::Red)
-                    .bg(bg)
-                    .add_modifier(Modifier::BOLD),
+                colors::status_error().add_modifier(Modifier::BOLD),
             );
         }
     }

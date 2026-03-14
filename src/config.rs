@@ -54,6 +54,7 @@ pub struct ColorConfig {
     pub popup_border_fg: Option<String>,
     pub popup_dim_fg: Option<String>,
     pub popup_input_bg: Option<String>,
+    pub popup_input_fg: Option<String>,
     pub popup_selected_danger_bg: Option<String>,
 }
 
@@ -85,6 +86,7 @@ pub struct ColorDefaults {
     pub popup_border_fg: &'static str,
     pub popup_dim_fg: &'static str,
     pub popup_input_bg: &'static str,
+    pub popup_input_fg: &'static str,
     pub popup_selected_danger_bg: &'static str,
 }
 
@@ -93,28 +95,29 @@ pub const DEFAULT_COLORS: ColorDefaults = ColorDefaults {
     git_added: "green",
     git_deleted: "red",
     git_ignored: "dark_gray",
-    git_conflicted: "red",
+    git_conflicted: "light_red",
     git_staged_modified: "yellow",
     git_staged_added: "green",
     git_staged_deleted: "red",
     unfocused_header_bg: "dark_gray",
-    unfocused_header_fg: "gray",
-    hex_values: "light_blue",
+    unfocused_header_fg: "black",
+    hex_values: "blue",
     hex_ascii: "gray",
-    preview_dir_name: "light_yellow",
-    inline_code: "yellow",
+    preview_dir_name: "blue",
+    inline_code: "green",
     tree_line: "dark_gray",
-    status_bar_bg: "dark_gray",
+    status_bar_bg: "black",
     status_bar_fg: "white",
-    dir_color: "yellow",
+    dir_color: "blue",
     default_fg: "reset",
     find_match: "cyan",
     popup_fg: "white",
     popup_bg: "black",
     popup_accent: "light_blue",
-    popup_border_fg: "gray",
+    popup_border_fg: "blue",
     popup_dim_fg: "gray",
-    popup_input_bg: "black",
+    popup_input_bg: "white",
+    popup_input_fg: "black",
     popup_selected_danger_bg: "red",
 };
 
@@ -226,6 +229,10 @@ impl ColorConfig {
                 .popup_input_bg
                 .clone()
                 .or_else(|| Some(DEFAULT_COLORS.popup_input_bg.to_string())),
+            popup_input_fg: self
+                .popup_input_fg
+                .clone()
+                .or_else(|| Some(DEFAULT_COLORS.popup_input_fg.to_string())),
             popup_selected_danger_bg: self
                 .popup_selected_danger_bg
                 .clone()
@@ -695,13 +702,18 @@ auto_preview = false
 
 [colors]
 # Format: ANSI name ("red"), indexed ("indexed:240" or "240"), or hex ("#ff0000")
+# Built-in defaults are ANSI-only and already tuned for stronger popup/input contrast.
+# Add entries here only when you want to override them.
 # Run `croot config` to see the full resolved palette.
 # popup_bg = "black"
 # popup_fg = "white"
 # popup_accent = "light_blue"
-# popup_input_bg = "black"
+# popup_border_fg = "blue"
+# popup_input_bg = "white"
+# popup_input_fg = "black"
 # popup_selected_danger_bg = "red"
-# dir_color = "yellow"
+# status_bar_bg = "black"
+# dir_color = "blue"
 # default_fg = "reset"
 # find_match = "cyan"
 "##
@@ -942,7 +954,8 @@ mod tests {
 
         assert!(toml.contains("[colors]"));
         assert!(toml.contains("popup_bg = \"black\""));
-        assert!(toml.contains("dir_color = \"yellow\""));
+        assert!(toml.contains("popup_input_bg = \"white\""));
+        assert!(toml.contains("dir_color = \"blue\""));
     }
 
     #[test]

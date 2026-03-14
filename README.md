@@ -40,6 +40,9 @@ croot ~/projects # Browse a specific directory
 
 Config file: `~/.config/croot/config.toml` (or `$XDG_CONFIG_HOME/croot/config.toml`)
 
+The built-in default palette is ANSI-only and tuned for a light, higher-contrast popup/input experience inspired by Cursor Light in Ghostty.
+Add a `[colors]` section only if you want to override those defaults for your own terminal theme.
+
 ## Development
 
 ```bash

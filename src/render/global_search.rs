@@ -1,9 +1,4 @@
-use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    style::{Color, Modifier, Style},
-    widgets::Widget,
-};
+use ratatui::{buffer::Buffer, layout::Rect, style::Modifier, widgets::Widget};
 use unicode_width::UnicodeWidthStr;
 
 use super::colors;
@@ -62,15 +57,7 @@ impl Widget for GlobalSearchOverlay<'_> {
 
         // Input line
         let prompt = " > ";
-        buf.set_string(
-            dialog.x + 1,
-            input_y,
-            prompt,
-            Style::default()
-                .fg(Color::Cyan)
-                .bg(colors::popup_input_bg())
-                .add_modifier(Modifier::BOLD),
-        );
+        buf.set_string(dialog.x + 1, input_y, prompt, colors::popup_prompt());
 
         let input_x = dialog.x + 1 + prompt.len() as u16;
         let input_width = (dialog.width - 3) as usize;
@@ -88,11 +75,7 @@ impl Widget for GlobalSearchOverlay<'_> {
             self.state.cursor_pos
         };
         if let Some(cell) = buf.cell_mut((input_x + cursor_pos as u16, input_y)) {
-            cell.set_style(
-                Style::default()
-                    .fg(colors::popup_input_bg())
-                    .bg(colors::popup_fg()),
-            );
+            cell.set_style(colors::popup_cursor());
             if cell.symbol() == " " || cell.symbol().is_empty() {
                 cell.set_symbol(" ");
             }
@@ -117,19 +100,11 @@ impl Widget for GlobalSearchOverlay<'_> {
                 dialog.x + 2,
                 results_y,
                 "Searching...",
-                Style::default().fg(Color::Yellow).bg(colors::popup_bg()),
+                colors::popup_warning(),
             );
         } else if let Some(ref err) = self.state.global_error {
             let display = truncate_str(err, content_width);
-            buf.set_string(
-                dialog.x + 2,
-                results_y,
-                display,
-                Style::default()
-                    .fg(Color::Red)
-                    .bg(colors::popup_bg())
-                    .add_modifier(Modifier::BOLD),
-            );
+            buf.set_string(dialog.x + 2, results_y, display, colors::popup_error());
         } else if self.state.global_results.is_empty() {
             if !self.state.query.is_empty() {
                 buf.set_string(dialog.x + 2, results_y, "No results", colors::popup_dim());
@@ -188,12 +163,7 @@ impl Widget for GlobalSearchOverlay<'_> {
             );
             let count_x = dialog.x + dialog.width - count.width() as u16 - 2;
             if count_x > dialog.x + 2 {
-                buf.set_string(
-                    count_x,
-                    help_y,
-                    &count,
-                    Style::default().fg(Color::Green).bg(colors::popup_bg()),
-                );
+                buf.set_string(count_x, help_y, &count, colors::popup_success());
             }
         }
     }

@@ -192,11 +192,7 @@ impl Widget for InputDialogWidget<'_> {
                 self.state.cursor_pos
             };
             if let Some(cell) = buf.cell_mut((input_x + cursor_display_pos as u16, input_y)) {
-                cell.set_style(
-                    Style::default()
-                        .fg(colors::popup_input_bg())
-                        .bg(colors::popup_fg()),
-                );
+                cell.set_style(colors::popup_cursor());
             }
 
             // Buttons

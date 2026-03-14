@@ -4,3 +4,4 @@ docs-private/
 .claude/
 CLAUDE.md
 agent.md
+examples/
