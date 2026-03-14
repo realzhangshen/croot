@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-03-11
+
+### Added
+- "Open in $EDITOR" feature for files
+- "Open Externally" feature for files
+- `croot config` subcommand for CLI-based configuration management
+- GitHub Pages landing page with automated demo GIF generation
+- Toggle preview off when clicking the already-selected file
+
+### Fixed
+- OSC 8 hyperlink text overflow corrupting terminal display
+
+### Changed
+- Dependency bumps (ratatui 0.30, git2 0.20.4, notify 8.2.0, toml 1.0.3)
+- CI action bumps (checkout v6, upload-artifact v7, download-artifact v8)
+- Pre-commit/pre-push hooks and Makefile for local CI checks
+
 ## [0.4.0] - 2026-03-07
 
 ### Added
@@ -49,6 +66,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Markdown rendering preview with pulldown-cmark
 - Preview re-renders on terminal resize to re-wrap content at new width
 
+## [0.2.4] - 2026-03-05
+
+### Changed
+- Harden release workflow (validate tag format, check tap token, fix heredoc)
+
+### Fixed
+- cargo-deny config (allow BSL-1.0/CC0-1.0, ignore unmaintained advisories)
+- CI: use cargo-deny-action and bump MSRV to 1.88
+
 ## [0.2.3] - 2026-03-05
 
 ### Changed
@@ -63,6 +89,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extract layout types (FocusPane, PreviewLayout) to layout module
 - Extract file watcher to dedicated watcher module
 - Move apply_git_statuses to GitState::apply_to_nodes method
+
+## [0.2.2] - 2026-03-05
+
+### Fixed
+- Self-update to use Homebrew instead of cargo
+
+## [0.2.1] - 2026-03-04
+
+_Release-only commit (CI/packaging fix). No user-facing changes._
 
 ## [0.2.0] - 2026-03-04
 
@@ -107,10 +142,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Git ignored file display: removed redundant status marker, fixed directory lookup
 - macOS x86_64 CI build using correct runner (macos-14)
 
-[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/realzhangshen/croot/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/realzhangshen/croot/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/realzhangshen/croot/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/realzhangshen/croot/compare/v0.2.4...v0.2.5
+[0.2.4]: https://github.com/realzhangshen/croot/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/realzhangshen/croot/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/realzhangshen/croot/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/realzhangshen/croot/compare/v0.2.0...v0.2.1

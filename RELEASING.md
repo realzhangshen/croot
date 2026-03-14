@@ -70,9 +70,11 @@ git commit -m "Release vX.Y.Z"
 ### Step 5: Create and push the tag
 
 ```bash
-git tag vX.Y.Z
-git push && git push --tags
+make release VERSION=X.Y.Z
 ```
+
+This validates that `Cargo.toml` version matches, `CHANGELOG.md` has an entry,
+and the working tree is clean before creating the tag and pushing.
 
 ---
 
@@ -140,7 +142,7 @@ The release commit existed on `main` but no tag was pushed, so CI never
 triggered. The version was bumped in `Cargo.toml` and `CHANGELOG.md` had a
 `[0.2.2]` section, but without the tag the release was never built.
 
-**Fix:** Always run `git push --tags` after `git tag`.
+**Fix:** Use `make release VERSION=X.Y.Z`, which handles both tagging and pushing.
 
 ### 2. Version bump without CHANGELOG update (v0.4.1)
 
@@ -148,8 +150,8 @@ triggered. The version was bumped in `Cargo.toml` and `CHANGELOG.md` had a
 empty `[Unreleased]` section and no `[0.4.1]` entry. The release went out
 with no user-facing notes.
 
-**Fix:** Always update `CHANGELOG.md` in the same commit as the version
-bump.
+**Fix:** Use `make release VERSION=X.Y.Z`, which refuses to tag without a
+CHANGELOG entry.
 
 ### 3. CHANGELOG link maintenance
 
@@ -193,11 +195,10 @@ cargo check
 #    - Add: [X.Y.Z]: https://github.com/realzhangshen/croot/compare/vPREV...vX.Y.Z
 #    - Update: [Unreleased]: https://github.com/realzhangshen/croot/compare/vX.Y.Z...HEAD
 
-# 4. Commit & tag
+# 4. Commit & release
 git add Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "Release vX.Y.Z"
-git tag vX.Y.Z
-git push && git push --tags
+make release VERSION=X.Y.Z
 
 # 5. Verify
 #    - GitHub Actions: all green

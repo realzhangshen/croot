@@ -21,3 +21,9 @@ When a milestone task is completed (e.g., finishing a plan's execution, completi
 1. Run `cargo test` — only proceed if **all tests pass**
 2. Stage relevant files and create a commit with a clear message
 3. Do not wait for the user to ask — commit proactively upon task completion
+
+## Release
+
+- Always update CHANGELOG.md before releasing (move [Unreleased] items to new version section, update comparison links)
+- Use `make release VERSION=x.y.z` to create and push the tag
+- Never create a tag manually — the Makefile enforces pre-release checks
