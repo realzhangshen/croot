@@ -457,3 +457,180 @@ fn format_table_row(
     line.push(("│".to_string(), border_style));
     line
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Extract the plain text from styled lines.
+    fn lines_to_text(lines: &[Vec<StyledSpan>]) -> Vec<String> {
+        lines
+            .iter()
+            .map(|spans| spans.iter().map(|(text, _)| text.as_str()).collect())
+            .collect()
+    }
+
+    #[test]
+    fn empty_input_returns_empty() {
+        let result = render_markdown("", 80);
+        assert!(result.is_empty() || result.iter().all(|l| l.is_empty()));
+    }
+
+    #[test]
+    fn heading_produces_styled_output() {
+        let result = render_markdown("# Hello", 80);
+        let text = lines_to_text(&result);
+        assert!(
+            text.iter().any(|l| l.contains("Hello")),
+            "Heading text missing: {text:?}"
+        );
+
+        // Check H1 style: should be Blue + Bold + Underlined
+        let heading_line = &result[0];
+        let (_, style) = heading_line
+            .iter()
+            .find(|(t, _)| t.contains("Hello"))
+            .unwrap();
+        assert_eq!(style.fg, Some(Color::Blue));
+        assert!(style.add_modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn h2_and_h3_headings() {
+        let result = render_markdown("## Sub\n### Detail", 80);
+        let text = lines_to_text(&result);
+        assert!(text.iter().any(|l| l.contains("Sub")));
+        assert!(text.iter().any(|l| l.contains("Detail")));
+    }
+
+    #[test]
+    fn bold_and_italic_text() {
+        let result = render_markdown("**bold** and *italic*", 80);
+        let all_spans: Vec<&StyledSpan> = result.iter().flat_map(|l| l.iter()).collect();
+
+        let bold_span = all_spans
+            .iter()
+            .find(|(t, _)| t.contains("bold"))
+            .expect("bold text missing");
+        assert!(bold_span.1.add_modifier.contains(Modifier::BOLD));
+
+        let italic_span = all_spans
+            .iter()
+            .find(|(t, _)| t.contains("italic"))
+            .expect("italic text missing");
+        assert!(italic_span.1.add_modifier.contains(Modifier::ITALIC));
+    }
+
+    #[test]
+    fn inline_code_rendered() {
+        let result = render_markdown("Use `foo()` here", 80);
+        let text = lines_to_text(&result);
+        assert!(
+            text.iter().any(|l| l.contains("`foo()`")),
+            "Inline code missing: {text:?}"
+        );
+    }
+
+    #[test]
+    fn code_block_rendered() {
+        let md = "```rust\nlet x = 42;\n```";
+        let result = render_markdown(md, 80);
+        let text = lines_to_text(&result);
+        assert!(
+            text.iter().any(|l| l.contains("let x = 42;")),
+            "Code block content missing: {text:?}"
+        );
+    }
+
+    #[test]
+    fn code_block_without_language() {
+        let md = "```\nplain code\n```";
+        let result = render_markdown(md, 80);
+        let text = lines_to_text(&result);
+        assert!(text.iter().any(|l| l.contains("plain code")));
+    }
+
+    #[test]
+    fn unordered_list() {
+        let md = "- item one\n- item two\n- item three";
+        let result = render_markdown(md, 80);
+        let text = lines_to_text(&result);
+        assert!(text.iter().any(|l| l.contains("item one")));
+        assert!(text.iter().any(|l| l.contains("item two")));
+        // Check bullet marker
+        assert!(
+            text.iter().any(|l| l.contains('•')),
+            "Bullet marker missing: {text:?}"
+        );
+    }
+
+    #[test]
+    fn ordered_list() {
+        let md = "1. first\n2. second\n3. third";
+        let result = render_markdown(md, 80);
+        let text = lines_to_text(&result);
+        assert!(text.iter().any(|l| l.contains("1.")));
+        assert!(text.iter().any(|l| l.contains("first")));
+    }
+
+    #[test]
+    fn nested_list() {
+        let md = "- outer\n  - inner\n    - deep";
+        let result = render_markdown(md, 80);
+        let text = lines_to_text(&result);
+        assert!(text.iter().any(|l| l.contains("outer")));
+        assert!(text.iter().any(|l| l.contains("inner")));
+        assert!(text.iter().any(|l| l.contains("deep")));
+    }
+
+    #[test]
+    fn horizontal_rule() {
+        let md = "above\n\n---\n\nbelow";
+        let result = render_markdown(md, 80);
+        let text = lines_to_text(&result);
+        assert!(text.iter().any(|l| l.contains('─')));
+    }
+
+    #[test]
+    fn link_rendered_with_url() {
+        let md = "[click here](https://example.com)";
+        let result = render_markdown(md, 80);
+        let text = lines_to_text(&result);
+        assert!(text.iter().any(|l| l.contains("click here")));
+        assert!(text.iter().any(|l| l.contains("https://example.com")));
+    }
+
+    #[test]
+    fn blockquote_prefixed() {
+        let md = "> quoted text";
+        let result = render_markdown(md, 80);
+        let text = lines_to_text(&result);
+        assert!(
+            text.iter().any(|l| l.contains('│')),
+            "Blockquote prefix missing: {text:?}"
+        );
+        assert!(text.iter().any(|l| l.contains("quoted text")));
+    }
+
+    #[test]
+    fn strikethrough_text() {
+        let md = "~~deleted~~";
+        let result = render_markdown(md, 80);
+        let all_spans: Vec<&StyledSpan> = result.iter().flat_map(|l| l.iter()).collect();
+        let span = all_spans
+            .iter()
+            .find(|(t, _)| t.contains("deleted"))
+            .expect("strikethrough text missing");
+        assert!(span.1.add_modifier.contains(Modifier::CROSSED_OUT));
+    }
+
+    #[test]
+    fn table_renders_with_borders() {
+        let md = "| A | B |\n|---|---|\n| 1 | 2 |";
+        let result = render_markdown(md, 80);
+        let text = lines_to_text(&result);
+        assert!(text.iter().any(|l| l.contains('│')));
+        assert!(text.iter().any(|l| l.contains("A")));
+        assert!(text.iter().any(|l| l.contains("1")));
+    }
+}

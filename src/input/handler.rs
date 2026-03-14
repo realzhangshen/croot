@@ -195,7 +195,13 @@ pub fn build_keybinding_map(config: &KeybindingsConfig) -> KeybindingMap {
         };
         if let Some(key_str) = key_str {
             if let Some((code, modifiers)) = parse_key(key_str) {
-                map.insert(KeyBinding { code, modifiers }, action.clone());
+                let binding = KeyBinding { code, modifiers };
+                if let Some(existing) = map.get(&binding) {
+                    eprintln!(
+                        "croot: warning: key '{key_str}' is bound to both {existing:?} and {action:?}; last wins"
+                    );
+                }
+                map.insert(binding, action.clone());
             }
         }
     }
@@ -220,7 +226,13 @@ pub fn build_keybinding_map(config: &KeybindingsConfig) -> KeybindingMap {
     for (opt, action) in opt_ins {
         if let Some(ref s) = opt {
             if let Some((code, modifiers)) = parse_key(s) {
-                map.insert(KeyBinding { code, modifiers }, action.clone());
+                let binding = KeyBinding { code, modifiers };
+                if let Some(existing) = map.get(&binding) {
+                    eprintln!(
+                        "croot: warning: key '{s}' is bound to both {existing:?} and {action:?}; last wins"
+                    );
+                }
+                map.insert(binding, action.clone());
             }
         }
     }

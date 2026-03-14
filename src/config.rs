@@ -616,8 +616,31 @@ impl Config {
     pub fn load() -> Self {
         let path = config_path();
         match std::fs::read_to_string(&path) {
-            Ok(content) => toml::from_str(&content).unwrap_or_default(),
+            Ok(content) => match toml::from_str(&content) {
+                Ok(cfg) => cfg,
+                Err(e) => {
+                    eprintln!("croot: warning: config parse error: {e}; using defaults");
+                    Self::default()
+                }
+            },
             Err(_) => Self::default(),
+        }
+    }
+
+    /// Parse config from a TOML string, returning defaults on error.
+    /// On parse errors, writes a warning to `warn_sink` (if provided).
+    pub fn parse_with_warning(content: &str, warn_sink: &mut Option<String>) -> Self {
+        match toml::from_str(content) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                let msg = format!("croot: warning: config parse error: {e}; using defaults");
+                if let Some(ref mut sink) = warn_sink {
+                    *sink = msg;
+                } else {
+                    eprintln!("{msg}");
+                }
+                Self::default()
+            }
         }
     }
 
@@ -964,5 +987,45 @@ mod tests {
 
         assert!(template.contains("[colors]"));
         assert!(template.contains("popup_bg"));
+    }
+
+    #[test]
+    fn parse_with_warning_valid_toml_returns_config() {
+        let content = r#"
+[tree]
+show_hidden = false
+"#;
+        let mut warning = None;
+        let cfg = Config::parse_with_warning(content, &mut warning);
+        assert!(warning.is_none());
+        assert!(!cfg.tree.show_hidden);
+    }
+
+    #[test]
+    fn parse_with_warning_invalid_toml_returns_defaults_and_warns() {
+        let content = "this is [not valid{ toml!!!";
+        let mut warning = Some(String::new());
+        let cfg = Config::parse_with_warning(content, &mut warning);
+        // Should return defaults
+        assert!(cfg.tree.show_hidden); // default is true
+                                       // Should have written a warning
+        let msg = warning.unwrap();
+        assert!(
+            msg.contains("config parse error"),
+            "Expected warning message, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn parse_with_warning_wrong_types_returns_defaults() {
+        // Valid TOML but wrong types for our schema
+        let content = r#"
+[tree]
+show_hidden = "not a bool"
+"#;
+        let mut warning = Some(String::new());
+        let cfg = Config::parse_with_warning(content, &mut warning);
+        assert!(cfg.tree.show_hidden); // default
+        assert!(warning.unwrap().contains("config parse error"));
     }
 }

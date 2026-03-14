@@ -12,6 +12,11 @@ pub struct GlobalSearchOverlay<'a> {
 
 impl Widget for GlobalSearchOverlay<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        // Guard: skip rendering if terminal is too small for the dialog
+        if area.width < 10 || area.height < 6 {
+            return;
+        }
+
         // Dialog dimensions: centered, ~60% width, ~60% height
         let width = (area.width * 3 / 5)
             .max(40)
@@ -48,7 +53,7 @@ impl Widget for GlobalSearchOverlay<'_> {
         // Pre-fill input row with sunken input style
         let input_y = dialog.y + 1;
         let input_style = colors::popup_input();
-        for col in (dialog.x + 1)..(dialog.x + dialog.width - 1) {
+        for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
             if let Some(cell) = buf.cell_mut((col, input_y)) {
                 cell.reset();
                 cell.set_style(input_style);
@@ -60,7 +65,7 @@ impl Widget for GlobalSearchOverlay<'_> {
         buf.set_string(dialog.x + 1, input_y, prompt, colors::popup_prompt());
 
         let input_x = dialog.x + 1 + prompt.len() as u16;
-        let input_width = (dialog.width - 3) as usize;
+        let input_width = (dialog.width.saturating_sub(3)) as usize;
         let query_display = if self.state.query.len() > input_width {
             &self.state.query[self.state.query.len() - input_width..]
         } else {
@@ -83,7 +88,7 @@ impl Widget for GlobalSearchOverlay<'_> {
 
         // Separator
         let sep_y = dialog.y + 2;
-        for col in (dialog.x + 1)..(dialog.x + dialog.width - 1) {
+        for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
             if let Some(cell) = buf.cell_mut((col, sep_y)) {
                 cell.set_symbol("─");
                 cell.set_style(border_style);
@@ -93,7 +98,7 @@ impl Widget for GlobalSearchOverlay<'_> {
         // Results area
         let results_y = dialog.y + 3;
         let results_height = dialog.height.saturating_sub(5) as usize; // -3 top, -2 bottom
-        let content_width = (dialog.width - 3) as usize;
+        let content_width = (dialog.width.saturating_sub(3)) as usize;
 
         if self.state.global_loading {
             buf.set_string(
@@ -125,7 +130,7 @@ impl Widget for GlobalSearchOverlay<'_> {
 
                 // Fill row background for selected item
                 if is_selected {
-                    for col in (dialog.x + 1)..(dialog.x + dialog.width - 1) {
+                    for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
                         if let Some(cell) = buf.cell_mut((col, row_y)) {
                             cell.set_style(style);
                         }
@@ -150,7 +155,7 @@ impl Widget for GlobalSearchOverlay<'_> {
         }
 
         // Help line at bottom
-        let help_y = dialog.y + dialog.height - 2;
+        let help_y = dialog.y + dialog.height.saturating_sub(2);
         let help = "[Enter] go to  [Esc] cancel";
         buf.set_string(dialog.x + 2, help_y, help, colors::popup_dim());
 
@@ -161,7 +166,9 @@ impl Widget for GlobalSearchOverlay<'_> {
                 self.state.global_selected + 1,
                 self.state.global_results.len()
             );
-            let count_x = dialog.x + dialog.width - count.width() as u16 - 2;
+            let count_x = dialog
+                .x
+                .saturating_add(dialog.width.saturating_sub(count.width() as u16 + 2));
             if count_x > dialog.x + 2 {
                 buf.set_string(count_x, help_y, &count, colors::popup_success());
             }
@@ -193,6 +200,30 @@ mod tests {
     use super::*;
     use crate::render::search_bar::{SearchMode, SearchState};
     use ratatui::style::Modifier;
+
+    #[test]
+    fn tiny_terminal_no_panic() {
+        let state = SearchState::new(SearchMode::Global);
+        // Test various tiny terminal sizes that should not panic
+        for (w, h) in [(5, 3), (8, 5), (9, 5), (3, 3), (1, 1), (10, 6)] {
+            let area = Rect::new(0, 0, w, h);
+            let mut buf = Buffer::empty(area);
+            let widget = GlobalSearchOverlay { state: &state };
+            widget.render(area, &mut buf);
+        }
+    }
+
+    #[test]
+    fn narrow_terminal_no_panic() {
+        let state = SearchState::new(SearchMode::Global);
+        // Terminal wider than threshold but still narrow
+        for w in 10..50 {
+            let area = Rect::new(0, 0, w, 10);
+            let mut buf = Buffer::empty(area);
+            let widget = GlobalSearchOverlay { state: &state };
+            widget.render(area, &mut buf);
+        }
+    }
 
     #[test]
     fn popup_body_uses_reversed() {

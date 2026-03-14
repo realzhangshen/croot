@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyboardEnhancementFlags,
@@ -92,6 +92,8 @@ pub struct App {
     search_bar_y: Option<u16>,
     // Status bar branch click region: (x_start, x_end)
     status_bar_branch_region: Option<(u16, u16)>,
+    // Transient error message with timestamp for auto-dismiss
+    error_message: Option<(String, Instant)>,
 }
 
 impl App {
@@ -146,6 +148,7 @@ impl App {
             status_bar_y: 0,
             search_bar_y: None,
             status_bar_branch_region: None,
+            error_message: None,
         })
     }
 
@@ -533,6 +536,26 @@ impl App {
 
         self.hyperlink_regions = status_bar.hyperlink_regions(status_area);
         status_bar.render(status_area, frame.buffer_mut());
+
+        // Overlay error message on status bar (auto-dismiss after 3 seconds)
+        if let Some((ref msg, ts)) = self.error_message {
+            if ts.elapsed() < Duration::from_secs(3) {
+                let error_style = ratatui::style::Style::default()
+                    .fg(ratatui::style::Color::White)
+                    .bg(ratatui::style::Color::Red)
+                    .add_modifier(ratatui::style::Modifier::BOLD);
+                let display = if msg.len() as u16 > status_area.width {
+                    &msg[..status_area.width as usize]
+                } else {
+                    msg
+                };
+                frame
+                    .buffer_mut()
+                    .set_string(status_area.x, status_area.y, display, error_style);
+            } else {
+                self.error_message = None;
+            }
+        }
 
         // Search bar (shown when in search mode or filter is active)
         if show_search_bar {
@@ -1683,6 +1706,11 @@ impl App {
         }
     }
 
+    /// Display a transient error message in the status bar area.
+    fn show_error(&mut self, msg: String) {
+        self.error_message = Some((msg, Instant::now()));
+    }
+
     fn confirm_dialog(&mut self) {
         let Some(dialog) = self.input_dialog.take() else {
             return;
@@ -1695,22 +1723,30 @@ impl App {
                     let new_path = dialog.context_path.join(&dialog.input);
                     // Create parent dirs if needed
                     if let Some(parent) = new_path.parent() {
-                        let _ = std::fs::create_dir_all(parent);
+                        if let Err(e) = std::fs::create_dir_all(parent) {
+                            self.show_error(format!("Create dirs failed: {e}"));
+                        }
                     }
-                    let _ = std::fs::File::create(&new_path);
+                    if let Err(e) = std::fs::File::create(&new_path) {
+                        self.show_error(format!("Create file failed: {e}"));
+                    }
                 }
             }
             DialogKind::NewDir => {
                 if !dialog.input.is_empty() {
                     let new_path = dialog.context_path.join(&dialog.input);
-                    let _ = std::fs::create_dir_all(&new_path);
+                    if let Err(e) = std::fs::create_dir_all(&new_path) {
+                        self.show_error(format!("Create directory failed: {e}"));
+                    }
                 }
             }
             DialogKind::Rename => {
                 if !dialog.input.is_empty() && dialog.input != dialog.target_name {
                     if let Some(parent) = dialog.context_path.parent() {
                         let new_path = parent.join(&dialog.input);
-                        let _ = std::fs::rename(&dialog.context_path, &new_path);
+                        if let Err(e) = std::fs::rename(&dialog.context_path, &new_path) {
+                            self.show_error(format!("Rename failed: {e}"));
+                        }
                     }
                 }
             }
@@ -1718,9 +1754,11 @@ impl App {
             DialogKind::ConfirmDelete => {
                 let path = &dialog.context_path;
                 if path.is_dir() {
-                    let _ = std::fs::remove_dir_all(path);
-                } else {
-                    let _ = std::fs::remove_file(path);
+                    if let Err(e) = std::fs::remove_dir_all(path) {
+                        self.show_error(format!("Delete failed: {e}"));
+                    }
+                } else if let Err(e) = std::fs::remove_file(path) {
+                    self.show_error(format!("Delete failed: {e}"));
                 }
             }
         }
@@ -2326,6 +2364,65 @@ mod tests {
         app.handle_global_search_mouse(mouse);
 
         assert_eq!(app.input_mode, InputMode::GlobalSearch);
+    }
+
+    #[test]
+    fn test_show_error_sets_message() {
+        let mut app = test_app();
+        assert!(app.error_message.is_none());
+        app.show_error("test error".to_string());
+        assert!(app.error_message.is_some());
+        let (msg, _ts) = app.error_message.as_ref().unwrap();
+        assert_eq!(msg, "test error");
+    }
+
+    #[test]
+    fn test_error_message_auto_dismiss() {
+        let mut app = test_app();
+        // Set an error with a past timestamp (4 seconds ago)
+        app.error_message = Some((
+            "old error".to_string(),
+            Instant::now() - Duration::from_secs(4),
+        ));
+        // After 3 seconds the message should be considered expired
+        let (_, ts) = app.error_message.as_ref().unwrap();
+        assert!(ts.elapsed() >= Duration::from_secs(3));
+    }
+
+    #[test]
+    fn test_confirm_dialog_rename_nonexistent_shows_error() {
+        let mut app = test_app();
+        let fake_path = std::env::temp_dir().join("croot_nonexistent_for_rename");
+        app.input_dialog = Some(InputDialogState::new(
+            DialogKind::Rename,
+            fake_path,
+            "old_name".to_string(),
+        ));
+        app.input_mode = InputMode::Dialog;
+        // Set the input to something different to trigger rename
+        app.input_dialog.as_mut().unwrap().input = "new_name".to_string();
+        app.confirm_dialog();
+        assert!(
+            app.error_message.is_some(),
+            "Rename of nonexistent file should show error"
+        );
+    }
+
+    #[test]
+    fn test_confirm_dialog_delete_nonexistent_shows_error() {
+        let mut app = test_app();
+        let fake_path = std::env::temp_dir().join("croot_nonexistent_for_delete");
+        app.input_dialog = Some(InputDialogState::new(
+            DialogKind::ConfirmDelete,
+            fake_path,
+            "ghost".to_string(),
+        ));
+        app.input_mode = InputMode::Dialog;
+        app.confirm_dialog();
+        assert!(
+            app.error_message.is_some(),
+            "Delete of nonexistent file should show error"
+        );
     }
 
     #[test]

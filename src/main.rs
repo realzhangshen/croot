@@ -13,7 +13,7 @@ use std::io;
 use std::path::PathBuf;
 use std::process;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use crossterm::{
     event::{
         DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags,
@@ -52,6 +52,11 @@ enum Command {
         #[command(subcommand)]
         action: Option<ConfigAction>,
     },
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        shell: clap_complete::Shell,
+    },
 }
 
 #[derive(Subcommand)]
@@ -83,6 +88,10 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Some(Command::Update) => return self_update(),
         Some(Command::Config { action }) => return handle_config(action),
+        Some(Command::Completions { shell }) => {
+            clap_complete::generate(shell, &mut Cli::command(), "croot", &mut std::io::stdout());
+            return Ok(());
+        }
         None => {}
     }
 
@@ -224,7 +233,9 @@ fn self_update() -> anyhow::Result<()> {
             process::exit(s.code().unwrap_or(1));
         }
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            eprintln!("error: 'brew' not found in PATH. Install Homebrew via https://brew.sh");
+            eprintln!("error: 'brew' not found. To update croot manually:");
+            eprintln!("  cargo install croot       # if installed via cargo");
+            eprintln!("  brew install croot        # install Homebrew first: https://brew.sh");
             process::exit(1);
         }
         Err(e) => Err(e.into()),

@@ -72,3 +72,130 @@ pub fn load_children_with_meta(dir: &Path, depth: usize, config: &TreeConfig) ->
     sort_nodes(&mut nodes, dirs_first);
     nodes
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::TreeConfig;
+    use std::fs;
+
+    fn default_config() -> TreeConfig {
+        TreeConfig::default()
+    }
+
+    #[test]
+    fn basic_directory_listing() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("file_a.txt"), "a").unwrap();
+        fs::write(dir.path().join("file_b.txt"), "b").unwrap();
+        fs::create_dir(dir.path().join("subdir")).unwrap();
+
+        let nodes = load_children_with_meta(dir.path(), 0, &default_config());
+        let names: Vec<&str> = nodes.iter().map(|n| n.name.as_str()).collect();
+
+        assert!(names.contains(&"file_a.txt"));
+        assert!(names.contains(&"file_b.txt"));
+        assert!(names.contains(&"subdir"));
+    }
+
+    #[test]
+    fn empty_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let nodes = load_children_with_meta(dir.path(), 0, &default_config());
+        assert!(nodes.is_empty());
+    }
+
+    #[test]
+    fn dirs_first_ordering() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("aaa_file.txt"), "").unwrap();
+        fs::create_dir(dir.path().join("zzz_dir")).unwrap();
+
+        let config = TreeConfig {
+            dirs_first: true,
+            ..default_config()
+        };
+        let nodes = load_children_with_meta(dir.path(), 0, &config);
+
+        // The directory should appear before the file
+        let dir_pos = nodes.iter().position(|n| n.name == "zzz_dir").unwrap();
+        let file_pos = nodes.iter().position(|n| n.name == "aaa_file.txt").unwrap();
+        assert!(
+            dir_pos < file_pos,
+            "Directory should come before file when dirs_first=true"
+        );
+    }
+
+    #[test]
+    fn hidden_file_filtering() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(".hidden"), "").unwrap();
+        fs::write(dir.path().join("visible"), "").unwrap();
+
+        // show_hidden=false should filter out dotfiles
+        let config = TreeConfig {
+            show_hidden: false,
+            ..default_config()
+        };
+        let nodes = load_children_with_meta(dir.path(), 0, &config);
+        let names: Vec<&str> = nodes.iter().map(|n| n.name.as_str()).collect();
+        assert!(
+            !names.contains(&".hidden"),
+            "Hidden file should be filtered"
+        );
+        assert!(names.contains(&"visible"));
+
+        // show_hidden=true should include dotfiles
+        let config_show = TreeConfig {
+            show_hidden: true,
+            ..default_config()
+        };
+        let nodes = load_children_with_meta(dir.path(), 0, &config_show);
+        let names: Vec<&str> = nodes.iter().map(|n| n.name.as_str()).collect();
+        assert!(names.contains(&".hidden"), "Hidden file should be visible");
+    }
+
+    #[test]
+    fn exclude_list_filters_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join(".git")).unwrap();
+        fs::write(dir.path().join("keep.txt"), "").unwrap();
+
+        let config = TreeConfig {
+            exclude: vec![".git".to_string()],
+            show_hidden: true,
+            ..default_config()
+        };
+        let nodes = load_children_with_meta(dir.path(), 0, &config);
+        let names: Vec<&str> = nodes.iter().map(|n| n.name.as_str()).collect();
+        assert!(!names.contains(&".git"), ".git should be excluded");
+        assert!(names.contains(&"keep.txt"));
+    }
+
+    #[test]
+    fn symlink_detected() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("target.txt");
+        fs::write(&target, "data").unwrap();
+
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&target, dir.path().join("link.txt")).unwrap();
+            let nodes = load_children_with_meta(dir.path(), 0, &default_config());
+            let link_node = nodes.iter().find(|n| n.name == "link.txt").unwrap();
+            assert_eq!(link_node.kind, NodeKind::Symlink);
+        }
+    }
+
+    #[test]
+    fn depth_is_set_correctly() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("f.txt"), "").unwrap();
+
+        let nodes = load_children_with_meta(dir.path(), 3, &default_config());
+        assert!(!nodes.is_empty());
+        for node in &nodes {
+            assert_eq!(node.depth, 3);
+        }
+    }
+}
