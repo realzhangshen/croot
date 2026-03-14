@@ -1,8 +1,4 @@
-use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    style::{Color, Modifier},
-};
+use ratatui::{buffer::Buffer, layout::Rect, style::Modifier};
 use unicode_width::UnicodeWidthStr;
 
 use super::colors;
@@ -419,6 +415,7 @@ fn selected_display_row_in(display_rows: &[DisplayRow], selected: usize) -> usiz
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::style::Color;
 
     fn make_branches() -> Vec<BranchInfo> {
         vec![
