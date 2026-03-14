@@ -35,14 +35,20 @@ export default defineConfig({
   title: 'croot',
   description: 'The VS Code sidebar for your terminal',
   base: '/croot/',
+  appearance: false,
 
   head: [
     ['link', { rel: 'icon', href: '/croot/favicon.svg', type: 'image/svg+xml' }],
+    ['link', { rel: 'preconnect', href: 'https://cursor.com' }],
     ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
     ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
     ['link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap' }],
-    ['meta', { name: 'theme-color', content: '#0d1117' }],
+    ['meta', { name: 'theme-color', content: '#f7f7f4' }],
   ],
+
+  markdown: {
+    theme: 'github-light',
+  },
 
   themeConfig: {
     logo: '/favicon.svg',

@@ -1,51 +1,165 @@
 @import "tailwindcss";
 
-/* ── VitePress theme overrides ─────────────── */
+/* ── CursorGothic font-face ──────────────────── */
+
+@font-face {
+  font-family: "CursorGothic";
+  src: url("https://cursor.com/marketing-static/_next/static/media/CursorGothic_Regular-s.p.a361088d.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "CursorGothic";
+  src: url("https://cursor.com/marketing-static/_next/static/media/CursorGothic_Italic-s.p.00bb2606.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "CursorGothic";
+  src: url("https://cursor.com/marketing-static/_next/static/media/CursorGothic_Bold-s.p.95169710.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "CursorGothic";
+  src: url("https://cursor.com/marketing-static/_next/static/media/CursorGothic_BoldItalic-s.p.036859cb.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+}
+
+/* ── Design tokens ───────────────────────────── */
 
 :root {
-  --vp-c-brand-1: #3fb950;
-  --vp-c-brand-2: #238636;
-  --vp-c-brand-3: #2ea043;
-  --vp-c-brand-soft: rgba(63, 185, 80, 0.15);
+  color-scheme: light;
+
+  --croot-bg: #f7f7f4;
+  --croot-bg-surface: #ffffff;
+  --croot-bg-elevated: #eeeee8;
+  --croot-bg-hover: rgba(38, 37, 30, 0.06);
+  --croot-border: rgba(38, 37, 30, 0.12);
+  --croot-border-strong: rgba(38, 37, 30, 0.22);
+  --croot-text: #26251e;
+  --croot-text-secondary: rgba(38, 37, 30, 0.55);
+  --croot-text-muted: rgba(38, 37, 30, 0.4);
+  --croot-accent: #26251e;
+  --croot-accent-white: #f7f7f4;
+
+  --croot-font-sans: CursorGothic, "CursorGothic Fallback", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --croot-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, Consolas, monospace;
+  --croot-max-width: 1200px;
+
+  --croot-radius-sm: 12px;
+  --croot-radius-md: 16px;
+  --croot-radius-pill: 999px;
+
+  --croot-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --croot-dur-fast: 140ms;
+  --croot-dur-mid: 280ms;
+
+  --croot-shadow: 0 1px 3px rgba(38, 37, 30, 0.06), 0 4px 16px rgba(38, 37, 30, 0.05);
+  --croot-shadow-elevated: 0 2px 6px rgba(38, 37, 30, 0.08), 0 8px 24px rgba(38, 37, 30, 0.08);
+
+  /* ── VitePress theme overrides ── */
+  --vp-c-bg: #f7f7f4;
+  --vp-c-bg-soft: #ffffff;
+  --vp-c-bg-mute: #eeeee8;
+  --vp-c-bg-alt: #f7f7f4;
+
+  --vp-c-text-1: #26251e;
+  --vp-c-text-2: rgba(38, 37, 30, 0.55);
+  --vp-c-text-3: rgba(38, 37, 30, 0.4);
+
+  --vp-c-brand-1: #26251e;
+  --vp-c-brand-2: rgba(38, 37, 30, 0.8);
+  --vp-c-brand-3: rgba(38, 37, 30, 0.6);
+  --vp-c-brand-soft: rgba(38, 37, 30, 0.08);
+
+  --vp-c-divider: rgba(38, 37, 30, 0.12);
+  --vp-c-gutter: rgba(38, 37, 30, 0.12);
+  --vp-c-border: rgba(38, 37, 30, 0.12);
+
+  --vp-font-family-base: CursorGothic, "CursorGothic Fallback", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
   --vp-font-family-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, Consolas, monospace;
 
-  --croot-bg: #0d1117;
-  --croot-bg-surface: #161b22;
-  --croot-bg-overlay: #1c2129;
-  --croot-border: #30363d;
-  --croot-text: #e6edf3;
-  --croot-text-muted: #8b949e;
-  --croot-accent: #3fb950;
-  --croot-accent-dim: #238636;
-  --croot-accent-glow: rgba(63, 185, 80, 0.15);
-  --croot-link: #58a6ff;
-  --croot-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, Consolas, monospace;
-  --croot-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-  --croot-max-width: 1120px;
-  --croot-radius: 8px;
+  --vp-sidebar-bg-color: #f7f7f4;
+  --vp-nav-bg-color: rgba(247, 247, 244, 0.96);
 }
 
-.dark {
-  --vp-c-brand-1: #3fb950;
-  --vp-c-brand-2: #2ea043;
-  --vp-c-brand-3: #238636;
+/* ── Animations ──────────────────────────────── */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-html:not(.dark) {
-  --croot-bg: #ffffff;
-  --croot-bg-surface: #f6f8fa;
-  --croot-bg-overlay: #eaeef2;
-  --croot-border: #d0d7de;
-  --croot-text: #1f2328;
-  --croot-text-muted: #656d76;
-  --croot-accent: #1a7f37;
-  --croot-accent-dim: #2da44e;
-  --croot-accent-glow: rgba(45, 164, 78, 0.1);
-  --croot-link: #0969da;
+/* ── Selection ───────────────────────────────── */
+
+::selection {
+  background: rgba(38, 37, 30, 0.18);
+  color: #26251e;
+}
+
+/* ── VitePress nav glassmorphism ─────────────── */
+
+.VPNav .VPNavBar {
+  background: rgba(247, 247, 244, 0.96) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(38, 37, 30, 0.12) !important;
+}
+
+/* ── Shared section styles ───────────────────── */
+
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--croot-border);
+  border-radius: var(--croot-radius-pill);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--croot-text-muted);
+  background: var(--croot-bg-hover);
+  font-family: var(--croot-font-sans);
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-family: var(--croot-font-sans);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: var(--croot-text);
 }
 
 /* Hide default VitePress home content when using custom layout */
 .Layout.home .VPContent,
 .Layout.home .VPNav {
   /* Keep nav visible */
+}
+
+/* ── Reduced motion ──────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }

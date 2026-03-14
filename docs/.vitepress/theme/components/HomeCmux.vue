@@ -32,7 +32,6 @@
 
 <style scoped>
 .cmux-section {
-  border-top: 1px solid var(--croot-border);
   padding: 80px 24px;
   background: var(--croot-bg);
   font-family: var(--croot-font-sans);
@@ -43,22 +42,6 @@
   margin: 0 auto;
 }
 
-.section-label {
-  font-family: var(--croot-font-mono);
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--croot-accent);
-  margin-bottom: 8px;
-}
-
-.section-title {
-  font-size: clamp(1.5rem, 3vw, 2rem);
-  font-weight: 700;
-  margin-bottom: 24px;
-  color: var(--croot-text);
-}
-
 .cmux-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -67,49 +50,58 @@
 }
 
 .cmux-text p {
-  color: var(--croot-text-muted);
+  color: var(--croot-text-secondary);
   margin-bottom: 16px;
   font-size: 0.95rem;
   line-height: 1.7;
 }
 
 .cmux-text a:not(.btn) {
-  color: var(--croot-link);
+  color: var(--croot-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 24px;
-  border-radius: 6px;
+  padding: 0.72rem 1.15rem;
+  border-radius: var(--croot-radius-pill);
   font-size: 0.95rem;
-  font-weight: 500;
+  font-weight: 600;
   text-decoration: none;
-  transition: all 0.2s;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  transition:
+    transform var(--croot-dur-fast) var(--croot-ease),
+    border-color var(--croot-dur-fast) var(--croot-ease),
+    background-color var(--croot-dur-fast) var(--croot-ease);
   margin-top: 8px;
 }
 
 .btn-outline {
   background: transparent;
   color: var(--croot-text);
-  border: 1px solid var(--croot-border);
+  border: 1px solid var(--croot-border-strong);
 }
 
 .btn-outline:hover {
-  border-color: var(--croot-text-muted);
+  transform: translateY(-1px);
+  border-color: var(--croot-text);
   text-decoration: none;
 }
 
 .cmux-visual {
   background: var(--croot-bg-surface);
   border: 1px solid var(--croot-border);
-  border-radius: var(--croot-radius);
+  border-radius: var(--croot-radius-md);
   padding: 24px;
   font-family: var(--croot-font-mono);
   font-size: 0.8rem;
-  color: var(--croot-text-muted);
+  color: var(--croot-text-secondary);
   line-height: 1.6;
+  box-shadow: var(--croot-shadow);
 }
 
 .cmux-visual pre {
@@ -117,11 +109,11 @@
 }
 
 .label {
-  color: var(--croot-accent);
+  color: var(--croot-text);
 }
 
 .dim {
-  color: var(--croot-border);
+  color: var(--croot-border-strong);
 }
 
 @media (max-width: 768px) {

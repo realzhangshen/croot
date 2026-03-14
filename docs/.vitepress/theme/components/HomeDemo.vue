@@ -42,9 +42,7 @@ onMounted(() => {
 
 <style scoped>
 .demo-section {
-  background: var(--croot-bg-surface);
-  border-top: 1px solid var(--croot-border);
-  border-bottom: 1px solid var(--croot-border);
+  background: var(--croot-bg);
   padding: 80px 24px;
   font-family: var(--croot-font-sans);
 }
@@ -55,24 +53,8 @@ onMounted(() => {
   text-align: center;
 }
 
-.section-label {
-  font-family: var(--croot-font-mono);
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--croot-accent);
-  margin-bottom: 8px;
-}
-
-.section-title {
-  font-size: clamp(1.5rem, 3vw, 2rem);
-  font-weight: 700;
-  margin-bottom: 12px;
-  color: var(--croot-text);
-}
-
 .section-desc {
-  color: var(--croot-text-muted);
+  color: var(--croot-text-secondary);
   max-width: 600px;
   margin: 0 auto 48px;
   line-height: 1.6;
@@ -81,14 +63,14 @@ onMounted(() => {
 .demo-window {
   max-width: 840px;
   margin: 0 auto;
-  border-radius: 12px;
+  border-radius: var(--croot-radius-md);
   overflow: hidden;
   border: 1px solid var(--croot-border);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--croot-shadow-elevated);
 }
 
 .demo-titlebar {
-  background: var(--croot-bg-overlay);
+  background: var(--croot-bg-elevated);
   padding: 12px 16px;
   display: flex;
   align-items: center;
@@ -140,7 +122,7 @@ onMounted(() => {
   display: inline-block;
   width: 8px;
   height: 1.2em;
-  background: var(--croot-accent);
+  background: #3fb950;
   vertical-align: text-bottom;
   animation: blink 1s step-end infinite;
 }

@@ -2,7 +2,7 @@
   <footer class="site-footer">
     <div class="footer-inner">
       <div class="footer-left">
-        Built with <span class="accent">Rust</span> &amp; <a href="https://ratatui.rs">Ratatui</a>
+        Built with Rust &amp; <a href="https://ratatui.rs">Ratatui</a>
       </div>
       <ul class="footer-links">
         <li><a href="https://github.com/realzhangshen/croot">GitHub</a></li>
@@ -15,7 +15,6 @@
 
 <style scoped>
 .site-footer {
-  border-top: 1px solid var(--croot-border);
   padding: 40px 24px;
   background: var(--croot-bg);
   font-family: var(--croot-font-sans);
@@ -32,22 +31,18 @@
 }
 
 .footer-left {
-  font-family: var(--croot-font-mono);
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--croot-text-muted);
 }
 
-.footer-left .accent {
-  color: var(--croot-accent);
-}
-
 .footer-left a {
-  color: var(--croot-accent);
+  color: var(--croot-text-secondary);
   text-decoration: none;
+  transition: color var(--croot-dur-fast) var(--croot-ease);
 }
 
 .footer-left a:hover {
-  text-decoration: underline;
+  color: var(--croot-text);
 }
 
 .footer-links {
@@ -62,7 +57,7 @@
   color: var(--croot-text-muted);
   font-size: 0.85rem;
   text-decoration: none;
-  transition: color 0.2s;
+  transition: color var(--croot-dur-fast) var(--croot-ease);
 }
 
 .footer-links a:hover {

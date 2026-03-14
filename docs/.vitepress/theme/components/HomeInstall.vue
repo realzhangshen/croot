@@ -114,24 +114,8 @@ sudo mv croot /usr/local/bin/</pre>
   margin: 0 auto;
 }
 
-.section-label {
-  font-family: var(--croot-font-mono);
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--croot-accent);
-  margin-bottom: 8px;
-}
-
-.section-title {
-  font-size: clamp(1.5rem, 3vw, 2rem);
-  font-weight: 700;
-  margin-bottom: 12px;
-  color: var(--croot-text);
-}
-
 .section-desc {
-  color: var(--croot-text-muted);
+  color: var(--croot-text-secondary);
   max-width: 600px;
   margin-bottom: 48px;
   line-height: 1.6;
@@ -139,30 +123,37 @@ sudo mv croot /usr/local/bin/</pre>
 
 .install-tabs {
   display: flex;
-  border-bottom: 1px solid var(--croot-border);
+  gap: 0.55rem;
+  flex-wrap: wrap;
   max-width: 640px;
+  margin-bottom: 4px;
 }
 
 .install-tab {
-  padding: 10px 20px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--croot-text-muted);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--croot-radius-pill);
+  border: 1px solid var(--croot-border);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--croot-text-secondary);
+  background: transparent;
   cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
   font-family: var(--croot-font-sans);
+  transition:
+    color var(--croot-dur-fast) var(--croot-ease),
+    background-color var(--croot-dur-fast) var(--croot-ease),
+    border-color var(--croot-dur-fast) var(--croot-ease);
 }
 
 .install-tab:hover {
   color: var(--croot-text);
+  border-color: var(--croot-border-strong);
 }
 
 .install-tab.active {
-  color: var(--croot-text);
-  border-bottom-color: var(--croot-accent);
+  color: var(--croot-accent-white);
+  background: var(--croot-accent);
+  border-color: var(--croot-accent);
 }
 
 .install-panel {
@@ -172,7 +163,7 @@ sudo mv croot /usr/local/bin/</pre>
 .install-block {
   background: var(--croot-bg-surface);
   border: 1px solid var(--croot-border);
-  border-radius: var(--croot-radius);
+  border-radius: var(--croot-radius-sm);
   margin-top: 16px;
   overflow: hidden;
 }
@@ -183,7 +174,7 @@ sudo mv croot /usr/local/bin/</pre>
   justify-content: space-between;
   padding: 10px 16px;
   border-bottom: 1px solid var(--croot-border);
-  background: var(--croot-bg-overlay);
+  background: var(--croot-bg-elevated);
 }
 
 .install-block-header span {
@@ -199,21 +190,23 @@ sudo mv croot /usr/local/bin/</pre>
   border: 1px solid var(--croot-border);
   color: var(--croot-text-muted);
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--croot-radius-pill);
   font-size: 0.75rem;
   cursor: pointer;
   font-family: var(--croot-font-mono);
-  transition: all 0.2s;
+  transition:
+    border-color var(--croot-dur-fast) var(--croot-ease),
+    color var(--croot-dur-fast) var(--croot-ease);
 }
 
 .copy-button:hover {
-  border-color: var(--croot-accent);
-  color: var(--croot-accent);
+  border-color: var(--croot-border-strong);
+  color: var(--croot-text);
 }
 
 .copy-button.copied {
-  border-color: var(--croot-accent);
-  color: var(--croot-accent);
+  border-color: var(--croot-border-strong);
+  color: var(--croot-text);
 }
 
 .install-block pre {
@@ -233,11 +226,13 @@ sudo mv croot /usr/local/bin/</pre>
 .binary-note {
   margin-top: 12px;
   font-size: 0.85rem;
-  color: var(--croot-text-muted);
+  color: var(--croot-text-secondary);
 }
 
 .binary-note a {
-  color: var(--croot-link);
+  color: var(--croot-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 @media (max-width: 640px) {

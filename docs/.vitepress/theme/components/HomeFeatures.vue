@@ -6,7 +6,7 @@
       <p class="section-desc">A fast, keyboard-driven file tree with git awareness, syntax previews, and mouse support. No Electron required.</p>
 
       <div class="features-grid">
-        <div v-for="feature in features" :key="feature.title" class="feature-card">
+        <div v-for="(feature, i) in features" :key="feature.title" class="feature-card" :style="{ animationDelay: `${i * 40}ms` }">
           <div class="feature-icon" v-html="feature.icon"></div>
           <h3>{{ feature.title }}</h3>
           <p v-html="feature.desc"></p>
@@ -78,24 +78,8 @@ const features = [
   margin: 0 auto;
 }
 
-.section-label {
-  font-family: var(--croot-font-mono);
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--croot-accent);
-  margin-bottom: 8px;
-}
-
-.section-title {
-  font-size: clamp(1.5rem, 3vw, 2rem);
-  font-weight: 700;
-  margin-bottom: 12px;
-  color: var(--croot-text);
-}
-
 .section-desc {
-  color: var(--croot-text-muted);
+  color: var(--croot-text-secondary);
   max-width: 600px;
   margin-bottom: 48px;
   line-height: 1.6;
@@ -110,14 +94,18 @@ const features = [
 .feature-card {
   background: var(--croot-bg-surface);
   border: 1px solid var(--croot-border);
-  border-radius: var(--croot-radius);
+  border-radius: var(--croot-radius-md);
   padding: 28px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: var(--croot-shadow);
+  transition:
+    transform var(--croot-dur-fast) var(--croot-ease),
+    box-shadow var(--croot-dur-fast) var(--croot-ease);
+  animation: fade-up var(--croot-dur-mid) var(--croot-ease) both;
 }
 
 .feature-card:hover {
-  border-color: var(--croot-accent);
-  box-shadow: 0 0 0 1px var(--croot-accent-glow), 0 8px 24px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
+  box-shadow: var(--croot-shadow-elevated);
 }
 
 .feature-icon {
@@ -128,9 +116,9 @@ const features = [
   justify-content: center;
   width: 40px;
   height: 40px;
-  background: var(--croot-accent-glow);
+  background: rgba(38, 37, 30, 0.04);
   border-radius: 8px;
-  color: var(--croot-accent);
+  color: var(--croot-text-secondary);
 }
 
 .feature-icon :deep(svg) {
@@ -150,7 +138,7 @@ const features = [
 }
 
 .feature-card p {
-  color: var(--croot-text-muted);
+  color: var(--croot-text-secondary);
   font-size: 0.9rem;
   line-height: 1.5;
 }
@@ -158,7 +146,7 @@ const features = [
 .feature-card :deep(code) {
   font-family: var(--croot-font-mono);
   font-size: 0.85em;
-  background: var(--croot-bg-overlay);
+  background: var(--croot-bg-elevated);
   padding: 2px 6px;
   border-radius: 4px;
 }
