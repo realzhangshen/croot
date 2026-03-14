@@ -66,15 +66,13 @@ impl Widget for GlobalSearchOverlay<'_> {
 
         let input_x = dialog.x + 1 + prompt.len() as u16;
         let input_width = (dialog.width.saturating_sub(3)) as usize;
-        let query_display = if self.state.query.len() > input_width {
-            &self.state.query[self.state.query.len() - input_width..]
-        } else {
-            &self.state.query
-        };
-        buf.set_string(input_x, input_y, query_display, input_style);
+        let query_display =
+            super::status_bar::truncate_start_to_display_width(&self.state.query, input_width);
+        buf.set_string(input_x, input_y, &query_display, input_style);
 
         // Cursor (block cursor: swap fg/bg)
-        let cursor_pos = if self.state.query.len() > input_width {
+        let query_display_width = UnicodeWidthStr::width(self.state.query.as_str());
+        let cursor_pos = if query_display_width > input_width {
             input_width
         } else {
             self.state.cursor_pos

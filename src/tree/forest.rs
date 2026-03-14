@@ -485,7 +485,7 @@ mod tests {
     use super::*;
     use crate::tree::node::TreeNode;
 
-    /// Build a FileTree from a list of (name, kind, depth) tuples — no filesystem needed.
+    /// Build a `FileTree` from a list of (name, kind, depth) tuples — no filesystem needed.
     fn tree_from(entries: &[(&str, NodeKind, usize)]) -> FileTree {
         let nodes: Vec<TreeNode> = entries
             .iter()
@@ -499,8 +499,10 @@ mod tests {
             .iter()
             .filter(|n| n.kind == NodeKind::Directory)
             .count();
-        let mut config = TreeConfig::default();
-        config.compact_folders = false;
+        let config = TreeConfig {
+            compact_folders: false,
+            ..TreeConfig::default()
+        };
         FileTree {
             nodes,
             cursor: 0,

@@ -858,14 +858,24 @@ fn insert_at_key(root: &mut toml::Value, key: &str, value: toml::Value) -> Resul
     let mut current = root;
     // Navigate/create intermediate tables
     for part in &parts[..parts.len() - 1] {
-        if !current.get(part).is_some_and(toml::Value::is_table) {
-            current
-                .as_table_mut()
-                .ok_or_else(|| format!("Expected table at '{part}'"))?
-                .insert(
-                    (*part).to_string(),
-                    toml::Value::Table(toml::map::Map::new()),
-                );
+        match current.get(part) {
+            Some(v) if v.is_table() => {
+                // Navigate into existing table
+            }
+            Some(_) => {
+                return Err(format!(
+                    "Key '{part}' already exists as a non-table value; cannot create sub-key"
+                ));
+            }
+            None => {
+                current
+                    .as_table_mut()
+                    .ok_or_else(|| format!("Expected table at '{part}'"))?
+                    .insert(
+                        (*part).to_string(),
+                        toml::Value::Table(toml::map::Map::new()),
+                    );
+            }
         }
         current = current.get_mut(part).unwrap();
     }
@@ -991,10 +1001,10 @@ mod tests {
 
     #[test]
     fn parse_with_warning_valid_toml_returns_config() {
-        let content = r#"
+        let content = r"
 [tree]
 show_hidden = false
-"#;
+";
         let mut warning = None;
         let cfg = Config::parse_with_warning(content, &mut warning);
         assert!(warning.is_none());
@@ -1027,5 +1037,37 @@ show_hidden = "not a bool"
         let cfg = Config::parse_with_warning(content, &mut warning);
         assert!(cfg.tree.show_hidden); // default
         assert!(warning.unwrap().contains("config parse error"));
+    }
+
+    #[test]
+    fn insert_at_key_rejects_overwrite_non_table() {
+        let mut root = toml::Value::Table(toml::map::Map::new());
+        insert_at_key(&mut root, "theme", toml::Value::String("dark".to_string())).unwrap();
+        // Now try to set "theme.bg" — should fail because "theme" is a string
+        let result = insert_at_key(
+            &mut root,
+            "theme.bg",
+            toml::Value::String("#000".to_string()),
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("non-table"));
+    }
+
+    #[test]
+    fn insert_at_key_creates_missing_intermediate() {
+        let mut root = toml::Value::Table(toml::map::Map::new());
+        insert_at_key(&mut root, "a.b.c", toml::Value::String("val".to_string())).unwrap();
+        let val = navigate(&root, "a.b.c").unwrap();
+        assert_eq!(val.as_str(), Some("val"));
+    }
+
+    #[test]
+    fn insert_at_key_preserves_existing_table() {
+        let mut root = toml::Value::Table(toml::map::Map::new());
+        insert_at_key(&mut root, "a.x", toml::Value::Integer(1)).unwrap();
+        insert_at_key(&mut root, "a.y", toml::Value::Integer(2)).unwrap();
+        // Both keys should exist
+        assert_eq!(navigate(&root, "a.x").unwrap().as_integer(), Some(1));
+        assert_eq!(navigate(&root, "a.y").unwrap().as_integer(), Some(2));
     }
 }

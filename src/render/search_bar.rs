@@ -8,6 +8,8 @@ use ratatui::{
     widgets::Widget,
 };
 
+use unicode_width::UnicodeWidthStr;
+
 use super::colors;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,15 +223,13 @@ impl Widget for SearchBar<'_> {
         let input_width = area.width.saturating_sub(prompt.len() as u16 + 12) as usize;
 
         // Draw query text
-        let display_text = if self.state.query.len() > input_width {
-            &self.state.query[self.state.query.len() - input_width..]
-        } else {
-            &self.state.query
-        };
-        buf.set_string(input_x, area.y, display_text, colors::status_input());
+        let display_text =
+            super::status_bar::truncate_start_to_display_width(&self.state.query, input_width);
+        buf.set_string(input_x, area.y, &display_text, colors::status_input());
 
         // Draw cursor
-        let cursor_display_pos = if self.state.query.len() > input_width {
+        let query_display_width = UnicodeWidthStr::width(self.state.query.as_str());
+        let cursor_display_pos = if query_display_width > input_width {
             input_width
         } else {
             self.state.cursor_pos

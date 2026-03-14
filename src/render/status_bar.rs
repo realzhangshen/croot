@@ -9,6 +9,27 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::colors;
 
+/// Return the rightmost portion of `s` that fits within `max_width` display columns.
+/// Always slices on valid char boundaries and respects multi-byte / wide characters.
+pub(crate) fn truncate_start_to_display_width(s: &str, max_width: usize) -> String {
+    let total = UnicodeWidthStr::width(s);
+    if total <= max_width {
+        return s.to_string();
+    }
+    // Walk from the end, accumulating display width
+    let mut width = 0;
+    let mut start_byte = s.len();
+    for ch in s.chars().rev() {
+        let cw = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if width + cw > max_width {
+            break;
+        }
+        width += cw;
+        start_byte -= ch.len_utf8();
+    }
+    s[start_byte..].to_string()
+}
+
 pub struct StatusBar<'a> {
     pub branch: Option<&'a str>,
     pub file_count: usize,
@@ -253,7 +274,7 @@ mod tests {
             "Missing selected path in: {text:?}"
         );
         assert!(text.contains("42"), "Missing file count in: {text:?}");
-        assert!(text.contains("8"), "Missing dir count in: {text:?}");
+        assert!(text.contains('8'), "Missing dir count in: {text:?}");
         assert!(text.contains("│"), "Missing separator in: {text:?}");
         // Check for  icon (U+E0A0)
         assert!(
@@ -390,5 +411,31 @@ mod tests {
                 "Root name should have BOLD modifier at pos {pos}"
             );
         }
+    }
+
+    #[test]
+    fn truncate_start_ascii() {
+        assert_eq!(truncate_start_to_display_width("abcdef", 4), "cdef");
+    }
+
+    #[test]
+    fn truncate_start_multibyte() {
+        // CJK characters are 2 display columns each
+        let s = "你好世界"; // 4 chars × 2 = 8 columns
+        assert_eq!(truncate_start_to_display_width(s, 4), "世界");
+    }
+
+    #[test]
+    fn truncate_start_emoji() {
+        // Emoji are typically 2 display columns
+        let s = "hello🌍🌍";
+        let result = truncate_start_to_display_width(s, 4);
+        assert_eq!(result, "🌍🌍");
+    }
+
+    #[test]
+    fn truncate_start_exact_fit() {
+        assert_eq!(truncate_start_to_display_width("abc", 3), "abc");
+        assert_eq!(truncate_start_to_display_width("abc", 10), "abc");
     }
 }

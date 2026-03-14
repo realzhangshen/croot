@@ -132,8 +132,10 @@ impl StatefulWidget for TreeView<'_> {
                 } else {
                     &[]
                 }
+            } else if let Some(g) = all_guides.get(absolute_idx) {
+                g
             } else {
-                &all_guides[absolute_idx]
+                &[]
             };
 
             for (d, &has_continuation) in guides.iter().enumerate() {
@@ -374,7 +376,8 @@ fn precompute_filtered_guides(nodes: &[TreeNode], visible_indices: &[usize]) -> 
 
     let max_depth = visible_indices
         .iter()
-        .map(|&idx| nodes[idx].depth)
+        .filter_map(|&idx| nodes.get(idx))
+        .map(|node| node.depth)
         .max()
         .unwrap_or(0);
 
@@ -382,7 +385,11 @@ fn precompute_filtered_guides(nodes: &[TreeNode], visible_indices: &[usize]) -> 
     let mut rev_results: Vec<Vec<bool>> = Vec::with_capacity(n);
 
     for &idx in visible_indices.iter().rev() {
-        let depth = nodes[idx].depth;
+        let Some(node) = nodes.get(idx) else {
+            rev_results.push(Vec::new());
+            continue;
+        };
+        let depth = node.depth;
         let mut guides = vec![false; depth];
         for (d, guide) in guides.iter_mut().enumerate() {
             *guide = has_more[d];
@@ -658,7 +665,7 @@ mod tests {
     use crate::tree::node::{NodeKind, TreeNode};
     use std::path::PathBuf;
 
-    /// Build a minimal FileTree with two file nodes for rendering tests.
+    /// Build a minimal `FileTree` with two file nodes for rendering tests.
     fn make_test_tree() -> FileTree {
         let config = crate::config::TreeConfig {
             show_hidden: true,
@@ -969,5 +976,20 @@ mod tests {
         // Highlighted span should have BOLD + UNDERLINED
         assert!(spans[0].style.add_modifier.contains(Modifier::BOLD));
         assert!(spans[0].style.add_modifier.contains(Modifier::UNDERLINED));
+    }
+
+    #[test]
+    fn precompute_filtered_guides_skips_oob_index() {
+        use crate::tree::node::{NodeKind, TreeNode};
+        let nodes = vec![TreeNode::new(
+            std::path::PathBuf::from("/root"),
+            NodeKind::Directory,
+            0,
+        )];
+        // Index 999 is out of bounds — should not panic
+        let guides = precompute_filtered_guides(&nodes, &[0, 999]);
+        assert_eq!(guides.len(), 2);
+        // The OOB entry should produce an empty guide vec
+        assert!(guides[1].is_empty());
     }
 }

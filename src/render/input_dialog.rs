@@ -5,6 +5,8 @@ use ratatui::{
     widgets::Widget,
 };
 
+use unicode_width::UnicodeWidthStr;
+
 use super::colors;
 
 /// The kind of dialog being shown.
@@ -178,15 +180,13 @@ impl Widget for InputDialogWidget<'_> {
             }
 
             // Draw input text
-            let display_text = if self.state.input.len() > input_width {
-                &self.state.input[self.state.input.len() - input_width..]
-            } else {
-                &self.state.input
-            };
-            buf.set_string(input_x, input_y, display_text, input_style);
+            let display_text =
+                super::status_bar::truncate_start_to_display_width(&self.state.input, input_width);
+            buf.set_string(input_x, input_y, &display_text, input_style);
 
             // Draw cursor (block cursor: swap fg/bg)
-            let cursor_display_pos = if self.state.input.len() > input_width {
+            let input_display_width = UnicodeWidthStr::width(self.state.input.as_str());
+            let cursor_display_pos = if input_display_width > input_width {
                 input_width
             } else {
                 self.state.cursor_pos

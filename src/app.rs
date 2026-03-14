@@ -96,6 +96,23 @@ pub struct App {
     error_message: Option<(String, Instant)>,
 }
 
+/// Check whether `target` (which may contain `..` or be absolute) resolves
+/// to a path within `root`. Works purely on path components — no filesystem access.
+fn is_path_within_root(root: &std::path::Path, target: &std::path::Path) -> bool {
+    use std::path::Component;
+    let mut normalized = PathBuf::new();
+    for comp in target.components() {
+        match comp {
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::CurDir => {}
+            _ => normalized.push(comp),
+        }
+    }
+    normalized.starts_with(root)
+}
+
 impl App {
     pub fn new(root: PathBuf, enhanced_keyboard: bool, config: Config) -> anyhow::Result<Self> {
         let mut tree = FileTree::new(root.clone(), config.tree.clone());
@@ -223,7 +240,7 @@ impl App {
                                 // R5: Click outside dialog cancels it
                                 post_action = self.handle_dialog_mouse(mouse);
                             } else if self.input_mode == InputMode::GlobalSearch {
-                                post_action = self.handle_global_search_mouse(mouse);
+                                post_action = self.handle_global_search_mouse(mouse, &preview_tx);
                             } else {
                                 // Route by area priority: status > search > tree/preview
                                 let is_left_down = matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left));
@@ -857,6 +874,7 @@ impl App {
                     let path = result.path;
                     self.tree.navigate_to_path(&path);
                     self.reapply_git();
+                    self.trigger_preview_load(preview_tx);
                 }
             }
             Action::GlobalSearchCancel => {
@@ -1721,22 +1739,30 @@ impl App {
             DialogKind::NewFile => {
                 if !dialog.input.is_empty() {
                     let new_path = dialog.context_path.join(&dialog.input);
-                    // Create parent dirs if needed
-                    if let Some(parent) = new_path.parent() {
-                        if let Err(e) = std::fs::create_dir_all(parent) {
-                            self.show_error(format!("Create dirs failed: {e}"));
+                    if is_path_within_root(&self.root, &new_path) {
+                        // Create parent dirs if needed
+                        if let Some(parent) = new_path.parent() {
+                            if let Err(e) = std::fs::create_dir_all(parent) {
+                                self.show_error(format!("Create dirs failed: {e}"));
+                            }
                         }
-                    }
-                    if let Err(e) = std::fs::File::create(&new_path) {
-                        self.show_error(format!("Create file failed: {e}"));
+                        if let Err(e) = std::fs::File::create(&new_path) {
+                            self.show_error(format!("Create file failed: {e}"));
+                        }
+                    } else {
+                        self.show_error("Path escapes workspace root".to_string());
                     }
                 }
             }
             DialogKind::NewDir => {
                 if !dialog.input.is_empty() {
                     let new_path = dialog.context_path.join(&dialog.input);
-                    if let Err(e) = std::fs::create_dir_all(&new_path) {
-                        self.show_error(format!("Create directory failed: {e}"));
+                    if is_path_within_root(&self.root, &new_path) {
+                        if let Err(e) = std::fs::create_dir_all(&new_path) {
+                            self.show_error(format!("Create directory failed: {e}"));
+                        }
+                    } else {
+                        self.show_error("Path escapes workspace root".to_string());
                     }
                 }
             }
@@ -1744,8 +1770,12 @@ impl App {
                 if !dialog.input.is_empty() && dialog.input != dialog.target_name {
                     if let Some(parent) = dialog.context_path.parent() {
                         let new_path = parent.join(&dialog.input);
-                        if let Err(e) = std::fs::rename(&dialog.context_path, &new_path) {
-                            self.show_error(format!("Rename failed: {e}"));
+                        if is_path_within_root(&self.root, &new_path) {
+                            if let Err(e) = std::fs::rename(&dialog.context_path, &new_path) {
+                                self.show_error(format!("Rename failed: {e}"));
+                            }
+                        } else {
+                            self.show_error("Path escapes workspace root".to_string());
                         }
                     }
                 }
@@ -1769,6 +1799,7 @@ impl App {
             git.refresh();
         }
         self.reapply_git();
+        self.refresh_search_state();
     }
 
     /// Get the directory context for the currently selected node.
@@ -2217,10 +2248,10 @@ impl App {
 
         // Resolve editor and split into command + args (e.g. "code --wait")
         let editor_str = self.resolve_editor();
-        let mut parts = editor_str.split_whitespace();
-        let cmd = parts.next().unwrap_or("vi");
+        let parts = shell_words::split(&editor_str).unwrap_or_else(|_| vec![editor_str.clone()]);
+        let cmd = parts.first().map_or("vi", |s| s.as_str());
         let status = std::process::Command::new(cmd)
-            .args(parts)
+            .args(&parts[1..])
             .arg(path)
             .status();
 
@@ -2250,7 +2281,11 @@ impl App {
 
     /// Handle mouse events while in `GlobalSearch` mode.
     /// Only left-clicks are meaningful; all other mouse events (moves, scrolls) are ignored.
-    fn handle_global_search_mouse(&mut self, mouse: crossterm::event::MouseEvent) -> PostAction {
+    fn handle_global_search_mouse(
+        &mut self,
+        mouse: crossterm::event::MouseEvent,
+        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+    ) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
 
         // Only respond to left-click; ignore hover, scroll, drag, etc.
@@ -2305,6 +2340,7 @@ impl App {
                     let path = result.path;
                     self.tree.navigate_to_path(&path);
                     self.reapply_git();
+                    self.trigger_preview_load(preview_tx);
                 }
             }
         }
@@ -2343,7 +2379,8 @@ mod tests {
             row: 10,
             modifiers: crossterm::event::KeyModifiers::NONE,
         };
-        app.handle_global_search_mouse(mouse);
+        let (ptx, _prx) = mpsc::channel(1);
+        app.handle_global_search_mouse(mouse, &ptx);
 
         // Mode should still be GlobalSearch
         assert_eq!(app.input_mode, InputMode::GlobalSearch);
@@ -2361,7 +2398,8 @@ mod tests {
             row: 10,
             modifiers: crossterm::event::KeyModifiers::NONE,
         };
-        app.handle_global_search_mouse(mouse);
+        let (ptx, _prx) = mpsc::channel(1);
+        app.handle_global_search_mouse(mouse, &ptx);
 
         assert_eq!(app.input_mode, InputMode::GlobalSearch);
     }
@@ -2382,7 +2420,7 @@ mod tests {
         // Set an error with a past timestamp (4 seconds ago)
         app.error_message = Some((
             "old error".to_string(),
-            Instant::now() - Duration::from_secs(4),
+            Instant::now().checked_sub(Duration::from_secs(4)).unwrap(),
         ));
         // After 3 seconds the message should be considered expired
         let (_, ts) = app.error_message.as_ref().unwrap();
@@ -2426,6 +2464,82 @@ mod tests {
     }
 
     #[test]
+    fn shell_words_parses_quoted_editor_path() {
+        let input = "'/path/to/my editor' --wait";
+        let parts = shell_words::split(input).unwrap();
+        assert_eq!(parts, vec!["/path/to/my editor", "--wait"]);
+    }
+
+    #[test]
+    fn rejects_absolute_path() {
+        let root = std::path::Path::new("/home/user/project");
+        let target = std::path::PathBuf::from("/etc/passwd");
+        assert!(
+            !is_path_within_root(root, &target),
+            "Absolute path outside root should be rejected"
+        );
+    }
+
+    #[test]
+    fn rejects_dotdot_escape() {
+        let root = std::path::Path::new("/home/user/project");
+        let target = root.join("../../etc");
+        assert!(
+            !is_path_within_root(root, &target),
+            "Path with ../ escaping root should be rejected"
+        );
+    }
+
+    #[test]
+    fn allows_normal_subpath() {
+        let root = std::path::Path::new("/home/user/project");
+        let target = root.join("subdir/file.txt");
+        assert!(
+            is_path_within_root(root, &target),
+            "Normal subpath should be allowed"
+        );
+    }
+
+    #[test]
+    fn allows_dotdot_within_root() {
+        let root = std::path::Path::new("/home/user/project");
+        let target = root.join("a/../b");
+        assert!(
+            is_path_within_root(root, &target),
+            "Path with ../ that stays within root should be allowed"
+        );
+    }
+
+    #[test]
+    fn confirm_dialog_refreshes_search_state() {
+        let mut app = test_app();
+        // Enter filter mode with a query
+        app.search_state = SearchState::new(SearchMode::Filter);
+        app.search_state.query = "nonexistent_xyz".to_string();
+        // Manually add a stale visible index beyond tree size
+        app.search_state.visible_indices = vec![0, 999];
+
+        // Set up a delete dialog for a nonexistent file (will fail but still refreshes)
+        let fake_path = std::env::temp_dir().join("croot_test_confirm_refresh");
+        app.input_dialog = Some(InputDialogState::new(
+            DialogKind::ConfirmDelete,
+            fake_path,
+            "ghost".to_string(),
+        ));
+        app.input_mode = InputMode::Dialog;
+        app.confirm_dialog();
+
+        // After confirm_dialog, refresh_search_state should have been called.
+        // The stale index 999 should be gone since the query won't match anything.
+        for &idx in &app.search_state.visible_indices {
+            assert!(
+                idx < app.tree.nodes.len(),
+                "visible_indices should have no out-of-bounds entries, found {idx}"
+            );
+        }
+    }
+
+    #[test]
     fn test_global_search_click_outside_cancels() {
         let mut app = test_app();
         app.input_mode = InputMode::GlobalSearch;
@@ -2439,8 +2553,47 @@ mod tests {
             row: 0,
             modifiers: crossterm::event::KeyModifiers::NONE,
         };
-        app.handle_global_search_mouse(mouse);
+        let (ptx, _prx) = mpsc::channel(1);
+        app.handle_global_search_mouse(mouse, &ptx);
 
         assert_eq!(app.input_mode, InputMode::Normal);
+    }
+
+    #[tokio::test]
+    async fn global_search_confirm_triggers_preview() {
+        let mut app = test_app();
+        // Create a real file in the test app's root
+        let test_file = app.root.join("preview_test.txt");
+        std::fs::write(&test_file, "content").unwrap();
+        app.tree.refresh();
+        app.preview_visible = true;
+
+        // Set up global search state with a result pointing to the test file
+        app.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.global_results.push(GlobalSearchResult {
+            path: test_file.clone(),
+            display: "preview_test.txt".to_string(),
+            line: None,
+            context: None,
+        });
+        app.search_state.global_selected = 0;
+
+        let (ptx, _prx) = mpsc::channel(16);
+        let search_tx: mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)> =
+            mpsc::channel(1).0;
+
+        // Fire GlobalSearchConfirm via handle_action
+        app.handle_action(&Action::GlobalSearchConfirm, &ptx, &search_tx);
+
+        // trigger_preview_load should have been called, setting the preview to Loading
+        // and spawning a debounce task
+        assert_eq!(app.input_mode, InputMode::Normal);
+        assert!(
+            app.preview_debounce_handle.is_some(),
+            "Preview debounce handle should be set after confirm"
+        );
+        // Clean up
+        let _ = std::fs::remove_file(&test_file);
     }
 }

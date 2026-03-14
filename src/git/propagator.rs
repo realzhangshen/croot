@@ -87,7 +87,7 @@ mod tests {
 
         let dirs = propagate_to_dirs(&files, Path::new("/repo"));
         assert_eq!(dirs.get(Path::new("/repo")), Some(&GitStatus::Modified));
-        assert!(dirs.get(Path::new("/")).is_none());
+        assert!(!dirs.contains_key(Path::new("/")));
     }
 
     #[test]

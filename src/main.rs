@@ -185,9 +185,13 @@ fn handle_config(action: Option<ConfigAction>) -> anyhow::Result<()> {
             }
             let cfg = config::Config::load();
             let editor_str = config::resolve_editor(&cfg);
-            let mut parts = editor_str.split_whitespace();
-            let cmd = parts.next().unwrap_or("vi");
-            let status = process::Command::new(cmd).args(parts).arg(&path).status();
+            let parts =
+                shell_words::split(&editor_str).unwrap_or_else(|_| vec![editor_str.clone()]);
+            let cmd = parts.first().map_or("vi", |s| s.as_str());
+            let status = process::Command::new(cmd)
+                .args(&parts[1..])
+                .arg(&path)
+                .status();
             match status {
                 Ok(s) if s.success() => {}
                 Ok(s) => process::exit(s.code().unwrap_or(1)),

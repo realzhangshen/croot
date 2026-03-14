@@ -473,7 +473,7 @@ mod tests {
     #[test]
     fn empty_input_returns_empty() {
         let result = render_markdown("", 80);
-        assert!(result.is_empty() || result.iter().all(|l| l.is_empty()));
+        assert!(result.is_empty() || result.iter().all(Vec::is_empty));
     }
 
     #[test]
@@ -630,7 +630,7 @@ mod tests {
         let result = render_markdown(md, 80);
         let text = lines_to_text(&result);
         assert!(text.iter().any(|l| l.contains('│')));
-        assert!(text.iter().any(|l| l.contains("A")));
-        assert!(text.iter().any(|l| l.contains("1")));
+        assert!(text.iter().any(|l| l.contains('A')));
+        assert!(text.iter().any(|l| l.contains('1')));
     }
 }

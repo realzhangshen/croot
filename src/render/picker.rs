@@ -266,15 +266,13 @@ impl PickerWidget {
         // Draw query
         let query_x = input_x + 2;
         let query_width = input_width.saturating_sub(2);
-        let display_text = if state.query.len() > query_width {
-            &state.query[state.query.len() - query_width..]
-        } else {
-            &state.query
-        };
-        buf.set_string(query_x, input_y, display_text, input_style);
+        let display_text =
+            super::status_bar::truncate_start_to_display_width(&state.query, query_width);
+        buf.set_string(query_x, input_y, &display_text, input_style);
 
         // Draw cursor (block cursor: swap fg/bg)
-        let cursor_display_pos = if state.query.len() > query_width {
+        let query_display_width = UnicodeWidthStr::width(state.query.as_str());
+        let cursor_display_pos = if query_display_width > query_width {
             query_width
         } else {
             state.cursor_pos
