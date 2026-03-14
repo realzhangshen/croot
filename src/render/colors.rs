@@ -36,6 +36,7 @@ struct ResolvedColors {
     popup_border_fg: Color,
     popup_dim_fg: Color,
     popup_input_bg: Color,
+    popup_input_fg: Color,
     popup_selected_danger_bg: Color,
 }
 
@@ -108,6 +109,10 @@ impl ResolvedColors {
                 config.popup_input_bg.as_ref(),
                 DEFAULT_COLORS.popup_input_bg,
             ),
+            popup_input_fg: resolve(
+                config.popup_input_fg.as_ref(),
+                DEFAULT_COLORS.popup_input_fg,
+            ),
             popup_selected_danger_bg: resolve(
                 config.popup_selected_danger_bg.as_ref(),
                 DEFAULT_COLORS.popup_selected_danger_bg,
@@ -168,6 +173,7 @@ color_getters!(
     popup_border_fg,
     popup_dim_fg,
     popup_input_bg,
+    popup_input_fg,
     popup_selected_danger_bg,
 );
 
@@ -178,15 +184,16 @@ pub fn hover_style() -> Style {
 
 /// Popup / menu base: foreground on popup background.
 pub fn popup_base() -> Style {
-    Style::default().fg(popup_fg()).bg(popup_bg())
+    Style::default()
+        .fg(popup_fg())
+        .bg(popup_bg())
+        .add_modifier(Modifier::BOLD)
 }
 
 /// Popup selected item: accent background with popup foreground.
 pub fn popup_selected() -> Style {
-    Style::reset()
-        .bg(popup_accent())
-        .fg(popup_fg())
-        .add_modifier(Modifier::BOLD)
+    // Match the tree cursor treatment so popup selection feels like the same UI language.
+    Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD)
 }
 
 /// Popup selected danger item (e.g. Delete).
@@ -199,7 +206,10 @@ pub fn popup_selected_danger() -> Style {
 
 /// Popup dim text (hints, separators, [Cancel]).
 pub fn popup_dim() -> Style {
-    Style::default().fg(popup_dim_fg()).bg(popup_bg())
+    Style::default()
+        .fg(popup_dim_fg())
+        .bg(popup_bg())
+        .add_modifier(Modifier::BOLD)
 }
 
 /// Popup border.
@@ -209,7 +219,58 @@ pub fn popup_border() -> Style {
 
 /// Popup input field.
 pub fn popup_input() -> Style {
-    Style::default().fg(popup_fg()).bg(popup_input_bg())
+    Style::default().fg(popup_input_fg()).bg(popup_input_bg())
+}
+
+/// Popup input prompt (e.g. `> `).
+pub fn popup_prompt() -> Style {
+    Style::default()
+        .fg(popup_accent())
+        .bg(popup_input_bg())
+        .add_modifier(Modifier::BOLD)
+}
+
+/// Popup input cursor using the input field's own fg/bg.
+pub fn popup_cursor() -> Style {
+    Style::default().fg(popup_input_bg()).bg(popup_input_fg())
+}
+
+/// Popup success text (counts, confirmed states).
+pub fn popup_success() -> Style {
+    Style::default().fg(git_added()).bg(popup_bg())
+}
+
+/// Popup warning text (loading, pending states).
+pub fn popup_warning() -> Style {
+    Style::default().fg(git_modified()).bg(popup_bg())
+}
+
+/// Popup error text.
+pub fn popup_error() -> Style {
+    Style::default()
+        .fg(git_deleted())
+        .bg(popup_bg())
+        .add_modifier(Modifier::BOLD)
+}
+
+/// Status/input bar base text.
+pub fn status_input() -> Style {
+    Style::default().fg(status_bar_fg()).bg(status_bar_bg())
+}
+
+/// Status/input bar cursor.
+pub fn status_cursor() -> Style {
+    Style::default().fg(status_bar_bg()).bg(status_bar_fg())
+}
+
+/// Status/input bar success text.
+pub fn status_success() -> Style {
+    Style::default().fg(git_added()).bg(status_bar_bg())
+}
+
+/// Status/input bar error text.
+pub fn status_error() -> Style {
+    Style::default().fg(git_deleted()).bg(status_bar_bg())
 }
 
 /// Clear a rectangular region and apply a fresh style.
@@ -235,7 +296,8 @@ mod tests {
 
         assert_eq!(colors.popup_fg, Color::White);
         assert_eq!(colors.popup_bg, Color::Black);
-        assert_eq!(colors.dir_color, Color::Yellow);
+        assert_eq!(colors.popup_input_fg, Color::Black);
+        assert_eq!(colors.dir_color, Color::Blue);
         assert_eq!(colors.default_fg, Color::Reset);
         assert_eq!(colors.popup_selected_danger_bg, Color::Red);
     }
@@ -247,12 +309,14 @@ mod tests {
             popup_fg: Some("indexed:254".to_string()),
             dir_color: Some("light-blue".to_string()),
             popup_dim_fg: Some("nope".to_string()),
+            popup_input_fg: Some("black".to_string()),
             ..ColorConfig::default()
         };
         let colors = ResolvedColors::from_config(&config);
 
         assert_eq!(colors.popup_bg, Color::Rgb(16, 16, 16));
         assert_eq!(colors.popup_fg, Color::Indexed(254));
+        assert_eq!(colors.popup_input_fg, Color::Black);
         assert_eq!(colors.dir_color, Color::LightBlue);
         assert_eq!(colors.popup_dim_fg, Color::Gray);
     }

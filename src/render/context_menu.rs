@@ -427,8 +427,8 @@ mod tests {
             "normal menu item should NOT have REVERSED"
         );
         assert!(
-            !cell.modifier.contains(Modifier::BOLD),
-            "normal menu item should NOT have BOLD"
+            cell.modifier.contains(Modifier::BOLD),
+            "normal menu item should have BOLD (bright text for light-theme contrast)"
         );
     }
 
@@ -446,7 +446,7 @@ mod tests {
     }
 
     #[test]
-    fn selected_item_has_blue_bg_white_fg_bold() {
+    fn selected_item_matches_tree_cursor_treatment() {
         let state = ContextMenuState::new_for_file(0, 0, 0);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
@@ -460,18 +460,9 @@ mod tests {
             cell.modifier
         );
         assert!(
-            !cell.modifier.contains(Modifier::REVERSED),
-            "selected menu item should NOT have REVERSED"
-        );
-        assert_eq!(
-            cell.bg,
-            colors::popup_accent(),
-            "selected item should have bright blue bg"
-        );
-        assert_eq!(
-            cell.fg,
-            colors::popup_fg(),
-            "selected item should have bright white fg"
+            cell.modifier.contains(Modifier::REVERSED),
+            "selected menu item should use REVERSED like the tree cursor, got {:?}",
+            cell.modifier
         );
     }
 
@@ -575,7 +566,7 @@ mod tests {
         assert_eq!(
             cell.fg,
             colors::popup_fg(),
-            "selected Delete should have bright white fg"
+            "selected Delete should use POPUP_FG"
         );
         assert!(
             cell.modifier.contains(Modifier::BOLD),
