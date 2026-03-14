@@ -42,12 +42,12 @@
   --croot-bg: #f7f7f4;
   --croot-bg-surface: #ffffff;
   --croot-bg-elevated: #eeeee8;
-  --croot-bg-hover: rgba(38, 37, 30, 0.06);
-  --croot-border: rgba(38, 37, 30, 0.12);
-  --croot-border-strong: rgba(38, 37, 30, 0.22);
+  --croot-bg-hover: rgba(38, 37, 30, 0.08);
+  --croot-border: rgba(38, 37, 30, 0.18);
+  --croot-border-strong: rgba(38, 37, 30, 0.3);
   --croot-text: #26251e;
-  --croot-text-secondary: rgba(38, 37, 30, 0.55);
-  --croot-text-muted: rgba(38, 37, 30, 0.4);
+  --croot-text-secondary: rgba(38, 37, 30, 0.7);
+  --croot-text-muted: rgba(38, 37, 30, 0.55);
   --croot-accent: #26251e;
   --croot-accent-white: #f7f7f4;
 
@@ -73,17 +73,17 @@
   --vp-c-bg-alt: #f7f7f4;
 
   --vp-c-text-1: #26251e;
-  --vp-c-text-2: rgba(38, 37, 30, 0.55);
-  --vp-c-text-3: rgba(38, 37, 30, 0.4);
+  --vp-c-text-2: rgba(38, 37, 30, 0.7);
+  --vp-c-text-3: rgba(38, 37, 30, 0.55);
 
   --vp-c-brand-1: #26251e;
-  --vp-c-brand-2: rgba(38, 37, 30, 0.8);
-  --vp-c-brand-3: rgba(38, 37, 30, 0.6);
+  --vp-c-brand-2: rgba(38, 37, 30, 0.85);
+  --vp-c-brand-3: rgba(38, 37, 30, 0.7);
   --vp-c-brand-soft: rgba(38, 37, 30, 0.08);
 
-  --vp-c-divider: rgba(38, 37, 30, 0.12);
-  --vp-c-gutter: rgba(38, 37, 30, 0.12);
-  --vp-c-border: rgba(38, 37, 30, 0.12);
+  --vp-c-divider: rgba(38, 37, 30, 0.18);
+  --vp-c-gutter: rgba(38, 37, 30, 0.18);
+  --vp-c-border: rgba(38, 37, 30, 0.18);
 
   --vp-font-family-base: CursorGothic, "CursorGothic Fallback", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
   --vp-font-family-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, Consolas, monospace;
@@ -118,7 +118,7 @@
   background: rgba(247, 247, 244, 0.96) !important;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(38, 37, 30, 0.12) !important;
+  border-bottom: 1px solid rgba(38, 37, 30, 0.18) !important;
 }
 
 /* ── Shared section styles ───────────────────── */
@@ -150,6 +150,260 @@
 .Layout.home .VPContent,
 .Layout.home .VPNav {
   /* Keep nav visible */
+}
+
+/* ── Step 2: Typography tuning for doc pages ─── */
+
+.vp-doc {
+  line-height: 1.8;
+  letter-spacing: -0.01em;
+}
+
+.vp-doc h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin-bottom: 1rem;
+}
+
+.vp-doc h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  margin-top: 2.5rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--croot-border);
+}
+
+.vp-doc h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.4;
+  margin-top: 2rem;
+}
+
+.vp-doc .content-container {
+  max-width: 740px;
+}
+
+/* ── Step 3: Code block styling (warm aesthetic) */
+
+.vp-doc div[class*="language-"] {
+  background: var(--croot-bg-elevated) !important;
+  border: 1px solid var(--croot-border);
+  border-radius: 8px;
+}
+
+.vp-doc div[class*="language-"] pre {
+  background: transparent !important;
+  font-family: var(--croot-font-mono);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.vp-doc div[class*="language-"] code {
+  font-family: var(--croot-font-mono);
+  font-size: 14px;
+}
+
+.vp-doc div[class*="language-"] .lang {
+  color: var(--croot-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.vp-doc div[class*="language-"] button.copy {
+  border: 1px solid var(--croot-border);
+  border-radius: 6px;
+  background: var(--croot-bg-surface);
+}
+
+.vp-doc div[class*="language-"] button.copy:hover {
+  background: var(--croot-bg-hover);
+  border-color: var(--croot-border-strong);
+}
+
+.vp-doc div[class*="language-"] .highlighted {
+  background: rgba(38, 37, 30, 0.06);
+  border-left: 3px solid var(--croot-accent);
+}
+
+/* ── Step 4: Inline code styling ─────────────── */
+
+.vp-doc :not(pre) > code {
+  background: var(--croot-bg-elevated);
+  border: 1px solid var(--croot-border);
+  font-family: var(--croot-font-mono);
+  font-size: 0.875em;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--croot-text);
+}
+
+/* ── Step 5: Custom blocks ───────────────────── */
+
+.vp-doc .custom-block {
+  border-radius: 8px;
+  border-width: 1px;
+  border-style: solid;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.vp-doc .custom-block .custom-block-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.vp-doc .custom-block.tip {
+  background: rgba(60, 90, 50, 0.06);
+  border-color: rgba(60, 90, 50, 0.2);
+}
+
+.vp-doc .custom-block.tip .custom-block-title {
+  color: #3c5a32;
+}
+
+.vp-doc .custom-block.warning {
+  background: rgba(122, 88, 18, 0.06);
+  border-color: rgba(122, 88, 18, 0.2);
+}
+
+.vp-doc .custom-block.warning .custom-block-title {
+  color: #7a5812;
+}
+
+.vp-doc .custom-block.danger {
+  background: rgba(140, 40, 30, 0.06);
+  border-color: rgba(140, 40, 30, 0.2);
+}
+
+.vp-doc .custom-block.danger .custom-block-title {
+  color: #8c281e;
+}
+
+.vp-doc .custom-block.info {
+  background: rgba(38, 37, 30, 0.04);
+  border-color: var(--croot-border);
+}
+
+.vp-doc .custom-block.info .custom-block-title {
+  color: var(--croot-text-secondary);
+}
+
+/* ── Step 6: Sidebar styling ─────────────────── */
+
+.VPSidebar .VPSidebarItem.is-active > .item > .link > .text {
+  font-weight: 700;
+  color: var(--croot-text);
+}
+
+.VPSidebar .VPSidebarItem .text {
+  transition: color var(--croot-dur-fast) var(--croot-ease);
+}
+
+.VPSidebar .VPSidebarItem .link:hover .text {
+  color: var(--croot-text) !important;
+}
+
+.VPSidebar .group-title,
+.VPSidebar .VPSidebarItem.level-0 > .item > .text {
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--croot-text-muted);
+}
+
+/* ── Step 6: Link styling ────────────────────── */
+
+.vp-doc a {
+  text-decoration: underline;
+  text-decoration-color: rgba(38, 37, 30, 0.25);
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--croot-dur-fast) var(--croot-ease),
+              color var(--croot-dur-fast) var(--croot-ease);
+}
+
+.vp-doc a:hover {
+  text-decoration-color: var(--croot-text);
+  color: var(--croot-text);
+}
+
+/* ── Step 6: Table styling ───────────────────── */
+
+.vp-doc table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 15px;
+}
+
+.vp-doc table th {
+  background: var(--croot-bg-elevated);
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 14px;
+  border: 1px solid var(--croot-border);
+}
+
+.vp-doc table td {
+  padding: 10px 14px;
+  border: 1px solid var(--croot-border);
+}
+
+.vp-doc table tr:hover td {
+  background: rgba(38, 37, 30, 0.03);
+}
+
+/* ── Step 6: Badge styling ───────────────────── */
+
+.vp-doc .VPBadge {
+  background: var(--croot-bg-elevated);
+  color: var(--croot-text-secondary);
+  border: 1px solid var(--croot-border);
+  font-weight: 500;
+}
+
+.vp-doc .VPBadge.tip {
+  background: rgba(60, 90, 50, 0.08);
+  color: #3c5a32;
+  border-color: rgba(60, 90, 50, 0.2);
+}
+
+.vp-doc .VPBadge.warning {
+  background: rgba(122, 88, 18, 0.08);
+  color: #7a5812;
+  border-color: rgba(122, 88, 18, 0.2);
+}
+
+.vp-doc .VPBadge.danger {
+  background: rgba(140, 40, 30, 0.08);
+  color: #8c281e;
+  border-color: rgba(140, 40, 30, 0.2);
+}
+
+/* ── Step 6: Custom scrollbar ────────────────── */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(38, 37, 30, 0.15);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(38, 37, 30, 0.25);
 }
 
 /* ── Reduced motion ──────────────────────────── */
