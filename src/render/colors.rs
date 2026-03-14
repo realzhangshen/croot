@@ -170,8 +170,6 @@ color_getters!(
     popup_fg,
     popup_bg,
     popup_accent,
-    popup_border_fg,
-    popup_dim_fg,
     popup_input_bg,
     popup_input_fg,
     popup_selected_danger_bg,
@@ -187,18 +185,18 @@ pub fn hover_style() -> Style {
     Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
 }
 
-/// Popup / menu base: foreground on popup background.
+/// Popup / menu base: REVERSED uses the terminal's default fg/bg pair,
+/// which themes carefully tune for optimal contrast.
 pub fn popup_base() -> Style {
-    Style::default()
-        .fg(popup_fg())
-        .bg(popup_bg())
-        .add_modifier(Modifier::BOLD)
+    Style::default().add_modifier(Modifier::REVERSED)
 }
 
-/// Popup selected item: accent background with popup foreground.
+/// Popup selected item: explicit blue/white for clear visual distinction.
 pub fn popup_selected() -> Style {
-    // Match the tree cursor treatment so popup selection feels like the same UI language.
-    Style::default().add_modifier(Modifier::REVERSED | Modifier::BOLD)
+    Style::reset()
+        .bg(Color::Blue)
+        .fg(Color::White)
+        .add_modifier(Modifier::BOLD)
 }
 
 /// Popup selected danger item (e.g. Delete).
@@ -211,15 +209,12 @@ pub fn popup_selected_danger() -> Style {
 
 /// Popup dim text (hints, separators, [Cancel]).
 pub fn popup_dim() -> Style {
-    Style::default()
-        .fg(popup_dim_fg())
-        .bg(popup_bg())
-        .add_modifier(Modifier::BOLD)
+    Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
 }
 
-/// Popup border.
+/// Popup border: REVERSED to match popup_base for consistent appearance.
 pub fn popup_border() -> Style {
-    Style::default().fg(popup_border_fg()).bg(popup_bg())
+    Style::default().add_modifier(Modifier::REVERSED)
 }
 
 /// Popup input field.
@@ -348,11 +343,12 @@ mod tests {
             for col in 0..area.width {
                 let cell = buf.cell((col, row)).unwrap();
                 assert_eq!(cell.symbol(), " ", "symbol at ({col},{row})");
-                assert_eq!(cell.fg, popup_fg(), "fg at ({col},{row})");
-                assert_eq!(cell.bg, popup_bg(), "bg at ({col},{row})");
+                // After reset + REVERSED, fg/bg are default (Reset)
+                assert_eq!(cell.fg, Color::Reset, "fg at ({col},{row})");
+                assert_eq!(cell.bg, Color::Reset, "bg at ({col},{row})");
                 assert!(
-                    !cell.modifier.contains(Modifier::REVERSED),
-                    "should NOT have REVERSED at ({col},{row}): {:?}",
+                    cell.modifier.contains(Modifier::REVERSED),
+                    "should have REVERSED at ({col},{row}): {:?}",
                     cell.modifier
                 );
             }

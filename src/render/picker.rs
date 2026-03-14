@@ -1,4 +1,8 @@
-use ratatui::{buffer::Buffer, layout::Rect, style::Modifier};
+use ratatui::{
+    buffer::Buffer,
+    layout::Rect,
+    style::{Color, Modifier},
+};
 use unicode_width::UnicodeWidthStr;
 
 use super::colors;
@@ -561,18 +565,22 @@ mod tests {
     }
 
     #[test]
-    fn selected_item_matches_tree_cursor_treatment() {
+    fn selected_item_has_blue_bg_and_bold() {
         let state = PickerState::new_branch(&make_branches());
         let buf = render_picker(&state, 60, 20);
-        // Find the dialog and list area; selected item (main) should match the
-        // file-tree cursor treatment.
         let layout = state.layout(Rect::new(0, 0, 60, 20)).unwrap();
         let selected_y = layout.list_y;
         let x = layout.dialog_rect.x + 3;
         let cell = buf.cell((x, selected_y)).unwrap();
+        assert_eq!(
+            cell.bg,
+            Color::Blue,
+            "selected item should have Blue bg, got {:?}",
+            cell.bg
+        );
         assert!(
-            cell.modifier.contains(Modifier::REVERSED),
-            "selected item should use REVERSED like the tree cursor, got {:?}",
+            cell.modifier.contains(Modifier::BOLD),
+            "selected item should have BOLD, got {:?}",
             cell.modifier
         );
     }

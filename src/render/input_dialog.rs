@@ -256,7 +256,7 @@ pub(crate) fn draw_border(buf: &mut Buffer, rect: Rect, style: Style) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::style::Modifier;
+    use ratatui::style::{Color, Modifier};
 
     fn render_dialog(state: &InputDialogState) -> ratatui::buffer::Buffer {
         let area = ratatui::layout::Rect::new(0, 0, 60, 20);
@@ -279,11 +279,20 @@ mod tests {
         let mid_x = 30u16;
         let mid_y = 8u16;
         let cell = buf.cell((mid_x, mid_y)).unwrap();
-        assert_eq!(cell.bg, colors::popup_bg(), "dialog bg should be POPUP_BG");
-        assert_eq!(cell.fg, colors::popup_fg(), "dialog fg should be POPUP_FG");
+        // popup_base() uses REVERSED with default (Reset) fg/bg
+        assert_eq!(
+            cell.bg,
+            Color::Reset,
+            "dialog bg should be Reset (REVERSED)"
+        );
+        assert_eq!(
+            cell.fg,
+            Color::Reset,
+            "dialog fg should be Reset (REVERSED)"
+        );
         assert!(
-            !cell.modifier.contains(Modifier::REVERSED),
-            "dialog should NOT have REVERSED, got {:?}",
+            cell.modifier.contains(Modifier::REVERSED),
+            "dialog should have REVERSED, got {:?}",
             cell.modifier
         );
     }
@@ -315,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn title_has_bold_no_reversed() {
+    fn title_has_bold_and_reversed() {
         let state = InputDialogState::new(
             DialogKind::Rename,
             std::path::PathBuf::from("/tmp"),
@@ -334,8 +343,8 @@ mod tests {
             cell.modifier
         );
         assert!(
-            !cell.modifier.contains(Modifier::REVERSED),
-            "title should NOT have REVERSED, got {:?}",
+            cell.modifier.contains(Modifier::REVERSED),
+            "title should have REVERSED (popup border style), got {:?}",
             cell.modifier
         );
     }

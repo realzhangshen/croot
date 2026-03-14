@@ -392,7 +392,7 @@ impl Widget for ContextMenuWidget<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::style::Modifier;
+    use ratatui::style::{Color, Modifier};
 
     /// Render a context menu into a buffer and return it for inspection.
     fn render_menu(state: &ContextMenuState) -> ratatui::buffer::Buffer {
@@ -412,23 +412,20 @@ mod tests {
         let y = rect.y + 2; // second item row (index 1)
         let x = rect.x + 2;
         let cell = buf.cell((x, y)).unwrap();
+        // popup_base() uses REVERSED with default (Reset) fg/bg
         assert_eq!(
             cell.bg,
-            colors::popup_bg(),
-            "normal menu item bg should be POPUP_BG"
+            Color::Reset,
+            "normal menu item bg should be Reset (REVERSED)"
         );
         assert_eq!(
             cell.fg,
-            colors::popup_fg(),
-            "normal menu item fg should be POPUP_FG"
+            Color::Reset,
+            "normal menu item fg should be Reset (REVERSED)"
         );
         assert!(
-            !cell.modifier.contains(Modifier::REVERSED),
-            "normal menu item should NOT have REVERSED"
-        );
-        assert!(
-            cell.modifier.contains(Modifier::BOLD),
-            "normal menu item should have BOLD (bright text for light-theme contrast)"
+            cell.modifier.contains(Modifier::REVERSED),
+            "normal menu item should have REVERSED"
         );
     }
 
@@ -446,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn selected_item_matches_tree_cursor_treatment() {
+    fn selected_item_has_blue_bg_white_fg() {
         let state = ContextMenuState::new_for_file(0, 0, 0);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
@@ -454,14 +451,19 @@ mod tests {
         let y = rect.y + 1;
         let x = rect.x + 2;
         let cell = buf.cell((x, y)).unwrap();
+        assert_eq!(
+            cell.bg,
+            Color::Blue,
+            "selected menu item should have Blue bg"
+        );
+        assert_eq!(
+            cell.fg,
+            Color::White,
+            "selected menu item should have White fg"
+        );
         assert!(
             cell.modifier.contains(Modifier::BOLD),
             "selected menu item should have BOLD, got {:?}",
-            cell.modifier
-        );
-        assert!(
-            cell.modifier.contains(Modifier::REVERSED),
-            "selected menu item should use REVERSED like the tree cursor, got {:?}",
             cell.modifier
         );
     }
@@ -520,8 +522,8 @@ mod tests {
 
         let rect = state.menu_rect(40, 20);
         // Check interior cells (skip borders) for stale colors.
-        // With explicit White/Black in popup_base(), no cell should retain
-        // the pre-filled Red fg or Green bg.
+        // clear_region() resets cells before applying REVERSED, so no cell
+        // should retain the pre-filled Red fg or Green bg.
         for row in (rect.y + 1)..(rect.y + rect.height - 1) {
             for col in (rect.x + 1)..(rect.x + rect.width - 1) {
                 let cell = buf.cell((col, row)).unwrap();

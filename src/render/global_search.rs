@@ -195,7 +195,7 @@ mod tests {
     use ratatui::style::Modifier;
 
     #[test]
-    fn popup_body_has_popup_bg_and_no_reversed() {
+    fn popup_body_uses_reversed() {
         let state = SearchState::new(SearchMode::Global);
         let area = Rect::new(0, 0, 80, 24);
         let mut buf = Buffer::empty(area);
@@ -210,14 +210,9 @@ mod tests {
 
         // Check a body cell (results area, row 4 from dialog top)
         let cell = buf.cell((dx + 3, dy + 4)).unwrap();
-        assert_eq!(
-            cell.bg,
-            colors::popup_bg(),
-            "popup body bg should be POPUP_BG"
-        );
         assert!(
-            !cell.modifier.contains(Modifier::REVERSED),
-            "popup body should NOT have REVERSED, got {:?}",
+            cell.modifier.contains(Modifier::REVERSED),
+            "popup body should have REVERSED, got {:?}",
             cell.modifier
         );
     }
