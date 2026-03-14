@@ -3,7 +3,7 @@ name: Deploy Documentation
 on:
   push:
     branches: [main]
-    paths: ['docs/**']
+    paths: ['docs/**', 'web/**']
   workflow_dispatch:
 
 permissions:
@@ -26,14 +26,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: docs/package-lock.json
+          cache-dependency-path: web/package-lock.json
       - run: npm ci
-        working-directory: docs
-      - run: npm run docs:build
-        working-directory: docs
+        working-directory: web
+      - run: npm run build
+        working-directory: web
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/.vitepress/dist
+          path: web/out
       - id: deployment
         uses: actions/deploy-pages@v4

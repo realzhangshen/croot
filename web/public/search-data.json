@@ -1,0 +1,156 @@
+[
+  {
+    "slug": "advanced/cmux-workflow",
+    "title": "Pair with cmux",
+    "headings": [
+      "What is cmux?",
+      "Setup"
+    ],
+    "content": "Pair with cmux\ncroot works great alongside cmux for a full terminal-based development workspace.\n What is cmux?\ncmux is a terminal multiplexer that provides a VS Code-like pane layout in your terminal. Pair it with croot and you get:\n- File tree on the left (croot)\n- Editor in the top right\n- Shell in the bottom right\n Setup\n1. Install cmux: see cmux README\n2. Install croot: \n3. Launch cmux with croot in the sidebar pane\nTogether they give you a VS Code-like workspace that lives entirely in your"
+  },
+  {
+    "slug": "advanced/development",
+    "title": "Development",
+    "headings": [
+      "Prerequisites",
+      "Setup",
+      "Development Workflow",
+      "Make Commands",
+      "Git Hooks",
+      "Testing",
+      "Project Structure",
+      "Release Process"
+    ],
+    "content": "Development\nContributing to croot.\n Prerequisites\n- Rust 1.88+\n- Git\n Setup\n Development Workflow\ncroot follows Test-Driven Development (TDD):\n1. Red — write a failing test first\n2. Green — write the minimum code to make it pass\n3. Refactor — clean up while keeping tests green\nEvery new feature and bug fix starts with a test.\n Make Commands\n Git Hooks\n- Pre-commit: runs  (sub-second)\n- Pre-push: mirrors CI with all four checks (fmt, check, clippy, test)\nBoth are skippable with .\n Testing\nTests a"
+  },
+  {
+    "slug": "features/context-menus",
+    "title": "Context Menus",
+    "headings": [
+      "Available Actions",
+      "Keyboard Shortcut",
+      "Navigation"
+    ],
+    "content": "Context Menus\nRight-click any file or directory to open a context menu with common actions.\n Available Actions\nThe context menu provides quick access to:\n- Open in editor — opens the file in your configured editor\n- Open externally — opens with the system default application\n- Copy path — copies the full file path to clipboard\n- Reveal in Finder — opens the containing directory (macOS)\n- Rename — rename the file or directory\n- Delete — delete with confirmation\n Keyboard Shortcut\nRight-click work"
+  },
+  {
+    "slug": "features/file-operations",
+    "title": "File Operations",
+    "headings": [
+      "Create",
+      "Rename",
+      "Delete",
+      "Multi-Select",
+      "Open in Editor",
+      "Open Externally"
+    ],
+    "content": "File Operations\ncroot lets you manage files and directories without leaving the terminal.\n Create\n Key  Action \n-------------\n   Create a new file \n   Create a new directory \nA dialog prompts for the name. The new entry appears in the tree immediately.\n Rename\nPress  to rename the selected file or directory. The dialog pre-fills with the current name.\n Delete\nPress  to delete the selected file or directory. A confirmation dialog appears before deletion.\n Multi-Select\nPress  to toggle selection o"
+  },
+  {
+    "slug": "features/file-preview",
+    "title": "File Preview",
+    "headings": [
+      "Toggle Preview",
+      "Syntax Highlighting",
+      "Markdown Rendering",
+      "Binary Files",
+      "Configuration",
+      "Resizing",
+      "Directory Preview"
+    ],
+    "content": "File Preview\ncroot's split-pane preview lets you read files without leaving the file tree.\n Toggle Preview\nPress  to toggle the preview pane. The file under the cursor is previewed automatically.\n Syntax Highlighting\nThe preview supports syntax highlighting for 150+ languages including Rust, Python, JavaScript, TypeScript, Go, C/C++, Java, Ruby, and many more.\n Markdown Rendering\nMarkdown files are rendered with formatting by default. Press  to toggle between rendered and raw Markdown view.\n Bin"
+  },
+  {
+    "slug": "features/fuzzy-search",
+    "title": "Fuzzy Search",
+    "headings": [
+      "Local Search (`/`)",
+      "Filter Mode (`f`)",
+      "Global Filename Search (`s`)",
+      "Global Content Search (`S`)",
+      "Configuration"
+    ],
+    "content": "Fuzzy Search\ncroot offers multiple search modes for quickly finding files.\n Local Search ()\nPress  to start a fuzzy search within the current tree. Type a partial filename and matching entries highlight in real time. The match count displays in the status bar.\n-  /  — jump to next match\n-  /  — jump to previous match\n-  — confirm and stay on match\n-  — cancel search\n Filter Mode ()\nPress  to enter filter mode. Unlike search, filter mode hides non-matching entries, showing only files that match y"
+  },
+  {
+    "slug": "features/git-integration",
+    "title": "Git Integration",
+    "headings": [
+      "Status Indicators",
+      "Status Propagation",
+      "Staged vs Unstaged",
+      "Automatic Updates",
+      "Branch Picker",
+      "Color Customization"
+    ],
+    "content": "Git Integration\ncroot deeply integrates with git to show the status of every file in your repository.\n Status Indicators\nWhen you open croot in a git repository, each file shows its git status:\n Color  Status \n---------------\n Green  Staged / added \n Yellow  Modified (unstaged) \n Red  Deleted \n Light red  Conflicted \n Gray  Ignored \n Status Propagation\nGit status propagates upward through the directory tree. If any file inside  is modified, the  directory itself shows as modified. This lets you "
+  },
+  {
+    "slug": "features/mouse-support",
+    "title": "Mouse Support",
+    "headings": [
+      "Mouse Actions",
+      "Disabling Mouse"
+    ],
+    "content": "Mouse Support\ncroot has full mouse support that works alongside keyboard navigation.\n Mouse Actions\n Action  Effect \n----------------\n Click  Select a file/directory \n Double-click  Expand/collapse directory or open file \n Right-click  Open context menu \n Scroll  Scroll the file tree \n Drag divider  Resize tree/preview split \n Disabling Mouse\nIf mouse capture interferes with your terminal's native selection, disable it:\nWhen disabled, you can use your terminal's native mouse features (text selec"
+  },
+  {
+    "slug": "guide/configuration",
+    "title": "Configuration",
+    "headings": [
+      "Quick Start",
+      "Config Sections",
+      "`[tree]` — File Tree",
+      "`[preview]` — Preview Pane",
+      "`[editor]` — Editor Command",
+      "`[open]` — External Open Rules",
+      "`[mouse]`",
+      "`[keybindings]`",
+      "`[search]` — External Search Tools",
+      "`[colors]` — Color Customization",
+      "Reading and Setting Values"
+    ],
+    "content": "Configuration\ncroot uses a TOML config file at  (or ).\n Quick Start\n Config Sections\n  — File Tree\n  — Preview Pane\n  — Editor Command\n  — External Open Rules\n \n \nSee the Keybindings page for full details.\n  — External Search Tools\n  — Color Customization\nThe built-in palette is ANSI-only and tuned for broad terminal compatibility. Override any color with ANSI names, indexed colors (0–255), or hex RGB.\nColor formats:\n- ANSI names: , , , , , \n- Indexed:  or \n- Hex RGB: \n Reading and Setting Value"
+  },
+  {
+    "slug": "guide/getting-started",
+    "title": "Quickstart",
+    "headings": [
+      "Install",
+      "Launch",
+      "Basic Navigation",
+      "Open a Preview",
+      "File Operations",
+      "Git Status",
+      "Configuration",
+      "Next Steps"
+    ],
+    "content": "Quickstart\nGet up and running with croot in under 5 minutes.\n Install\nThe fastest way to install on macOS:\nSee the Installation guide for other platforms and methods.\n Launch\ncroot opens a full-screen TUI file explorer in your terminal.\n Basic Navigation\n Key  Action \n-------------\n  /   Move cursor \n  /   Collapse / expand directory \n   Toggle directory or open file \n  /   Jump to top / bottom \n   Fuzzy search by filename \n   Cancel search or close popup \n   Quit \n Open a Preview\nPress  to togg"
+  },
+  {
+    "slug": "guide/installation",
+    "title": "Installation",
+    "headings": [
+      "Homebrew (macOS)",
+      "From Source",
+      "Pre-built Binaries",
+      "Optional: Nerd Font",
+      "Verify Installation"
+    ],
+    "content": "Installation\n Homebrew (macOS)\nThe recommended way to install croot on macOS:\nThis installs the latest release and makes  available in your PATH.\n From Source\nRequires Rust 1.88 or later.\nThe binary will be at . Move it to a directory in your PATH:\n Pre-built Binaries\nDownload pre-built binaries from the GitHub Releases page.\nAvailable targets:\n-  — Apple Silicon Mac\n-  — Intel Mac\n-  — Linux x8664\n-  — Linux ARM64\nExample for macOS Apple Silicon:\n Optional: Nerd Font\ncroot renders 100+ file typ"
+  },
+  {
+    "slug": "guide/keybindings",
+    "title": "Keybindings",
+    "headings": [
+      "Navigation",
+      "Search & Filter",
+      "Preview",
+      "File Operations",
+      "Other",
+      "Customizing Keybindings",
+      "Key Format"
+    ],
+    "content": "Keybindings\ncroot provides two layers of keybindings: built-in defaults that work out of the box, and opt-in bindings you can enable in your config.\n Navigation\n Key  Action \n-------------\n  /   Move cursor up \n  /   Move cursor down \n  /   Collapse directory \n  /   Expand directory \n  /   Jump to top \n  /   Jump to bottom \n   Toggle directory or open file \n   Scroll page up \n   Scroll page down \n Search & Filter\n Key  Action \n-------------\n   Fuzzy search — jump to match \n   Filter — show only "
+  }
+]
