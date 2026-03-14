@@ -174,9 +174,7 @@ impl StatefulWidget for TreeView<'_> {
             let is_ignored = node.git_status == GitStatus::Ignored;
 
             let mut icon_base = Style::default().fg(icon_info.color);
-            if is_ignored {
-                icon_base = icon_base.add_modifier(Modifier::DIM);
-            } else if !node.is_dir() {
+            if !node.is_dir() || is_ignored {
                 icon_base = icon_base.add_modifier(Modifier::DIM);
             }
             let icon_style = row_style(icon_base);

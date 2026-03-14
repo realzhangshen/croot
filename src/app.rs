@@ -2210,7 +2210,7 @@ impl App {
         Ok(())
     }
 
-    /// Handle mouse events while in GlobalSearch mode.
+    /// Handle mouse events while in `GlobalSearch` mode.
     /// Only left-clicks are meaningful; all other mouse events (moves, scrolls) are ignored.
     fn handle_global_search_mouse(&mut self, mouse: crossterm::event::MouseEvent) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
