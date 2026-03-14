@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-03-14
+
+### Added
+- Shell completions subcommand via clap_complete
+- Comprehensive tests for render_md.rs (17 tests) and tree/loader.rs (7 tests)
+
+### Fixed
+- UTF-8 panics: replace byte-slicing with unicode-aware truncation in search bar, global search, picker, and input dialog
+- Cursor rendered at byte offset instead of display column in search/input components
+- Path traversal in file dialogs (new/rename) via component-based normalization and symlink-aware validation
+- Global search scroll-down not adjusting scroll_offset to keep selection visible
+- Editor command parsing failing on quoted paths with spaces (now uses shell_words::split)
+- Config `set` silently corrupting non-table intermediate values
+- Stale search state after file operations (create/rename/delete)
+- Global search confirm not updating preview panel
+- Context menu ignoring user keybindings and only using hard-coded defaults
+- Duplicate `execute_menu_action_sync` causing TogglePreview via mouse to skip preview load
+- fd/rg config commands not parsed correctly when containing flags (e.g., "fd --hidden")
+- Silent error swallowing in file operations — errors now surface in status bar
+- Config parse errors silently falling back to defaults without warning
+- Global search overlay crash on tiny terminals (<10x6)
+- Dialog width arithmetic overflow on narrow terminals
+- Duplicate keybinding conflicts now detected and warned
+
+### Changed
+- Improved self-update message for non-Homebrew users
+
 ## [0.5.0] - 2026-03-14
 
 ### Added
@@ -169,7 +196,8 @@ _Release-only commit (CI/packaging fix). No user-facing changes._
 - Git ignored file display: removed redundant status marker, fixed directory lookup
 - macOS x86_64 CI build using correct runner (macos-14)
 
-[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/realzhangshen/croot/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/realzhangshen/croot/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/realzhangshen/croot/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/realzhangshen/croot/compare/v0.3.0...v0.4.0
