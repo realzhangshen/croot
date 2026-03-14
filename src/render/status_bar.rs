@@ -438,4 +438,32 @@ mod tests {
         assert_eq!(truncate_start_to_display_width("abc", 3), "abc");
         assert_eq!(truncate_start_to_display_width("abc", 10), "abc");
     }
+
+    // ── Bug 1: error message truncation with unicode ──────────────────
+
+    #[test]
+    fn truncate_to_display_width_cjk_no_panic() {
+        // Simulates an error message with CJK chars being truncated to a narrow terminal
+        let msg = "Error: 文件不存在 (file not found)";
+        // Should not panic, even when width splits mid-character
+        for w in 0..msg.len() + 5 {
+            let _ = truncate_to_display_width(msg, w);
+        }
+    }
+
+    #[test]
+    fn truncate_to_display_width_emoji_no_panic() {
+        let msg = "Error: 🔥🔥🔥 something failed";
+        for w in 0..msg.len() + 5 {
+            let _ = truncate_to_display_width(msg, w);
+        }
+    }
+
+    #[test]
+    fn truncate_to_display_width_respects_columns() {
+        // "你好" = 4 display columns (2 each), 6 bytes
+        assert_eq!(truncate_to_display_width("你好", 3), "你"); // Only first fits
+        assert_eq!(truncate_to_display_width("你好", 4), "你好");
+        assert_eq!(truncate_to_display_width("你好", 10), "你好");
+    }
 }

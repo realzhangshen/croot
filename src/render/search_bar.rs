@@ -68,6 +68,7 @@ pub struct SearchState {
     pub global_loading: bool,
     pub global_error: Option<String>,
     pub global_search_type: GlobalSearchType,
+    pub global_visible_height: usize,
     pub request_id: u64,
 }
 
@@ -90,6 +91,7 @@ impl SearchState {
             global_loading: false,
             global_error: None,
             global_search_type: GlobalSearchType::FileName,
+            global_visible_height: 0,
             request_id: 0,
         }
     }
@@ -153,6 +155,13 @@ impl SearchState {
         self.query.is_empty()
     }
 
+    /// Convert a byte offset within `query` to its display column width.
+    /// This bridges the gap between byte-based `cursor_pos` (used for string
+    /// mutation) and the screen column where the cursor should render.
+    pub fn cursor_display_column(&self) -> usize {
+        cursor_byte_to_column(&self.query, self.cursor_pos)
+    }
+
     /// Parse the query to determine match mode and effective query string.
     /// Compiles and caches regex when in Regex mode.
     pub fn effective_query(&mut self) -> (String, MatchMode) {
@@ -174,6 +183,11 @@ impl SearchState {
             (self.query.clone(), MatchMode::Fuzzy)
         }
     }
+}
+
+/// Convert a byte offset within a string to its display column width.
+pub(crate) fn cursor_byte_to_column(s: &str, byte_pos: usize) -> usize {
+    UnicodeWidthStr::width(&s[..byte_pos])
 }
 
 pub struct SearchBar<'a> {
@@ -232,7 +246,7 @@ impl Widget for SearchBar<'_> {
         let cursor_display_pos = if query_display_width > input_width {
             input_width
         } else {
-            self.state.cursor_pos
+            self.state.cursor_display_column()
         };
         if let Some(cell) = buf.cell_mut((input_x + cursor_display_pos as u16, area.y)) {
             cell.set_style(colors::status_cursor());
@@ -561,5 +575,39 @@ mod tests {
         assert!(do_match_positions(MatchMode::Regex, "^app", Some(&re), "app.rs").is_some());
         assert!(do_match_positions(MatchMode::Regex, "^app", None, "app.rs").is_none());
         assert!(do_match_positions(MatchMode::Exact, "app", None, "app.rs").is_some());
+    }
+
+    // ── Bug 2: cursor byte-to-column ──────────────────────────────────
+
+    #[test]
+    fn cursor_byte_to_column_ascii() {
+        assert_eq!(cursor_byte_to_column("hello", 5), 5);
+        assert_eq!(cursor_byte_to_column("hello", 0), 0);
+    }
+
+    #[test]
+    fn cursor_byte_to_column_multibyte() {
+        // "café" — é is 2 bytes (0xC3 0xA9) but 1 display column
+        let s = "café";
+        assert_eq!(s.len(), 5); // 3 ASCII + 2-byte é
+                                // After inserting all chars, cursor_pos == 5 (bytes), display == 4 columns
+        let mut state = SearchState::new(SearchMode::Find);
+        for ch in s.chars() {
+            state.insert_char(ch);
+        }
+        assert_eq!(state.cursor_pos, 5);
+        assert_eq!(state.cursor_display_column(), 4);
+    }
+
+    #[test]
+    fn cursor_byte_to_column_cjk() {
+        // CJK chars are 3 bytes each, 2 display columns each
+        let s = "你好";
+        let mut state = SearchState::new(SearchMode::Find);
+        for ch in s.chars() {
+            state.insert_char(ch);
+        }
+        assert_eq!(state.cursor_pos, 6); // 2 × 3 bytes
+        assert_eq!(state.cursor_display_column(), 4); // 2 × 2 columns
     }
 }

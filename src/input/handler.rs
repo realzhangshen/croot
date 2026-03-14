@@ -295,11 +295,26 @@ pub fn handle_key(
 }
 
 /// Map a keyboard event in context menu mode.
-pub fn handle_key_menu(key: KeyEvent) -> Action {
+/// Checks user keybindings first, then falls back to hard-coded defaults.
+pub fn handle_key_menu(key: KeyEvent, keybindings: &KeybindingMap) -> Action {
+    // Check user keybindings for navigation actions
+    let binding = KeyBinding {
+        code: key.code,
+        modifiers: key.modifiers,
+    };
+    if let Some(action) = keybindings.get(&binding) {
+        match action {
+            Action::Quit => return Action::MenuClose,
+            Action::CursorDown => return Action::MenuDown,
+            Action::CursorUp => return Action::MenuUp,
+            _ => {}
+        }
+    }
+    // Hard-coded fallbacks
     match key.code {
-        KeyCode::Esc | KeyCode::Char('q') => Action::MenuClose,
-        KeyCode::Up | KeyCode::Char('k') => Action::MenuUp,
-        KeyCode::Down | KeyCode::Char('j') => Action::MenuDown,
+        KeyCode::Esc => Action::MenuClose,
+        KeyCode::Up => Action::MenuUp,
+        KeyCode::Down => Action::MenuDown,
         KeyCode::Enter => Action::MenuSelect(MenuAction::CopyPath), // placeholder, app resolves
         _ => Action::None,
     }
@@ -356,5 +371,78 @@ pub fn handle_key_global_search(key: KeyEvent) -> Action {
         KeyCode::Down | KeyCode::Tab => Action::GlobalSearchDown,
         KeyCode::Char(c) => Action::GlobalSearchChar(c),
         _ => Action::None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    // ── Bug 7: menu keybindings ──────────────────────────────────────
+
+    #[test]
+    fn handle_key_menu_uses_custom_quit_binding() {
+        let mut map = KeybindingMap::new();
+        // Map 'x' to Quit
+        map.insert(
+            KeyBinding {
+                code: KeyCode::Char('x'),
+                modifiers: KeyModifiers::NONE,
+            },
+            Action::Quit,
+        );
+        assert_eq!(
+            handle_key_menu(make_key(KeyCode::Char('x')), &map),
+            Action::MenuClose
+        );
+    }
+
+    #[test]
+    fn handle_key_menu_uses_custom_nav_bindings() {
+        let mut map = KeybindingMap::new();
+        map.insert(
+            KeyBinding {
+                code: KeyCode::Char('n'),
+                modifiers: KeyModifiers::NONE,
+            },
+            Action::CursorDown,
+        );
+        map.insert(
+            KeyBinding {
+                code: KeyCode::Char('p'),
+                modifiers: KeyModifiers::NONE,
+            },
+            Action::CursorUp,
+        );
+        assert_eq!(
+            handle_key_menu(make_key(KeyCode::Char('n')), &map),
+            Action::MenuDown
+        );
+        assert_eq!(
+            handle_key_menu(make_key(KeyCode::Char('p')), &map),
+            Action::MenuUp
+        );
+    }
+
+    #[test]
+    fn handle_key_menu_falls_back_to_defaults() {
+        let map = KeybindingMap::new(); // empty
+        assert_eq!(
+            handle_key_menu(make_key(KeyCode::Esc), &map),
+            Action::MenuClose
+        );
+        assert_eq!(handle_key_menu(make_key(KeyCode::Up), &map), Action::MenuUp);
+        assert_eq!(
+            handle_key_menu(make_key(KeyCode::Down), &map),
+            Action::MenuDown
+        );
+        assert_eq!(
+            handle_key_menu(make_key(KeyCode::Enter), &map),
+            Action::MenuSelect(MenuAction::CopyPath)
+        );
     }
 }

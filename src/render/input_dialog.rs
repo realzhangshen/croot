@@ -189,7 +189,7 @@ impl Widget for InputDialogWidget<'_> {
             let cursor_display_pos = if input_display_width > input_width {
                 input_width
             } else {
-                self.state.cursor_pos
+                super::search_bar::cursor_byte_to_column(&self.state.input, self.state.cursor_pos)
             };
             if let Some(cell) = buf.cell_mut((input_x + cursor_display_pos as u16, input_y)) {
                 cell.set_style(colors::popup_cursor());

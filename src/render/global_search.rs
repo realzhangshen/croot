@@ -75,7 +75,7 @@ impl Widget for GlobalSearchOverlay<'_> {
         let cursor_pos = if query_display_width > input_width {
             input_width
         } else {
-            self.state.cursor_pos
+            self.state.cursor_display_column()
         };
         if let Some(cell) = buf.cell_mut((input_x + cursor_pos as u16, input_y)) {
             cell.set_style(colors::popup_cursor());

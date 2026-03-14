@@ -275,7 +275,7 @@ impl PickerWidget {
         let cursor_display_pos = if query_display_width > query_width {
             query_width
         } else {
-            state.cursor_pos
+            super::search_bar::cursor_byte_to_column(&state.query, state.cursor_pos)
         };
         if let Some(cell) = buf.cell_mut((query_x + cursor_display_pos as u16, input_y)) {
             cell.set_style(colors::popup_cursor());

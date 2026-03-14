@@ -113,6 +113,30 @@ fn is_path_within_root(root: &std::path::Path, target: &std::path::Path) -> bool
     normalized.starts_with(root)
 }
 
+/// Strict path-within-root check that canonicalizes the nearest existing
+/// ancestor to defeat symlink-based path traversal.
+fn is_path_within_root_strict(root: &std::path::Path, target: &std::path::Path) -> bool {
+    // Fast lexical check first
+    if !is_path_within_root(root, target) {
+        return false;
+    }
+    // Canonicalize the nearest existing ancestor
+    let mut check = target.to_path_buf();
+    loop {
+        match check.canonicalize() {
+            Ok(canonical) => {
+                let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+                return canonical.starts_with(&canonical_root);
+            }
+            Err(_) => {
+                if !check.pop() {
+                    return false;
+                }
+            }
+        }
+    }
+}
+
 impl App {
     pub fn new(root: PathBuf, enhanced_keyboard: bool, config: Config) -> anyhow::Result<Self> {
         let mut tree = FileTree::new(root.clone(), config.tree.clone());
@@ -221,7 +245,9 @@ impl App {
                                         action
                                     }
                                 }
-                                InputMode::ContextMenu => handle_key_menu(key),
+                                InputMode::ContextMenu => {
+                                    handle_key_menu(key, &self.keybinding_map)
+                                }
                                 InputMode::Dialog => handle_key_dialog(key),
                                 InputMode::Search => handle_key_search(key),
                                 InputMode::Picker => handle_key_picker(key),
@@ -233,7 +259,8 @@ impl App {
                             use crossterm::event::{MouseButton, MouseEventKind};
 
                             if self.input_mode == InputMode::ContextMenu {
-                                post_action = self.handle_context_menu_mouse(mouse);
+                                post_action =
+                                    self.handle_context_menu_mouse(mouse, &preview_tx);
                             } else if self.input_mode == InputMode::Picker {
                                 post_action = self.handle_picker_mouse(mouse);
                             } else if self.input_mode == InputMode::Dialog {
@@ -561,11 +588,10 @@ impl App {
                     .fg(ratatui::style::Color::White)
                     .bg(ratatui::style::Color::Red)
                     .add_modifier(ratatui::style::Modifier::BOLD);
-                let display = if msg.len() as u16 > status_area.width {
-                    &msg[..status_area.width as usize]
-                } else {
-                    msg
-                };
+                let display = crate::render::status_bar::truncate_to_display_width(
+                    msg,
+                    status_area.width as usize,
+                );
                 frame
                     .buffer_mut()
                     .set_string(status_area.x, status_area.y, display, error_style);
@@ -601,6 +627,12 @@ impl App {
 
         // Global search overlay
         if self.input_mode == InputMode::GlobalSearch {
+            // Compute visible results height (same formula as GlobalSearchOverlay::render)
+            let dialog_height = (size.height * 3 / 5)
+                .max(10)
+                .min(size.height.saturating_sub(4));
+            self.search_state.global_visible_height = dialog_height.saturating_sub(5) as usize;
+
             let overlay = GlobalSearchOverlay {
                 state: &self.search_state,
             };
@@ -860,6 +892,15 @@ impl App {
                         < self.search_state.global_results.len()
                 {
                     self.search_state.global_selected += 1;
+                    // Keep selection visible by adjusting scroll offset
+                    let visible = self.search_state.global_visible_height;
+                    if visible > 0
+                        && self.search_state.global_selected
+                            >= self.search_state.global_scroll_offset + visible
+                    {
+                        self.search_state.global_scroll_offset =
+                            self.search_state.global_selected - visible + 1;
+                    }
                 }
             }
             Action::GlobalSearchConfirm => {
@@ -1233,7 +1274,11 @@ impl App {
         self.input_mode = InputMode::ContextMenu;
     }
 
-    fn handle_context_menu_mouse(&mut self, mouse: crossterm::event::MouseEvent) -> PostAction {
+    fn handle_context_menu_mouse(
+        &mut self,
+        mouse: crossterm::event::MouseEvent,
+        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+    ) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
 
         match mouse.kind {
@@ -1247,7 +1292,7 @@ impl App {
                             let node_idx = menu.node_idx;
                             self.context_menu = None;
                             self.input_mode = InputMode::Normal;
-                            return self.execute_menu_action_sync(&menu_action, node_idx);
+                            return self.execute_menu_action(&menu_action, node_idx, preview_tx);
                         }
                     } else {
                         self.context_menu = None;
@@ -1340,7 +1385,6 @@ impl App {
         PostAction::None
     }
 
-    // SYNC: keep in sync with execute_menu_action_sync
     fn execute_menu_action(
         &mut self,
         action: &MenuAction,
@@ -1432,85 +1476,6 @@ impl App {
             // Refresh handled in confirm_dialog
         } else if self.preview_visible {
             self.trigger_preview_load(preview_tx);
-        }
-        PostAction::None
-    }
-
-    // SYNC: keep in sync with execute_menu_action
-    fn execute_menu_action_sync(&mut self, action: &MenuAction, node_idx: usize) -> PostAction {
-        match action {
-            MenuAction::OpenInEditor => {
-                if let Some(node) = self.tree.nodes.get(node_idx) {
-                    if !node.is_dir() {
-                        return PostAction::OpenEditor(node.path.clone());
-                    }
-                }
-            }
-            MenuAction::CopyPath => {
-                if let Some(node) = self.tree.nodes.get(node_idx) {
-                    let rel = node
-                        .path
-                        .strip_prefix(&self.root)
-                        .unwrap_or(&node.path)
-                        .to_string_lossy()
-                        .into_owned();
-                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                        let _ = clipboard.set_text(rel);
-                    }
-                }
-            }
-            MenuAction::CopyAbsPath => {
-                if let Some(node) = self.tree.nodes.get(node_idx) {
-                    let abs = node.path.to_string_lossy().into_owned();
-                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                        let _ = clipboard.set_text(abs);
-                    }
-                }
-            }
-            MenuAction::OpenExternally => {
-                if let Some(node) = self.tree.nodes.get(node_idx) {
-                    if !node.is_dir() {
-                        self.open_externally(&node.path.clone());
-                    }
-                }
-            }
-            MenuAction::RevealInFinder => {
-                if let Some(node) = self.tree.nodes.get(node_idx) {
-                    let _ = std::process::Command::new("open")
-                        .arg("-R")
-                        .arg(&node.path)
-                        .spawn();
-                }
-            }
-            MenuAction::NewFile => self.start_new_file_at(node_idx),
-            MenuAction::NewDir => self.start_new_dir_at(node_idx),
-            MenuAction::Rename => self.start_rename_at(node_idx),
-            MenuAction::Delete => self.start_delete_at(node_idx),
-            MenuAction::TogglePreview => {
-                self.preview_visible = !self.preview_visible;
-                if !self.preview_visible {
-                    self.focus = FocusPane::Tree;
-                }
-            }
-            MenuAction::Refresh => {
-                self.tree.refresh();
-                if let Some(ref mut git) = self.git {
-                    git.refresh();
-                }
-                self.reapply_git();
-                self.refresh_search_state();
-            }
-            MenuAction::CollapseAll => {
-                self.tree.collapse_all();
-                self.reapply_git();
-                self.refresh_search_state();
-            }
-            MenuAction::StartFind => {
-                self.search_state = SearchState::new(SearchMode::Find);
-                self.search_state.origin_cursor = self.tree.cursor;
-                self.search_state.origin_scroll_offset = self.tree.scroll_offset;
-                self.input_mode = InputMode::Search;
-            }
         }
         PostAction::None
     }
@@ -1739,7 +1704,7 @@ impl App {
             DialogKind::NewFile => {
                 if !dialog.input.is_empty() {
                     let new_path = dialog.context_path.join(&dialog.input);
-                    if is_path_within_root(&self.root, &new_path) {
+                    if is_path_within_root_strict(&self.root, &new_path) {
                         // Create parent dirs if needed
                         if let Some(parent) = new_path.parent() {
                             if let Err(e) = std::fs::create_dir_all(parent) {
@@ -1757,7 +1722,7 @@ impl App {
             DialogKind::NewDir => {
                 if !dialog.input.is_empty() {
                     let new_path = dialog.context_path.join(&dialog.input);
-                    if is_path_within_root(&self.root, &new_path) {
+                    if is_path_within_root_strict(&self.root, &new_path) {
                         if let Err(e) = std::fs::create_dir_all(&new_path) {
                             self.show_error(format!("Create directory failed: {e}"));
                         }
@@ -1770,7 +1735,7 @@ impl App {
                 if !dialog.input.is_empty() && dialog.input != dialog.target_name {
                     if let Some(parent) = dialog.context_path.parent() {
                         let new_path = parent.join(&dialog.input);
-                        if is_path_within_root(&self.root, &new_path) {
+                        if is_path_within_root_strict(&self.root, &new_path) {
                             if let Err(e) = std::fs::rename(&dialog.context_path, &new_path) {
                                 self.show_error(format!("Rename failed: {e}"));
                             }
@@ -2028,14 +1993,22 @@ impl App {
 
             let output = match search_type {
                 GlobalSearchType::FileName => {
-                    tokio::process::Command::new(&fd_cmd)
+                    let parts =
+                        shell_words::split(&fd_cmd).unwrap_or_else(|_| vec![fd_cmd.clone()]);
+                    let (bin, extra) = parts.split_first().unwrap_or((&fd_cmd, &[]));
+                    tokio::process::Command::new(bin)
+                        .args(extra)
                         .args(["--type", "f", "--color", "never", &query])
                         .current_dir(&root)
                         .output()
                         .await
                 }
                 GlobalSearchType::Content => {
-                    tokio::process::Command::new(&rg_cmd)
+                    let parts =
+                        shell_words::split(&rg_cmd).unwrap_or_else(|_| vec![rg_cmd.clone()]);
+                    let (bin, extra) = parts.split_first().unwrap_or((&rg_cmd, &[]));
+                    tokio::process::Command::new(bin)
+                        .args(extra)
                         .args([
                             "--line-number",
                             "--no-heading",
@@ -2595,5 +2568,110 @@ mod tests {
         );
         // Clean up
         let _ = std::fs::remove_file(&test_file);
+    }
+
+    // ── Bug 5: symlink path traversal ───────────────────────────────────
+
+    #[test]
+    fn test_is_path_within_root_strict_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+        let tmp = std::env::temp_dir().join("croot_symlink_test");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("workspace")).unwrap();
+        std::fs::create_dir_all(tmp.join("outside")).unwrap();
+
+        // Create a symlink inside workspace pointing outside
+        let link_path = tmp.join("workspace/escape_link");
+        symlink(tmp.join("outside"), &link_path).unwrap();
+
+        let workspace = tmp.join("workspace");
+        let target = link_path.join("evil.txt");
+
+        // Lexical check passes (path looks like workspace/escape_link/evil.txt)
+        assert!(is_path_within_root(&workspace, &target));
+        // Strict check rejects (resolves through symlink to outside)
+        assert!(!is_path_within_root_strict(&workspace, &target));
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_is_path_within_root_strict_allows_normal_paths() {
+        let tmp = std::env::temp_dir().join("croot_strict_test");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("workspace/subdir")).unwrap();
+
+        let workspace = tmp.join("workspace");
+        let target = workspace.join("subdir/new_file.txt");
+
+        assert!(is_path_within_root_strict(&workspace, &target));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ── Bug 4: fd/rg shell-split ────────────────────────────────────────
+
+    #[test]
+    fn test_shell_words_split_fd_command() {
+        let parts = shell_words::split("fd --hidden --no-ignore").unwrap();
+        assert_eq!(parts, vec!["fd", "--hidden", "--no-ignore"]);
+        let (bin, extra) = parts.split_first().unwrap();
+        assert_eq!(bin, "fd");
+        assert_eq!(extra, &["--hidden", "--no-ignore"]);
+    }
+
+    #[test]
+    fn test_shell_words_split_rg_command() {
+        let parts = shell_words::split("rg --hidden").unwrap();
+        assert_eq!(parts, vec!["rg", "--hidden"]);
+    }
+
+    #[test]
+    fn test_shell_words_split_simple_command() {
+        // A simple command without args should produce a single element
+        let parts = shell_words::split("fd").unwrap();
+        assert_eq!(parts, vec!["fd"]);
+    }
+
+    // ── Bug 3: global search scroll-down keeps selection visible ──────
+
+    #[test]
+    fn test_global_search_down_adjusts_scroll_offset() {
+        use crate::render::search_bar::GlobalSearchResult;
+        use std::path::PathBuf;
+
+        let mut state = SearchState::new(SearchMode::Global);
+        state.global_visible_height = 5;
+        // Populate with 20 results
+        for i in 0..20 {
+            state.global_results.push(GlobalSearchResult {
+                path: PathBuf::from(format!("file{i}.rs")),
+                display: format!("file{i}.rs"),
+                line: None,
+                context: None,
+            });
+        }
+
+        // Navigate down 5 times (indices 0→5), should trigger scroll at index 5
+        for _ in 0..5 {
+            state.global_selected += 1;
+            let visible = state.global_visible_height;
+            if visible > 0 && state.global_selected >= state.global_scroll_offset + visible {
+                state.global_scroll_offset = state.global_selected - visible + 1;
+            }
+        }
+
+        assert_eq!(state.global_selected, 5);
+        assert_eq!(state.global_scroll_offset, 1);
+
+        // One more
+        state.global_selected += 1;
+        let visible = state.global_visible_height;
+        if visible > 0 && state.global_selected >= state.global_scroll_offset + visible {
+            state.global_scroll_offset = state.global_selected - visible + 1;
+        }
+        assert_eq!(state.global_selected, 6);
+        assert_eq!(state.global_scroll_offset, 2);
     }
 }
