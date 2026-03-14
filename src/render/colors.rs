@@ -177,6 +177,11 @@ color_getters!(
     popup_selected_danger_bg,
 );
 
+/// Tree connectors (│, ├─, └─, preview separator): dim for visual hierarchy.
+pub fn tree_connector() -> Style {
+    Style::default().fg(tree_line()).add_modifier(Modifier::DIM)
+}
+
 /// Tree-view hover row: subtle reverse + dim.
 pub fn hover_style() -> Style {
     Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)

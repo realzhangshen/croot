@@ -141,10 +141,7 @@ impl StatefulWidget for TreeView<'_> {
                     continue;
                 }
                 let connector = if has_continuation { "│ " } else { "  " };
-                spans.push(Span::styled(
-                    connector,
-                    row_style(Style::default().fg(colors::tree_line())),
-                ));
+                spans.push(Span::styled(connector, row_style(colors::tree_connector())));
             }
 
             // Branch connector for this node
@@ -159,10 +156,7 @@ impl StatefulWidget for TreeView<'_> {
                     state.is_last_sibling(absolute_idx)
                 };
                 let branch = if is_last { "└─" } else { "├─" };
-                spans.push(Span::styled(
-                    branch,
-                    row_style(Style::default().fg(colors::tree_line())),
-                ));
+                spans.push(Span::styled(branch, row_style(colors::tree_connector())));
             }
 
             // Icon — for compacted dirs, use the last dir in the chain's expand state
@@ -181,6 +175,8 @@ impl StatefulWidget for TreeView<'_> {
 
             let mut icon_base = Style::default().fg(icon_info.color);
             if is_ignored {
+                icon_base = icon_base.add_modifier(Modifier::DIM);
+            } else if !node.is_dir() {
                 icon_base = icon_base.add_modifier(Modifier::DIM);
             }
             let icon_style = row_style(icon_base);

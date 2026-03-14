@@ -9,12 +9,12 @@ use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
 use futures::StreamExt;
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::Style,
     widgets::{StatefulWidget, Widget},
     Terminal,
 };
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use unicode_width::UnicodeWidthStr;
 
 use crate::cmux::bridge::CmuxBridge;
 use crate::config::Config;
@@ -414,7 +414,7 @@ impl App {
             }
             .render(tree_area, frame.buffer_mut(), &mut self.tree);
 
-            let sep_style = Style::default().fg(colors::tree_line());
+            let sep_style = colors::tree_connector();
             for y in separator_area.y..separator_area.y + separator_area.height {
                 frame
                     .buffer_mut()
@@ -525,8 +525,9 @@ impl App {
         };
         // Track branch click region for mouse routing
         self.status_bar_branch_region = branch.as_ref().map(|b| {
-            // Branch is rendered as "  {branch} │ " starting at col 0
-            let end = (2 + b.len() + 1) as u16; // "  branch "
+            // Branch is rendered as "  \u{e0a0} {branch} │ " starting at col 0
+            let span_text = format!("  \u{e0a0} {b} ");
+            let end = UnicodeWidthStr::width(span_text.as_str()) as u16;
             (0, end)
         });
 
