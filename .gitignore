@@ -5,3 +5,6 @@ docs-private/
 CLAUDE.md
 agent.md
 examples/
+docs/node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/

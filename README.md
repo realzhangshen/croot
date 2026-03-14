@@ -2,6 +2,8 @@
 
 A terminal file explorer that brings the VS Code sidebar experience to your command line — built with Rust and [Ratatui](https://ratatui.rs).
 
+**[Documentation](https://realzhangshen.github.io/croot/)** | **[Getting Started](https://realzhangshen.github.io/croot/guide/getting-started)**
+
 ## Features
 
 - **Git status integration** — see modified, staged, and untracked files at a glance

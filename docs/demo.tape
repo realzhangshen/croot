@@ -1,7 +1,7 @@
 # VHS tape file for generating croot demo GIF
 # https://github.com/charmbracelet/vhs
 
-Output web/assets/demo.gif
+Output docs/public/demo.gif
 
 Set Shell zsh
 Set FontFamily "JetBrains Mono"
