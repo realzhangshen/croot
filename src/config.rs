@@ -6,8 +6,22 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GeneralConfig {
+    #[serde(default = "default_true")]
+    pub use_trash: bool,
+}
+
+impl Default for GeneralConfig {
+    fn default() -> Self {
+        Self { use_trash: true }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
+    #[serde(default)]
+    pub general: GeneralConfig,
     #[serde(default)]
     pub tree: TreeConfig,
     #[serde(default)]
@@ -932,6 +946,35 @@ fn format_value(val: &toml::Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn general_config_defaults_to_use_trash_true() {
+        let config = Config::default();
+        assert!(config.general.use_trash, "use_trash should default to true");
+    }
+
+    #[test]
+    fn general_config_deserializes_without_section() {
+        let content = r"
+[tree]
+show_hidden = false
+";
+        let cfg: Config = toml::from_str(content).unwrap();
+        assert!(
+            cfg.general.use_trash,
+            "Missing [general] should default use_trash to true"
+        );
+    }
+
+    #[test]
+    fn general_config_deserializes_use_trash_false() {
+        let content = r"
+[general]
+use_trash = false
+";
+        let cfg: Config = toml::from_str(content).unwrap();
+        assert!(!cfg.general.use_trash, "use_trash should be false when set");
+    }
 
     #[test]
     fn parse_color_supports_ansi_names() {
