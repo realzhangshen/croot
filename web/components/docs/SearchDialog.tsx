@@ -97,9 +97,9 @@ export function SearchDialog({
 
   return (
     <div className="fixed inset-0 z-[100] search-backdrop" onClick={onClose}>
-      <div className="mx-auto max-w-xl mt-[20vh] px-4" onClick={(e) => e.stopPropagation()}>
-        <div className="bg-bg-surface border border-border rounded-lg shadow-2xl overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+      <div className="mx-auto mt-[16vh] max-w-xl px-4" onClick={(e) => e.stopPropagation()}>
+        <div className="overflow-hidden rounded-[22px] border border-border bg-bg-surface shadow-[var(--shadow-dialog)]">
+          <div className="flex items-center gap-3 border-b border-border px-4 py-3.5">
             <Search size={16} className="text-text-muted shrink-0" />
             <input
               ref={inputRef}
@@ -110,7 +110,7 @@ export function SearchDialog({
               placeholder="Search documentation..."
               className="flex-1 bg-transparent text-sm text-text placeholder:text-text-muted outline-none"
             />
-            <kbd className="text-[10px] text-text-muted bg-bg-elevated px-1.5 py-0.5 rounded border border-border">
+            <kbd className="rounded-md border border-border bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-muted">
               ESC
             </kbd>
           </div>
@@ -120,7 +120,7 @@ export function SearchDialog({
                 <li key={result.slug}>
                   <button
                     onClick={() => navigate(result.slug)}
-                    className={`w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm transition-colors ${
+                    className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors ${
                       i === selected
                         ? "bg-bg-elevated text-text"
                         : "text-text-secondary hover:bg-bg-elevated"
@@ -128,7 +128,7 @@ export function SearchDialog({
                   >
                     <FileText size={14} className="shrink-0 text-text-muted" />
                     <div>
-                      <p className="font-medium">{result.title}</p>
+                      <p className="font-medium tracking-[-0.02em]">{result.title}</p>
                       <p className="text-xs text-text-muted">
                         {result.section}
                       </p>

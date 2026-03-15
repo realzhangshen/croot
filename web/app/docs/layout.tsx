@@ -11,14 +11,14 @@ export default function DocsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <div className="flex items-center gap-2 min-[960px]:hidden py-3 px-4 border-b border-border">
+    <div className="bg-bg-surface">
+      <div className="flex items-center gap-2 border-b border-border bg-bg-surface px-4 py-3 min-[960px]:hidden">
         <MobileNav />
-        <span className="text-sm text-text-muted">Documentation</span>
+        <span className="text-sm font-medium text-text-muted">Documentation</span>
       </div>
-      <div className="flex gap-0">
+      <div className="mx-auto flex max-w-[1520px]">
         <Sidebar />
-        <div className="flex-1 min-w-0 pl-10 pr-4 sm:pr-6">{children}</div>
+        <div className="min-w-0 flex-1 px-4 sm:px-6 lg:px-10">{children}</div>
       </div>
     </div>
   );

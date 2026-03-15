@@ -14,12 +14,12 @@ export function InstallCommand() {
   };
 
   return (
-    <div className="inline-flex items-center gap-3 bg-bg-elevated border border-border rounded-lg px-4 py-2.5 font-mono text-sm">
-      <span className="text-text-muted select-none">$</span>
-      <code className="text-text">{command}</code>
+    <div className="inline-flex max-w-full items-center gap-3 rounded-2xl border border-border bg-bg-surface px-4 py-3 text-sm shadow-[var(--shadow-soft)]">
+      <span className="select-none text-text-muted">$</span>
+      <code className="truncate text-left text-text">{command}</code>
       <button
         onClick={copy}
-        className="text-text-muted hover:text-text transition-colors"
+        className="rounded-lg p-1 text-text-muted transition-colors hover:bg-bg-elevated hover:text-text"
         aria-label="Copy install command"
       >
         {copied ? <Check size={14} /> : <Copy size={14} />}

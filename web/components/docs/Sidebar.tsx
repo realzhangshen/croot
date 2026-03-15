@@ -8,14 +8,14 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden min-[960px]:block w-[220px] shrink-0 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto py-6 pl-5 border-r border-border">
-      <nav className="space-y-8">
+    <aside className="sticky top-[52px] hidden h-[calc(100vh-52px)] w-[236px] shrink-0 overflow-y-auto border-r border-border bg-bg-sidebar min-[960px]:block">
+      <nav className="space-y-8 px-4 py-6">
         {sidebarSections.map((section) => (
           <div key={section.label}>
-            <h4 className="text-xs font-normal text-text-muted tracking-[0.6px] mb-1">
+            <h4 className="mb-2 px-2.5 text-[12px] font-medium tracking-[0.02em] text-text-muted">
               {section.label}
             </h4>
-            <ul>
+            <ul className="space-y-0.5">
               {section.links.map((link) => {
                 const href = `/docs/${link.slug}`;
                 const isActive = pathname === href;
@@ -23,10 +23,11 @@ export function Sidebar() {
                   <li key={link.slug}>
                     <Link
                       href={href}
-                      className={`block h-[29px] leading-[29px] text-base transition-colors rounded-sm hover:bg-bg-elevated/70 ${
+                      aria-current={isActive ? "page" : undefined}
+                      className={`block rounded-lg px-2.5 py-1.5 text-[15px] leading-6 transition-colors ${
                         isActive
-                          ? "text-sidebar-active font-medium"
-                          : "text-text"
+                          ? "font-medium text-sidebar-active"
+                          : "text-text-secondary hover:bg-white/55 hover:text-text dark:hover:bg-white/[0.04]"
                       }`}
                     >
                       {link.title}

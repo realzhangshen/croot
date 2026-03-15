@@ -14,19 +14,25 @@ const sectionIcons: Record<string, React.ElementType> = {
 
 export default function DocsIndex() {
   return (
-    <div className="py-8 max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold text-text mb-2">Documentation</h1>
-      <p className="text-text-secondary mb-8">
-        Everything you need to know about croot.
+    <div className="mx-auto max-w-[760px] py-10 lg:py-12">
+      <p className="text-[12px] font-medium tracking-[0.02em] text-text-muted">
+        Get Started
       </p>
-      <div className="space-y-8">
+      <h1 className="mt-2 text-[clamp(3rem,5.2vw,4rem)] font-semibold tracking-[-0.05em] text-text">
+        croot Documentation
+      </h1>
+      <p className="mt-5 max-w-2xl text-[17px] leading-8 text-text-secondary">
+        Explore installation, key workflows, and the features that make croot
+        feel closer to an editor sidebar than a typical terminal file browser.
+      </p>
+      <div className="mt-10 space-y-10">
         {sidebarSections.map((section) => {
           const Icon = sectionIcons[section.label] || BookOpen;
           return (
             <div key={section.label}>
-              <div className="flex items-center gap-2 mb-3">
+              <div className="mb-3 flex items-center gap-2">
                 <Icon size={16} className="text-text-muted" />
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
+                <h2 className="text-[12px] font-medium tracking-[0.02em] text-text-muted">
                   {section.label}
                 </h2>
               </div>
@@ -35,11 +41,14 @@ export default function DocsIndex() {
                   <Link
                     key={link.slug}
                     href={`/docs/${link.slug}`}
-                    className="group block p-4 rounded-lg border border-border hover:border-border-strong bg-bg-surface transition-colors"
+                    className="group block rounded-2xl border border-border bg-bg-elevated/45 p-4 transition-colors hover:border-border-strong hover:bg-bg-elevated"
                   >
-                    <h3 className="text-sm font-medium text-text group-hover:underline">
+                    <h3 className="text-[15px] font-medium tracking-[-0.02em] text-text">
                       {link.title}
                     </h3>
+                    <p className="mt-1 text-sm text-text-muted group-hover:text-text-secondary">
+                      Open this section
+                    </p>
                   </Link>
                 ))}
               </div>

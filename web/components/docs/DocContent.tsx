@@ -60,7 +60,7 @@ export function DocContent({ html }: { html: string }) {
   return (
     <article
       ref={articleRef}
-      className="prose prose-lg max-w-3xl"
+      className="prose max-w-[760px]"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

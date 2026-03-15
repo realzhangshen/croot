@@ -14,7 +14,7 @@ export function MobileNav() {
     <div className="min-[960px]:hidden">
       <button
         onClick={() => setOpen(true)}
-        className="p-2 text-text-muted hover:text-text transition-colors"
+        className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-bg text-text-muted transition-colors hover:border-border-strong hover:text-text"
         aria-label="Open navigation"
       >
         <Menu size={20} />
@@ -26,24 +26,26 @@ export function MobileNav() {
             className="absolute inset-0 bg-black/40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute top-0 left-0 bottom-0 w-72 bg-bg-surface border-r border-border overflow-y-auto">
+          <div className="absolute bottom-0 left-0 top-0 w-72 overflow-y-auto border-r border-border bg-bg-sidebar shadow-[var(--shadow-dialog)]">
             <div className="flex items-center justify-between p-4 border-b border-border">
-              <span className="font-semibold text-text">Navigation</span>
+              <span className="text-sm font-semibold tracking-[-0.02em] text-text">
+                Documentation
+              </span>
               <button
                 onClick={() => setOpen(false)}
-                className="p-1 text-text-muted hover:text-text"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg-elevated hover:text-text"
                 aria-label="Close navigation"
               >
                 <X size={18} />
               </button>
             </div>
-            <nav className="p-4 space-y-8">
+            <nav className="space-y-8 p-4">
               {sidebarSections.map((section) => (
                 <div key={section.label}>
-                  <h4 className="text-xs font-normal text-text-muted tracking-[0.6px] mb-1">
+                  <h4 className="mb-2 px-2.5 text-[12px] font-medium tracking-[0.02em] text-text-muted">
                     {section.label}
                   </h4>
-                  <ul>
+                  <ul className="space-y-0.5">
                     {section.links.map((link) => {
                       const href = `/docs/${link.slug}`;
                       const isActive = pathname === href;
@@ -52,10 +54,11 @@ export function MobileNav() {
                           <Link
                             href={href}
                             onClick={() => setOpen(false)}
-                            className={`block h-[29px] leading-[29px] text-base transition-colors rounded-sm hover:bg-bg-elevated/70 ${
+                            aria-current={isActive ? "page" : undefined}
+                            className={`block rounded-lg px-2.5 py-1.5 text-[15px] leading-6 transition-colors ${
                               isActive
-                                ? "text-sidebar-active font-medium"
-                                : "text-text"
+                                ? "font-medium text-sidebar-active"
+                                : "text-text-secondary hover:bg-white/55 hover:text-text dark:hover:bg-white/[0.04]"
                             }`}
                           >
                             {link.title}

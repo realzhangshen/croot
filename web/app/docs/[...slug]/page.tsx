@@ -36,10 +36,12 @@ export default async function DocPage({
   const doc = await getDocBySlug(slugStr);
 
   return (
-    <div className="flex gap-0">
-      <div className="flex-1 min-w-0 py-8">
-        <Breadcrumb slug={slugStr} />
-        <DocContent html={doc.html} />
+    <div className="flex min-w-0 gap-0">
+      <div className="min-w-0 flex-1 py-10 lg:py-12">
+        <div className="mx-auto max-w-[760px]">
+          <Breadcrumb slug={slugStr} />
+          <DocContent html={doc.html} />
+        </div>
       </div>
       <TableOfContents entries={doc.toc} />
     </div>

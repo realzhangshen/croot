@@ -48,22 +48,32 @@ const features = [
 
 export function FeatureGrid() {
   return (
-    <section className="py-16 sm:py-24">
+    <section className="py-16 sm:py-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="mb-8 text-center">
+          <p className="text-[12px] font-medium tracking-[0.02em] text-text-muted">
+            Core workflows
+          </p>
+          <h2 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-text sm:text-4xl">
+            Built for daily terminal work
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((feature) => (
             <div
               key={feature.title}
-              className="group p-6 rounded-lg border border-border hover:border-border-strong bg-bg-surface transition-colors"
+              className="group rounded-[24px] border border-border bg-bg-surface p-6 transition-all hover:-translate-y-0.5 hover:border-border-strong hover:bg-white/70 dark:hover:bg-white/[0.02]"
             >
-              <feature.icon
-                size={20}
-                className="text-text-muted group-hover:text-text transition-colors"
-              />
-              <h3 className="mt-3 text-base font-semibold text-text">
+              <div className="inline-flex rounded-2xl border border-border bg-bg-elevated p-2.5">
+                <feature.icon
+                  size={18}
+                  className="text-text-muted transition-colors group-hover:text-text"
+                />
+              </div>
+              <h3 className="mt-4 text-[17px] font-semibold tracking-[-0.03em] text-text">
                 {feature.title}
               </h3>
-              <p className="mt-2 text-sm text-text-secondary leading-relaxed">
+              <p className="mt-2 text-sm leading-7 text-text-secondary">
                 {feature.description}
               </p>
             </div>

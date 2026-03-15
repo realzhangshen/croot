@@ -15,6 +15,7 @@ const SearchDialog = dynamic(
 export function Navbar() {
   const pathname = usePathname();
   const isDocsActive = pathname.startsWith("/docs");
+  const isHomeActive = pathname === "/";
   const [searchOpen, setSearchOpen] = useState(false);
 
   const handleClose = useCallback(() => setSearchOpen(false), []);
@@ -32,51 +33,79 @@ export function Navbar() {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 h-14 border-b border-border bg-bg">
-        <div className="mx-auto max-w-7xl h-full px-4 sm:px-6 flex items-center justify-between">
-          <div className="flex items-center gap-6">
+      <nav className="sticky top-0 z-50 border-b border-border bg-bg-overlay backdrop-blur-xl">
+        <div className="mx-auto flex h-[52px] max-w-[1480px] items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-6 sm:gap-8">
             <Link
               href="/"
-              className="text-text font-semibold text-lg tracking-tight"
+              className="flex items-center gap-2 text-[1.02rem] font-semibold tracking-[-0.04em] text-text"
             >
-              croot
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-[6px] border border-border bg-bg-elevated text-[11px] font-semibold text-text shadow-[var(--shadow-soft)]">
+                c
+              </span>
+              <span>croot</span>
             </Link>
-            <div className="hidden sm:flex items-center gap-4">
+            <div className="hidden h-full items-center gap-1 sm:flex">
+              <Link
+                href="/"
+                className={`relative flex h-full items-center px-3 text-[14px] font-medium transition-colors ${
+                  isHomeActive
+                    ? "text-text"
+                    : "text-text-secondary hover:text-text"
+                }`}
+              >
+                Home
+                {isHomeActive && (
+                  <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-sidebar-active" />
+                )}
+              </Link>
               <Link
                 href="/docs"
-                className={`text-sm transition-colors ${
+                className={`relative flex h-full items-center px-3 text-[14px] font-medium transition-colors ${
                   isDocsActive
-                    ? "text-sidebar-active font-medium"
+                    ? "text-sidebar-active"
                     : "text-text-secondary hover:text-text"
                 }`}
               >
                 Docs
+                {isDocsActive && (
+                  <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-sidebar-active" />
+                )}
               </Link>
               <Link
                 href="/docs/guide/getting-started"
-                className="text-sm text-text-secondary hover:text-text transition-colors"
+                className="relative flex h-full items-center px-3 text-[14px] font-medium text-text-secondary transition-colors hover:text-text"
               >
                 Quickstart
               </Link>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setSearchOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-sm text-sm text-text-muted hover:text-text hover:bg-bg-elevated border border-border transition-colors"
+              className="hidden h-9 min-w-[182px] items-center justify-between gap-3 rounded-xl border border-border bg-bg px-3.5 text-[13px] text-text-muted transition-colors hover:border-border-strong hover:text-text sm:flex"
             >
-              <Search size={14} />
-              <span className="hidden sm:inline">Search</span>
-              <kbd className="hidden sm:inline text-xs text-text-muted bg-bg-elevated px-1.5 py-0.5 rounded border border-border ml-2">
+              <span className="flex items-center gap-2">
+                <Search size={14} />
+                <span>Search docs...</span>
+              </span>
+              <kbd className="rounded-md border border-border bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-muted">
                 ⌘K
               </kbd>
+            </button>
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-bg text-text-muted transition-colors hover:border-border-strong hover:text-text sm:hidden"
+              aria-label="Search"
+            >
+              <Search size={15} />
             </button>
             <ThemeToggle />
             <a
               href="https://github.com/realzhangshen/croot"
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 rounded-sm text-text-muted hover:text-text hover:bg-bg-elevated transition-colors"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-text-muted transition-colors hover:bg-bg-elevated hover:text-text"
               aria-label="GitHub"
             >
               <Github size={18} />
