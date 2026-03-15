@@ -1,19 +1,10 @@
-mod app;
-mod cmux;
-mod config;
-mod git;
-mod input;
-mod layout;
-mod preview;
-mod render;
-mod tree;
-mod watcher;
-
 use std::io;
 use std::path::PathBuf;
 use std::process;
 
 use clap::{CommandFactory, Parser, Subcommand};
+use croot::app::App;
+use croot::{config, render};
 use crossterm::{
     event::{
         DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags,
@@ -23,8 +14,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::prelude::*;
-
-use app::App;
 
 #[derive(Parser)]
 #[command(

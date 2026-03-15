@@ -123,6 +123,7 @@ pub const DEFAULT_COLORS: ColorDefaults = ColorDefaults {
 
 impl ColorConfig {
     /// Return a copy with `None` fields filled in with built-in defaults.
+    #[must_use]
     pub fn resolved(&self) -> Self {
         Self {
             git_modified: self
@@ -332,6 +333,7 @@ pub fn default_key_for(field: &str) -> Option<&'static str> {
 impl KeybindingsConfig {
     /// Return a copy with `None` fields filled in with built-in defaults.
     /// Fields the user explicitly set (including `""` to disable) are kept as-is.
+    #[must_use]
     pub fn resolved(&self) -> Self {
         fn resolve(field: Option<&String>, name: &str) -> Option<String> {
             match field {

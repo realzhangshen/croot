@@ -17,6 +17,12 @@ pub struct Selection {
     pub cursor: Option<ContentPos>,
 }
 
+impl Default for Selection {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Selection {
     pub fn new() -> Self {
         Self {
@@ -93,6 +99,12 @@ pub struct PreviewState {
     /// Image rendering state (non-blocking via background thread).
     #[cfg(feature = "image-preview")]
     pub image_state: Option<ratatui_image::thread::ThreadProtocol>,
+}
+
+impl Default for PreviewState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PreviewState {

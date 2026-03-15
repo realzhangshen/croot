@@ -10,6 +10,12 @@ pub struct ClickTracker {
     last_click_row: Option<u16>,
 }
 
+impl Default for ClickTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClickTracker {
     pub fn new() -> Self {
         Self {

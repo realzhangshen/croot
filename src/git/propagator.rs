@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash::BuildHasher;
 use std::path::{Path, PathBuf};
 
 use super::types::GitStatus;
@@ -7,8 +8,8 @@ use super::types::GitStatus;
 /// Each directory gets the most severe status among its descendants.
 ///
 /// Severity order: Conflicted > Deleted > Modified > Added > Untracked > Ignored > Clean
-pub fn propagate_to_dirs(
-    file_statuses: &HashMap<PathBuf, GitStatus>,
+pub fn propagate_to_dirs<S: BuildHasher>(
+    file_statuses: &HashMap<PathBuf, GitStatus, S>,
     repo_root: &Path,
 ) -> HashMap<PathBuf, GitStatus> {
     let mut dir_statuses: HashMap<PathBuf, GitStatus> = HashMap::new();
