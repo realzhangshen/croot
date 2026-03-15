@@ -5,13 +5,13 @@
 
 :root {
   --bg: #f7f7f4;
-  --bg-surface: #ffffff;
-  --bg-elevated: #eeeee8;
-  --border: rgba(38, 37, 30, 0.08);
-  --border-strong: rgba(38, 37, 30, 0.15);
+  --bg-surface: #f7f7f4;
+  --bg-elevated: #f0efea;
+  --border: #e2e2df;
+  --border-strong: #d4d4d0;
   --text: #26251e;
-  --text-secondary: rgba(38, 37, 30, 0.7);
-  --text-muted: rgba(38, 37, 30, 0.55);
+  --text-secondary: #3b3a33;
+  --text-muted: #7a7974;
   --accent: #26251e;
   --accent-fg: #f7f7f4;
   --sidebar-active: #eb5600;
@@ -55,7 +55,7 @@ body {
 /* ── Prose ─────────────────────────────────────── */
 
 .prose {
-  --tw-prose-body: var(--text-secondary);
+  --tw-prose-body: var(--text);
   --tw-prose-headings: var(--text);
   --tw-prose-links: var(--text);
   --tw-prose-bold: var(--text);
@@ -95,7 +95,7 @@ body {
 .prose pre {
   background-color: var(--bg-elevated) !important;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 1rem;
   overflow-x: auto;
   position: relative;
