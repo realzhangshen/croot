@@ -1,51 +1,47 @@
-import type { Metadata } from 'next'
-import { getAllSlugs, getDocBySlug } from '@/lib/docs'
-import { sidebar } from '@/lib/sidebar'
-import DocBreadcrumb from '@/components/docs/DocBreadcrumb'
-import DocContent from '@/components/docs/DocContent'
-import TableOfContents from '@/components/docs/TableOfContents'
+import { notFound } from "next/navigation";
+import { getDocBySlug, docExists } from "@/lib/docs";
+import { getAllDocSlugs } from "@/lib/sidebar";
+import { DocContent } from "@/components/docs/DocContent";
+import { TableOfContents } from "@/components/docs/TableOfContents";
+import { Breadcrumb } from "@/components/docs/Breadcrumb";
 
-export async function generateStaticParams() {
-  const slugs = getAllSlugs()
-  return slugs.map((slug) => ({ slug }))
+export function generateStaticParams() {
+  return getAllDocSlugs().map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string[] }>
-}): Promise<Metadata> {
-  const { slug } = await params
-  const doc = await getDocBySlug(slug)
-  return {
-    title: `${doc.title} — croot`,
-  }
+  params: Promise<{ slug: string[] }>;
+}) {
+  const { slug } = await params;
+  const slugStr = slug.join("/");
+  if (!docExists(slugStr)) return {};
+  const doc = await getDocBySlug(slugStr);
+  return { title: `${doc.title} — croot docs` };
 }
 
 export default async function DocPage({
   params,
 }: {
-  params: Promise<{ slug: string[] }>
+  params: Promise<{ slug: string[] }>;
 }) {
-  const { slug } = await params
-  const doc = await getDocBySlug(slug)
+  const { slug } = await params;
+  const slugStr = slug.join("/");
 
-  const currentPath = `/docs/${slug.join('/')}`
-  let groupName: string | null = null
-  for (const group of sidebar) {
-    if (group.items.some((item) => item.link === currentPath)) {
-      groupName = group.text
-      break
-    }
+  if (!docExists(slugStr)) {
+    notFound();
   }
 
+  const doc = await getDocBySlug(slugStr);
+
   return (
-    <div style={{ display: 'flex', gap: 0 }}>
-      <article style={{ flex: 1, minWidth: 0 }}>
-        <DocBreadcrumb groupName={groupName} />
-        <DocContent html={doc.html} editPath={doc.editPath} />
-      </article>
-      <TableOfContents headings={doc.headings} />
+    <div className="flex gap-0">
+      <div className="flex-1 min-w-0 py-8">
+        <Breadcrumb slug={slugStr} />
+        <DocContent html={doc.html} />
+      </div>
+      <TableOfContents entries={doc.toc} />
     </div>
-  )
+  );
 }

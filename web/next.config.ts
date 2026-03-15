@@ -1,11 +1,9 @@
-import type { NextConfig } from 'next'
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'export',
-  trailingSlash: true,
-  images: {
-    unoptimized: true,
-  },
-}
+  output: "export",
+  basePath: process.env.NODE_ENV === "production" ? "/croot" : "",
+  images: { unoptimized: true },
+};
 
-export default nextConfig
+export default nextConfig;

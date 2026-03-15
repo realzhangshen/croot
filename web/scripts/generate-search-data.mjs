@@ -1,66 +1,66 @@
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DOCS_DIR = path.join(__dirname, '..', '..', 'docs')
-const OUT_FILE = path.join(__dirname, '..', 'public', 'search-data.json')
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const docsDir = path.join(__dirname, "..", "..", "docs");
+const outFile = path.join(__dirname, "..", "public", "search-data.json");
 
-const SKIP_DIRS = new Set(['.vitepress', 'node_modules', 'public'])
+const sections = [
+  {
+    label: "Guide",
+    files: [
+      "guide/installation",
+      "guide/getting-started",
+      "guide/configuration",
+      "guide/keybindings",
+    ],
+  },
+  {
+    label: "Features",
+    files: [
+      "features/file-preview",
+      "features/fuzzy-search",
+      "features/file-operations",
+      "features/git-integration",
+      "features/mouse-support",
+      "features/context-menus",
+    ],
+  },
+  {
+    label: "Advanced",
+    files: ["advanced/cmux-workflow", "advanced/development"],
+  },
+];
 
-function getMarkdownFiles(dir, base = '') {
-  const entries = fs.readdirSync(dir, { withFileTypes: true })
-  const files = []
-  for (const entry of entries) {
-    if (SKIP_DIRS.has(entry.name)) continue
-    const rel = path.join(base, entry.name)
-    if (entry.isDirectory()) {
-      files.push(...getMarkdownFiles(path.join(dir, entry.name), rel))
-    } else if (entry.name.endsWith('.md') && entry.name !== 'index.md') {
-      files.push(rel)
-    }
+const entries = [];
+
+for (const section of sections) {
+  for (const slug of section.files) {
+    const filePath = path.join(docsDir, `${slug}.md`);
+    const content = fs.readFileSync(filePath, "utf-8");
+
+    const titleMatch = content.match(/^#\s+(.+)$/m);
+    const title = titleMatch ? titleMatch[1] : slug.split("/").pop();
+
+    // Strip markdown syntax for plain text search
+    const plainText = content
+      .replace(/^#+\s+/gm, "")
+      .replace(/```[\s\S]*?```/g, "")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/[*_~]/g, "")
+      .replace(/\n{2,}/g, "\n")
+      .trim();
+
+    entries.push({
+      title,
+      slug,
+      section: section.label,
+      content: plainText.slice(0, 2000),
+    });
   }
-  return files
 }
 
-function extractTitle(content) {
-  const match = content.match(/^#\s+(.+)$/m)
-  return match ? match[1] : ''
-}
-
-function extractHeadings(content) {
-  const headings = []
-  for (const match of content.matchAll(/^#{2,4}\s+(.+)$/gm)) {
-    headings.push(match[1])
-  }
-  return headings
-}
-
-function stripMarkdown(content) {
-  return content
-    .replace(/^---[\s\S]*?---\n*/m, '') // frontmatter
-    .replace(/```[\s\S]*?```/g, '')     // code blocks
-    .replace(/`[^`]+`/g, '')            // inline code
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links
-    .replace(/[#*_~>|]/g, '')           // markdown syntax
-    .replace(/\n{2,}/g, '\n')           // collapse newlines
-    .trim()
-}
-
-const files = getMarkdownFiles(DOCS_DIR)
-const searchData = files.map((file) => {
-  const filePath = path.join(DOCS_DIR, file)
-  const raw = fs.readFileSync(filePath, 'utf-8')
-  const slug = file.replace(/\.md$/, '')
-
-  return {
-    slug,
-    title: extractTitle(raw) || slug.split('/').pop().replace(/-/g, ' '),
-    headings: extractHeadings(raw),
-    content: stripMarkdown(raw).slice(0, 500),
-  }
-})
-
-fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true })
-fs.writeFileSync(OUT_FILE, JSON.stringify(searchData, null, 2))
-console.log(`Generated search data for ${searchData.length} docs`)
+fs.writeFileSync(outFile, JSON.stringify(entries, null, 2));
+console.log(`Generated search data: ${entries.length} entries`);

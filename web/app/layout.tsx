@@ -1,35 +1,40 @@
-import type { Metadata } from 'next'
-import '@/tailwind.css'
+import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
+import { ThemeProvider } from "@/components/shared/ThemeProvider";
+import { Navbar } from "@/components/shared/Navbar";
+import { Footer } from "@/components/shared/Footer";
+import { AntiFlashScript } from "@/components/shared/AntiFlashScript";
+import "@/tailwind.css";
 
 export const metadata: Metadata = {
-  title: 'croot — The VS Code sidebar for your terminal',
+  title: "croot — Terminal File Explorer",
   description:
-    'Navigate files, preview code, and manage your project — all from the command line.',
-  icons: { icon: '/favicon.svg' },
-  other: { 'theme-color': '#f7f7f4' },
-}
+    "A modern terminal-based file tree explorer built with Rust & Ratatui. Git integration, file preview, fuzzy search, and mouse support.",
+  icons: { icon: "/favicon.svg" },
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://cursor.com" />
+        <AntiFlashScript />
       </head>
       <body
-        className="antialiased"
-        style={{
-          fontFamily:
-            'CursorGothic, "CursorGothic Fallback", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif',
-          background: '#f7f7f4',
-          color: '#26251e',
-        }}
+        className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}
       >
-        {children}
+        <ThemeProvider>
+          <div className="min-h-screen flex flex-col">
+            <Navbar />
+            <main className="flex-1">{children}</main>
+            <Footer />
+          </div>
+        </ThemeProvider>
       </body>
     </html>
-  )
+  );
 }

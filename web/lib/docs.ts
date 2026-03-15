@@ -1,106 +1,113 @@
-import fs from 'fs'
-import path from 'path'
-import matter from 'gray-matter'
-import { unified } from 'unified'
-import remarkParse from 'remark-parse'
-import remarkGfm from 'remark-gfm'
-import remarkRehype from 'remark-rehype'
-import rehypeSlug from 'rehype-slug'
-import rehypeAutolinkHeadings from 'rehype-autolink-headings'
-import rehypeStringify from 'rehype-stringify'
-import rehypeShiki from '@shikijs/rehype'
+import fs from "fs";
+import path from "path";
+import { unified } from "unified";
+import remarkParse from "remark-parse";
+import remarkGfm from "remark-gfm";
+import remarkRehype from "remark-rehype";
+import rehypeRaw from "rehype-raw";
+import rehypeSlug from "rehype-slug";
+import rehypeStringify from "rehype-stringify";
+import { createHighlighter } from "shiki";
 
-const DOCS_DIR = path.join(process.cwd(), '..', 'docs')
+const DOCS_DIR = path.join(process.cwd(), "..", "docs");
 
-const SKIP_DIRS = new Set(['.vitepress', 'node_modules', 'public'])
+let highlighterPromise: ReturnType<typeof createHighlighter> | null = null;
 
-function getMarkdownFiles(dir: string, base = ''): string[] {
-  const entries = fs.readdirSync(dir, { withFileTypes: true })
-  const files: string[] = []
+function getHighlighter() {
+  if (!highlighterPromise) {
+    highlighterPromise = createHighlighter({
+      themes: ["github-light", "github-dark"],
+      langs: [
+        "bash",
+        "shell",
+        "toml",
+        "rust",
+        "json",
+        "yaml",
+        "markdown",
+        "typescript",
+        "javascript",
+      ],
+    });
+  }
+  return highlighterPromise;
+}
 
-  for (const entry of entries) {
-    if (SKIP_DIRS.has(entry.name)) continue
-    const rel = path.join(base, entry.name)
-    if (entry.isDirectory()) {
-      files.push(...getMarkdownFiles(path.join(dir, entry.name), rel))
-    } else if (entry.name.endsWith('.md') && entry.name !== 'index.md') {
-      files.push(rel)
-    }
+export interface TocEntry {
+  id: string;
+  text: string;
+  level: number;
+}
+
+export interface DocPage {
+  title: string;
+  html: string;
+  toc: TocEntry[];
+}
+
+// No user input or shell execution — only reads local markdown files
+// from the docs/ directory at build time (static site generation).
+export async function getDocBySlug(slug: string): Promise<DocPage> {
+  const filePath = path.join(DOCS_DIR, `${slug}.md`);
+  const raw = fs.readFileSync(filePath, "utf-8");
+
+  const highlighter = await getHighlighter();
+
+  // Extract TOC from raw markdown
+  const toc: TocEntry[] = [];
+  const headingRegex = /^(#{2,3})\s+(.+)$/gm;
+  let match;
+  while ((match = headingRegex.exec(raw)) !== null) {
+    const text = match[2].replace(/`([^`]+)`/g, "$1");
+    const id = text
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, "")
+      .replace(/\s+/g, "-");
+    toc.push({ id, text, level: match[1].length });
   }
 
-  return files
-}
+  // Extract title from first heading
+  const titleMatch = raw.match(/^#\s+(.+)$/m);
+  const title = titleMatch ? titleMatch[1] : slug.split("/").pop() || slug;
 
-export function getAllSlugs(): string[][] {
-  const files = getMarkdownFiles(DOCS_DIR)
-  return files.map((f) => {
-    const withoutExt = f.replace(/\.md$/, '')
-    return withoutExt.split(path.sep)
-  })
-}
-
-export interface DocHeading {
-  id: string
-  text: string
-  level: number
-}
-
-export async function getDocBySlug(slug: string[]): Promise<{
-  title: string
-  html: string
-  editPath: string
-  headings: DocHeading[]
-}> {
-  const filePath = path.join(DOCS_DIR, ...slug) + '.md'
-  const source = fs.readFileSync(filePath, 'utf-8')
-  const { data, content } = matter(source)
-
-  const processor = unified()
+  const result = await unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkRehype, { allowDangerousHtml: true })
+    .use(rehypeRaw)
     .use(rehypeSlug)
-    .use(rehypeAutolinkHeadings, {
-      behavior: 'append',
-      properties: { className: ['heading-anchor'], ariaHidden: 'true', tabIndex: -1 },
-      content: { type: 'text', value: '#' },
-    })
-    .use(rehypeShiki, { theme: 'github-light' })
-    .use(rehypeStringify, { allowDangerousHtml: true })
+    .use(rehypeStringify)
+    .process(raw);
 
-  const result = await processor.process(content)
+  let html = String(result);
 
-  const relativePath = slug.join('/') + '.md'
-  const title = data.title || slug[slug.length - 1].replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+  // Apply syntax highlighting to code blocks
+  html = html.replace(
+    /<pre><code class="language-(\w+)">([\s\S]*?)<\/code><\/pre>/g,
+    (_, lang, code) => {
+      const decoded = code
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
 
-  const html = String(result)
+      try {
+        return highlighter.codeToHtml(decoded, {
+          lang,
+          themes: { light: "github-light", dark: "github-dark" },
+          defaultColor: false,
+        });
+      } catch {
+        return `<pre><code>${code}</code></pre>`;
+      }
+    }
+  );
 
-  // Extract h2/h3 headings from rendered HTML
-  const headings: DocHeading[] = []
-  const headingRegex = /<h([23])\s+id="([^"]+)"[^>]*>([\s\S]*?)<\/h[23]>/g
-  let match
-  while ((match = headingRegex.exec(html)) !== null) {
-    const text = match[3].replace(/<[^>]+>/g, '').trim()
-    headings.push({ id: match[2], text, level: Number(match[1]) })
-  }
-
-  return {
-    title,
-    html,
-    editPath: `https://github.com/realzhangshen/croot/edit/main/docs/${relativePath}`,
-    headings,
-  }
+  return { title, html, toc };
 }
 
-export async function getAllDocs(): Promise<
-  { slug: string[]; title: string; html: string }[]
-> {
-  const slugs = getAllSlugs()
-  const docs = await Promise.all(
-    slugs.map(async (slug) => {
-      const doc = await getDocBySlug(slug)
-      return { slug, title: doc.title, html: doc.html }
-    })
-  )
-  return docs
+export function docExists(slug: string): boolean {
+  const filePath = path.join(DOCS_DIR, `${slug}.md`);
+  return fs.existsSync(filePath);
 }

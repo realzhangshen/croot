@@ -1,94 +1,43 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { sidebar } from '@/lib/sidebar'
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { sidebarSections } from "@/lib/sidebar";
 
-export default function Sidebar() {
-  const pathname = usePathname()
+export function Sidebar() {
+  const pathname = usePathname();
 
   return (
-    <aside className="sidebar">
-      <nav>
-        {sidebar.map((group) => (
-          <div key={group.text} className="sidebar-group">
-            <div className="group-title">{group.text}</div>
-            <ul>
-              {group.items.map((item) => {
-                const href = `${item.link}/`
-                const isActive = pathname === href || pathname === item.link
+    <aside className="hidden min-[960px]:block w-64 shrink-0 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto py-8 pr-6">
+      <nav className="space-y-6">
+        {sidebarSections.map((section) => (
+          <div key={section.label}>
+            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted mb-2 px-3">
+              {section.label}
+            </h4>
+            <ul className="space-y-0.5">
+              {section.links.map((link) => {
+                const href = `/docs/${link.slug}`;
+                const isActive = pathname === href;
                 return (
-                  <li key={item.link}>
+                  <li key={link.slug}>
                     <Link
                       href={href}
-                      className={`sidebar-link ${isActive ? 'active' : ''}`}
+                      className={`block px-3 py-1.5 text-sm rounded-sm transition-colors ${
+                        isActive
+                          ? "text-text font-medium bg-bg-elevated border-l-2 border-accent"
+                          : "text-text-secondary hover:text-text hover:bg-bg-elevated"
+                      }`}
                     >
-                      {item.text}
+                      {link.title}
                     </Link>
                   </li>
-                )
+                );
               })}
             </ul>
           </div>
         ))}
       </nav>
-
-      <style jsx>{`
-        .sidebar {
-          width: 256px;
-          flex-shrink: 0;
-          padding: 24px 0 24px 24px;
-          border-right: 1px solid var(--croot-border);
-          position: sticky;
-          top: 56px;
-          height: calc(100vh - 56px);
-          overflow-y: auto;
-          display: none;
-        }
-        @media (min-width: 960px) {
-          .sidebar { display: block; }
-        }
-        .sidebar-group {
-          margin-bottom: 28px;
-        }
-        .group-title {
-          text-transform: uppercase;
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.08em;
-          color: var(--croot-text-muted);
-          margin-bottom: 8px;
-          padding: 0 8px;
-        }
-        ul {
-          list-style: none;
-          margin: 0;
-          padding: 0;
-        }
-      `}</style>
-
-      <style jsx global>{`
-        .sidebar-link {
-          display: block;
-          padding: 6px 8px;
-          font-size: 0.9rem;
-          color: var(--croot-text-secondary);
-          text-decoration: none;
-          border-radius: 6px;
-          border-left: 2px solid transparent;
-          transition: color var(--croot-dur-fast) var(--croot-ease),
-                      background var(--croot-dur-fast) var(--croot-ease);
-        }
-        .sidebar-link:hover {
-          color: var(--croot-accent-orange);
-          background: var(--croot-bg-hover);
-        }
-        .sidebar-link.active {
-          color: var(--croot-accent-orange);
-          font-weight: 600;
-          border-left-color: var(--croot-accent-orange);
-        }
-      `}</style>
     </aside>
-  )
+  );
 }

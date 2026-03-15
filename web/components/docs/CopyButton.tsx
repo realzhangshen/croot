@@ -1,34 +1,24 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
+import { Check, Copy } from "lucide-react";
+import { useState } from "react";
 
-export default function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
+export function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
 
-  function handleCopy() {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }
+  const copy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <button
-      onClick={handleCopy}
-      aria-label="Copy to clipboard"
-      style={{
-        background: 'var(--croot-bg-surface)',
-        border: '1px solid var(--croot-border)',
-        borderRadius: 6,
-        padding: '4px 8px',
-        cursor: 'pointer',
-        color: copied ? 'var(--croot-text)' : 'var(--croot-text-muted)',
-        fontSize: '0.75rem',
-        fontFamily: 'var(--croot-font-mono)',
-        transition: 'color var(--croot-dur-fast) var(--croot-ease), border-color var(--croot-dur-fast) var(--croot-ease)',
-      }}
+      onClick={copy}
+      className="absolute top-3 right-3 p-1.5 rounded bg-bg-elevated/80 text-text-muted hover:text-text transition-colors opacity-0 group-hover:opacity-100"
+      aria-label="Copy code"
     >
-      {copied ? 'Copied!' : 'Copy'}
+      {copied ? <Check size={14} /> : <Copy size={14} />}
     </button>
-  )
+  );
 }
