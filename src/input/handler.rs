@@ -99,14 +99,6 @@ pub enum Action {
     CollapseAll,
     /// Focus the search bar without clearing the existing query.
     FocusSearch,
-    /// Cmd/Ctrl+Click: toggle individual selection on a tree row.
-    ToggleSelectRow(u16),
-    /// Shift+Click: range-select from anchor to this tree row.
-    RangeSelectRow(u16),
-    /// Shift+Up: extend selection upward.
-    SelectUp,
-    /// Shift+Down: extend selection downward.
-    SelectDown,
     /// Double-click on a tree row.
     DoubleClick(u16),
     /// Enter key: open file in editor or toggle directory.
@@ -270,16 +262,7 @@ pub fn handle_key(
         };
     }
 
-    // Hardcoded: Shift+Up/Down for selection extension
-    if key.modifiers.contains(KeyModifiers::SHIFT) {
-        match key.code {
-            KeyCode::Up => return Action::SelectUp,
-            KeyCode::Down => return Action::SelectDown,
-            _ => {}
-        }
-    }
-
-    // Hardcoded: Esc clears preview selection or tree selection
+    // Hardcoded: Esc clears preview selection
     if key.code == KeyCode::Esc {
         if preview_has_selection {
             return Action::ClearSelection;
@@ -448,22 +431,6 @@ mod tests {
             handle_key_menu(make_key(KeyCode::Char('p')), &map),
             Action::MenuUp
         );
-    }
-
-    // ── Shift+arrow selection tests ──────────────────────────────────
-
-    #[test]
-    fn shift_up_returns_select_up() {
-        let map = build_keybinding_map(&KeybindingsConfig::default());
-        let key = KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT);
-        assert_eq!(handle_key(key, false, false, &map), Action::SelectUp);
-    }
-
-    #[test]
-    fn shift_down_returns_select_down() {
-        let map = build_keybinding_map(&KeybindingsConfig::default());
-        let key = KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT);
-        assert_eq!(handle_key(key, false, false, &map), Action::SelectDown);
     }
 
     #[test]

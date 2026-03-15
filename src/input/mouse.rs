@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
 use super::handler::Action;
 
@@ -68,12 +68,7 @@ pub fn handle_mouse(
             let row = event.row;
             if row >= tree_area_y && row < tree_area_y + tree_area_height {
                 let relative_row = row - tree_area_y;
-                let mods = event.modifiers;
-                if mods.contains(KeyModifiers::SUPER) || mods.contains(KeyModifiers::CONTROL) {
-                    Action::ToggleSelectRow(relative_row)
-                } else if mods.contains(KeyModifiers::SHIFT) {
-                    Action::RangeSelectRow(relative_row)
-                } else if click_tracker.record_click(relative_row) {
+                if click_tracker.record_click(relative_row) {
                     Action::DoubleClick(relative_row)
                 } else {
                     Action::ClickRow(relative_row)
@@ -107,43 +102,19 @@ pub fn handle_mouse(
 mod tests {
     use super::*;
 
-    fn make_left_click(col: u16, row: u16, modifiers: KeyModifiers) -> MouseEvent {
+    fn make_left_click(col: u16, row: u16) -> MouseEvent {
         MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             column: col,
             row,
-            modifiers,
+            modifiers: crossterm::event::KeyModifiers::NONE,
         }
     }
 
     #[test]
-    fn cmd_click_returns_toggle_select() {
+    fn plain_click_returns_click_row() {
         let mut tracker = ClickTracker::new();
-        let event = make_left_click(5, 2, KeyModifiers::SUPER);
-        let action = handle_mouse(event, 0, 10, None, &mut tracker);
-        assert_eq!(action, Action::ToggleSelectRow(2));
-    }
-
-    #[test]
-    fn ctrl_click_returns_toggle_select() {
-        let mut tracker = ClickTracker::new();
-        let event = make_left_click(5, 3, KeyModifiers::CONTROL);
-        let action = handle_mouse(event, 0, 10, None, &mut tracker);
-        assert_eq!(action, Action::ToggleSelectRow(3));
-    }
-
-    #[test]
-    fn shift_click_returns_range_select() {
-        let mut tracker = ClickTracker::new();
-        let event = make_left_click(5, 4, KeyModifiers::SHIFT);
-        let action = handle_mouse(event, 0, 10, None, &mut tracker);
-        assert_eq!(action, Action::RangeSelectRow(4));
-    }
-
-    #[test]
-    fn plain_click_unchanged() {
-        let mut tracker = ClickTracker::new();
-        let event = make_left_click(5, 1, KeyModifiers::NONE);
+        let event = make_left_click(5, 1);
         let action = handle_mouse(event, 0, 10, None, &mut tracker);
         assert_eq!(action, Action::ClickRow(1));
     }

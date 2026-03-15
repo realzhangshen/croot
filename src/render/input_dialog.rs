@@ -16,7 +16,6 @@ pub enum DialogKind {
     NewDir,
     Rename,
     ConfirmDelete,
-    ConfirmMultiDelete,
 }
 
 impl DialogKind {
@@ -25,7 +24,7 @@ impl DialogKind {
             Self::NewFile => "New File",
             Self::NewDir => "New Directory",
             Self::Rename => "Rename",
-            Self::ConfirmDelete | Self::ConfirmMultiDelete => "Confirm Delete",
+            Self::ConfirmDelete => "Confirm Delete",
         }
     }
 }
@@ -42,8 +41,6 @@ pub struct InputDialogState {
     pub target_name: String,
     /// Whether to move to trash (true) or permanently delete (false).
     pub use_trash: bool,
-    /// Paths for multi-delete operations.
-    pub multi_paths: Vec<std::path::PathBuf>,
 }
 
 impl InputDialogState {
@@ -61,7 +58,6 @@ impl InputDialogState {
             context_path,
             target_name,
             use_trash: false,
-            multi_paths: Vec::new(),
         }
     }
 
@@ -104,10 +100,7 @@ impl InputDialogState {
     /// Returns `(confirm_rect, cancel_rect)` in screen coordinates for the button row.
     pub fn button_positions(&self, area: Rect) -> (Rect, Rect) {
         let dialog_width = 50u16.min(area.width.saturating_sub(4));
-        let dialog_height = if matches!(
-            self.kind,
-            DialogKind::ConfirmDelete | DialogKind::ConfirmMultiDelete
-        ) {
+        let dialog_height = if matches!(self.kind, DialogKind::ConfirmDelete) {
             6
         } else {
             5
@@ -135,10 +128,7 @@ pub struct InputDialogWidget<'a> {
 impl Widget for InputDialogWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let dialog_width = 50u16.min(area.width.saturating_sub(4));
-        let dialog_height = if matches!(
-            self.state.kind,
-            DialogKind::ConfirmDelete | DialogKind::ConfirmMultiDelete
-        ) {
+        let dialog_height = if matches!(self.state.kind, DialogKind::ConfirmDelete) {
             6
         } else {
             5
@@ -166,19 +156,9 @@ impl Widget for InputDialogWidget<'_> {
             dialog_rect.x + (dialog_rect.width.saturating_sub(title.len() as u16 + 2)) / 2;
         buf.set_string(title_x, dialog_rect.y, format!(" {title} "), title_style);
 
-        if matches!(
-            self.state.kind,
-            DialogKind::ConfirmDelete | DialogKind::ConfirmMultiDelete
-        ) {
+        if matches!(self.state.kind, DialogKind::ConfirmDelete) {
             // Show confirmation message
-            let msg = if self.state.kind == DialogKind::ConfirmMultiDelete {
-                let count = self.state.multi_paths.len();
-                if self.state.use_trash {
-                    format!("Move {count} items to Trash?")
-                } else {
-                    format!("Permanently delete {count} items?")
-                }
-            } else if self.state.use_trash {
+            let msg = if self.state.use_trash {
                 format!("Move '{}' to Trash?", self.state.target_name)
             } else {
                 format!("Permanently delete '{}'?", self.state.target_name)

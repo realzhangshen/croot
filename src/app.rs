@@ -295,14 +295,7 @@ impl App {
                                 InputMode::Normal => {
                                     let has_selection = self.preview_state.selection.is_active();
                                     let action = handle_key(key, self.preview_visible, has_selection, &self.keybinding_map);
-                                    // Esc with tree selection: clear it
-                                    if action == Action::None
-                                        && key.code == crossterm::event::KeyCode::Esc
-                                        && !self.tree.selection.is_empty()
-                                    {
-                                        self.tree.clear_selection();
-                                        Action::None
-                                    } else if self.focus == FocusPane::Preview {
+                                    if self.focus == FocusPane::Preview {
                                         match action {
                                             Action::ScrollUp(n) => Action::PreviewScrollUp(n),
                                             Action::ScrollDown(n) => Action::PreviewScrollDown(n),
@@ -911,7 +904,6 @@ impl App {
 
             // Search actions — Find mode
             Action::StartFind => {
-                self.tree.clear_selection();
                 self.search_state = SearchState::new(SearchMode::Find);
                 self.search_state.origin_cursor = self.tree.cursor;
                 self.search_state.origin_scroll_offset = self.tree.scroll_offset;
@@ -919,7 +911,6 @@ impl App {
             }
             // Search actions — Filter mode
             Action::StartFilter => {
-                self.tree.clear_selection();
                 self.search_state = SearchState::new(SearchMode::Filter);
                 self.search_state.origin_cursor = self.tree.cursor;
                 self.search_state.origin_scroll_offset = self.tree.scroll_offset;
@@ -1138,59 +1129,12 @@ impl App {
                 }
             }
 
-            // Multi-selection actions
-            Action::ToggleSelectRow(row) => {
-                self.dragging_separator = false;
-                let row_idx = row as usize;
-                if let Some(&idx) = self.tree.rendered_indices.get(row_idx) {
-                    if idx < self.tree.len() {
-                        self.tree.cursor = idx;
-                        self.tree.toggle_select(idx);
-                    }
-                }
-            }
-            Action::RangeSelectRow(row) => {
-                self.dragging_separator = false;
-                let row_idx = row as usize;
-                if let Some(&idx) = self.tree.rendered_indices.get(row_idx) {
-                    if idx < self.tree.len() {
-                        let anchor = self.tree.selection_anchor.unwrap_or(self.tree.cursor);
-                        self.tree.range_select(anchor, idx);
-                        self.tree.cursor = idx;
-                    }
-                }
-            }
-            Action::SelectUp => {
-                if self.focus == FocusPane::Tree {
-                    self.tree.extend_selection_up();
-                }
-            }
-            Action::SelectDown => {
-                if self.focus == FocusPane::Tree {
-                    self.tree.extend_selection_down();
-                }
-            }
-
             Action::None => {}
         }
         post
     }
 
     fn handle_tree_action(&mut self, action: &Action) {
-        // Clear multi-selection on plain navigation
-        match action {
-            Action::CursorUp
-            | Action::CursorDown
-            | Action::CursorLeft
-            | Action::CursorRight
-            | Action::GotoTop
-            | Action::GotoBottom
-            | Action::CollapseAll => {
-                self.tree.clear_selection();
-            }
-            _ => {}
-        }
-
         match action {
             Action::CursorUp => {
                 if self.focus == FocusPane::Preview {
@@ -1326,7 +1270,6 @@ impl App {
     fn handle_click_row(&mut self, row: u16, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
         self.focus = FocusPane::Tree;
         self.preview_state.selection.clear();
-        self.tree.clear_selection();
         let row_idx = row as usize;
         let idx = if row_idx < self.tree.rendered_indices.len() {
             self.tree.rendered_indices[row_idx]
@@ -1586,19 +1529,7 @@ impl App {
                 }
             }
             MenuAction::CopyPath => {
-                let text = if !self.tree.selection.is_empty() {
-                    self.tree
-                        .selected_paths()
-                        .iter()
-                        .map(|p| {
-                            p.strip_prefix(&self.root)
-                                .unwrap_or(p)
-                                .to_string_lossy()
-                                .into_owned()
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                } else if let Some(node) = self.tree.nodes.get(node_idx) {
+                let text = if let Some(node) = self.tree.nodes.get(node_idx) {
                     node.path
                         .strip_prefix(&self.root)
                         .unwrap_or(&node.path)
@@ -1614,14 +1545,7 @@ impl App {
                 }
             }
             MenuAction::CopyAbsPath => {
-                let text = if !self.tree.selection.is_empty() {
-                    self.tree
-                        .selected_paths()
-                        .iter()
-                        .map(|p| p.to_string_lossy().into_owned())
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                } else if let Some(node) = self.tree.nodes.get(node_idx) {
+                let text = if let Some(node) = self.tree.nodes.get(node_idx) {
                     node.path.to_string_lossy().into_owned()
                 } else {
                     String::new()
@@ -1707,10 +1631,7 @@ impl App {
 
         if let Some(ref dialog) = self.input_dialog {
             let dialog_width = 50u16.min(area.width.saturating_sub(4));
-            let dialog_height = if matches!(
-                dialog.kind,
-                DialogKind::ConfirmDelete | DialogKind::ConfirmMultiDelete
-            ) {
+            let dialog_height = if matches!(dialog.kind, DialogKind::ConfirmDelete) {
                 6
             } else {
                 5
@@ -1858,19 +1779,7 @@ impl App {
     }
 
     fn start_delete(&mut self) {
-        if !self.tree.selection.is_empty() {
-            let paths = self.tree.selected_paths();
-            let count = paths.len();
-            let mut dialog = InputDialogState::new(
-                DialogKind::ConfirmMultiDelete,
-                self.root.clone(),
-                format!("{count} items"),
-            );
-            dialog.use_trash = self.config.general.use_trash;
-            dialog.multi_paths = paths;
-            self.input_dialog = Some(dialog);
-            self.input_mode = InputMode::Dialog;
-        } else if let Some(node) = self.tree.selected() {
+        if let Some(node) = self.tree.selected() {
             let name = node.name.clone();
             let path = node.path.clone();
             let mut dialog = InputDialogState::new(DialogKind::ConfirmDelete, path, name);
@@ -1990,26 +1899,6 @@ impl App {
                 } else if let Err(e) = std::fs::remove_file(path) {
                     self.show_error(format!("Delete failed: {e}"));
                 }
-            }
-            DialogKind::ConfirmMultiDelete => {
-                // Delete in reverse order to avoid issues with nested paths
-                for path in dialog.multi_paths.iter().rev() {
-                    if dialog.use_trash {
-                        if let Err(e) = trash::delete(path) {
-                            self.show_error(format!("Trash failed: {e}"));
-                            break;
-                        }
-                    } else if path.is_dir() {
-                        if let Err(e) = std::fs::remove_dir_all(path) {
-                            self.show_error(format!("Delete failed: {e}"));
-                            break;
-                        }
-                    } else if let Err(e) = std::fs::remove_file(path) {
-                        self.show_error(format!("Delete failed: {e}"));
-                        break;
-                    }
-                }
-                self.tree.clear_selection();
             }
         }
 
