@@ -394,14 +394,27 @@ impl App {
                                 let file_info = loaded.file_info.clone();
                                 let tx = image_tx.clone();
                                 let path_clone = path.clone();
+                                let preview_tx_clone = preview_tx.clone();
                                 tokio::task::spawn_blocking(move || {
-                                    if let Ok(proto) = crate::preview::image::load_image(&path_clone, &picker) {
-                                        let thread_proto =
-                                            ratatui_image::thread::ThreadProtocol::new(
-                                                resize_tx,
-                                                Some(proto),
-                                            );
-                                        let _ = tx.blocking_send((path_clone, file_info, thread_proto));
+                                    match crate::preview::image::load_image(&path_clone, &picker) {
+                                        Ok(proto) => {
+                                            let thread_proto =
+                                                ratatui_image::thread::ThreadProtocol::new(
+                                                    resize_tx,
+                                                    Some(proto),
+                                                );
+                                            let _ = tx.blocking_send((path_clone, file_info, thread_proto));
+                                        }
+                                        Err(e) => {
+                                            let _ = preview_tx_clone.blocking_send((
+                                                path_clone,
+                                                LoadedPreview {
+                                                    kind: PreviewKind::Error(e),
+                                                    content: Vec::new(),
+                                                    file_info,
+                                                },
+                                            ));
+                                        }
                                     }
                                 });
                             }
