@@ -125,11 +125,21 @@ async fn main() -> anyhow::Result<()> {
         )?;
     }
 
+    // Query terminal for graphics protocol support (must happen before EventStream consumes stdin)
+    #[cfg(feature = "image-preview")]
+    let image_picker = ratatui_image::picker::Picker::from_query_stdio().ok();
+
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
     // Run app
-    let mut app = App::new(path, enhanced_keyboard, cfg)?;
+    let mut app = App::new(
+        path,
+        enhanced_keyboard,
+        cfg,
+        #[cfg(feature = "image-preview")]
+        image_picker,
+    )?;
     let result = app.run(&mut terminal).await;
 
     // Terminal teardown

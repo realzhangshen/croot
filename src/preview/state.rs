@@ -63,6 +63,8 @@ pub enum PreviewKind {
     Loading,
     Error(String),
     TooLarge,
+    #[cfg(feature = "image-preview")]
+    Image,
 }
 
 /// A single styled text segment within a line.
@@ -88,6 +90,9 @@ pub struct PreviewState {
     pub cached_mtime: Option<std::time::SystemTime>,
     /// Whether to render Markdown files (user preference, not reset on clear).
     pub render_markdown: bool,
+    /// Image rendering state (non-blocking via background thread).
+    #[cfg(feature = "image-preview")]
+    pub image_state: Option<ratatui_image::thread::ThreadProtocol>,
 }
 
 impl PreviewState {
@@ -102,6 +107,8 @@ impl PreviewState {
             selection: Selection::new(),
             cached_mtime: None,
             render_markdown: true,
+            #[cfg(feature = "image-preview")]
+            image_state: None,
         }
     }
 
@@ -124,6 +131,10 @@ impl PreviewState {
         self.file_info.clear();
         self.selection.clear();
         self.cached_mtime = None;
+        #[cfg(feature = "image-preview")]
+        {
+            self.image_state = None;
+        }
     }
 
     /// Apply a loaded preview result.
@@ -144,6 +155,27 @@ impl PreviewState {
         self.file_info = file_info;
         self.scroll_offset = 0;
         self.selection.clear();
+    }
+
+    /// Apply an image preview result.
+    #[cfg(feature = "image-preview")]
+    pub fn apply_image(
+        &mut self,
+        path: PathBuf,
+        file_info: String,
+        thread_proto: ratatui_image::thread::ThreadProtocol,
+    ) {
+        self.cached_mtime = std::fs::metadata(&path)
+            .ok()
+            .and_then(|m| m.modified().ok());
+        self.content.clear();
+        self.total_lines = 0;
+        self.kind = PreviewKind::Image;
+        self.current_path = Some(path);
+        self.file_info = file_info;
+        self.scroll_offset = 0;
+        self.selection.clear();
+        self.image_state = Some(thread_proto);
     }
 
     /// Extract the selected text from the content spans.
@@ -183,6 +215,15 @@ impl PreviewState {
     }
 }
 
+/// Check whether a file extension indicates an image format.
+#[cfg_attr(not(feature = "image-preview"), allow(dead_code))]
+pub fn is_image_extension(ext: &str) -> bool {
+    matches!(
+        ext,
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "ico" | "tiff" | "tif"
+    )
+}
+
 /// Extract text from styled spans between display columns `col_start` and `col_end`.
 fn extract_line_range(spans: &[StyledSpan], col_start: usize, col_end: usize) -> String {
     let mut result = String::new();
@@ -202,4 +243,60 @@ fn extract_line_range(spans: &[StyledSpan], col_start: usize, col_end: usize) ->
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_image_extension_recognizes_common_formats() {
+        assert!(is_image_extension("png"));
+        assert!(is_image_extension("jpg"));
+        assert!(is_image_extension("jpeg"));
+        assert!(is_image_extension("gif"));
+        assert!(is_image_extension("webp"));
+        assert!(is_image_extension("bmp"));
+        assert!(is_image_extension("ico"));
+        assert!(is_image_extension("tiff"));
+        assert!(is_image_extension("tif"));
+    }
+
+    #[test]
+    fn is_image_extension_rejects_non_image() {
+        assert!(!is_image_extension("rs"));
+        assert!(!is_image_extension("txt"));
+        assert!(!is_image_extension("md"));
+        assert!(!is_image_extension("toml"));
+    }
+
+    #[test]
+    fn clear_resets_all_fields() {
+        let mut state = PreviewState::new();
+        state.kind = PreviewKind::Text;
+        state.content = vec![vec![("hello".into(), Style::default())]];
+        state.total_lines = 1;
+        state.scroll_offset = 5;
+        state.file_info = "test".into();
+        state.current_path = Some(PathBuf::from("/tmp/test.rs"));
+
+        state.clear();
+
+        assert_eq!(state.kind, PreviewKind::Empty);
+        assert!(state.content.is_empty());
+        assert_eq!(state.total_lines, 0);
+        assert_eq!(state.scroll_offset, 0);
+        assert!(state.file_info.is_empty());
+        assert!(state.current_path.is_none());
+        assert!(state.cached_mtime.is_none());
+    }
+
+    #[cfg(feature = "image-preview")]
+    #[test]
+    fn clear_resets_image_state() {
+        let mut state = PreviewState::new();
+        // image_state starts as None, clear should keep it None
+        state.clear();
+        assert!(state.image_state.is_none());
+    }
 }

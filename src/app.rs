@@ -94,6 +94,17 @@ pub struct App {
     status_bar_branch_region: Option<(u16, u16)>,
     // Transient error message with timestamp for auto-dismiss
     error_message: Option<(String, Instant)>,
+    // Image preview support
+    #[cfg(feature = "image-preview")]
+    image_picker: Option<ratatui_image::picker::Picker>,
+    #[cfg(feature = "image-preview")]
+    resize_tx: Option<std::sync::mpsc::Sender<ratatui_image::thread::ResizeRequest>>,
+    #[cfg(feature = "image-preview")]
+    resize_response_rx: Option<
+        std::sync::mpsc::Receiver<
+            Result<ratatui_image::thread::ResizeResponse, ratatui_image::errors::Errors>,
+        >,
+    >,
 }
 
 /// Check whether `target` (which may contain `..` or be absolute) resolves
@@ -138,7 +149,12 @@ fn is_path_within_root_strict(root: &std::path::Path, target: &std::path::Path) 
 }
 
 impl App {
-    pub fn new(root: PathBuf, enhanced_keyboard: bool, config: Config) -> anyhow::Result<Self> {
+    pub fn new(
+        root: PathBuf,
+        enhanced_keyboard: bool,
+        config: Config,
+        #[cfg(feature = "image-preview")] image_picker: Option<ratatui_image::picker::Picker>,
+    ) -> anyhow::Result<Self> {
         let mut tree = FileTree::new(root.clone(), config.tree.clone());
         let git = GitState::load(&root);
         let cmux = CmuxBridge::detect();
@@ -190,6 +206,12 @@ impl App {
             search_bar_y: None,
             status_bar_branch_region: None,
             error_message: None,
+            #[cfg(feature = "image-preview")]
+            image_picker,
+            #[cfg(feature = "image-preview")]
+            resize_tx: None,
+            #[cfg(feature = "image-preview")]
+            resize_response_rx: None,
         })
     }
 
@@ -200,7 +222,33 @@ impl App {
     where
         B::Error: Send + Sync + 'static,
     {
+        // Image result channel type — always defined so tokio::select! compiles without #[cfg]
+        #[cfg(feature = "image-preview")]
+        type ImageResult = (PathBuf, String, ratatui_image::thread::ThreadProtocol);
+        #[cfg(not(feature = "image-preview"))]
+        type ImageResult = ();
+
+        // Set up image resize worker thread (must happen before EventStream)
+        #[cfg(feature = "image-preview")]
+        {
+            let (resize_tx, resize_rx) =
+                std::sync::mpsc::channel::<ratatui_image::thread::ResizeRequest>();
+            let (response_tx, response_rx) = std::sync::mpsc::channel();
+
+            std::thread::spawn(move || {
+                while let Ok(request) = resize_rx.recv() {
+                    let _ = response_tx.send(request.resize_encode());
+                }
+            });
+
+            self.resize_tx = Some(resize_tx);
+            self.resize_response_rx = Some(response_rx);
+        }
+
         let mut reader = EventStream::new();
+
+        let (image_tx, mut image_rx) = mpsc::channel::<ImageResult>(4);
+        let _ = &image_tx; // suppress unused warning when feature is off
 
         // Set up file watcher with 100ms debounce
         let (fs_tx, mut fs_rx) = mpsc::channel::<()>(1);
@@ -222,6 +270,18 @@ impl App {
         let mut post_action = PostAction::None;
 
         loop {
+            // Poll for completed image resize results (non-blocking)
+            #[cfg(feature = "image-preview")]
+            if let Some(ref rx) = self.resize_response_rx {
+                while let Ok(result) = rx.try_recv() {
+                    if let Ok(response) = result {
+                        if let Some(ref mut thread_proto) = self.preview_state.image_state {
+                            thread_proto.update_resized_protocol(response);
+                        }
+                    }
+                }
+            }
+
             terminal.draw(|frame| self.draw(frame))?;
             if self.input_mode == InputMode::Normal {
                 self.emit_osc8_hyperlinks()?;
@@ -322,8 +382,47 @@ impl App {
                 }
                 result = preview_rx.recv() => {
                     if let Some((path, loaded)) = result {
-                        self.preview_state.apply(path, loaded.kind, loaded.content, loaded.file_info);
+                        #[allow(unused_mut)]
+                        let mut handled = false;
+                        #[cfg(feature = "image-preview")]
+                        if loaded.kind == PreviewKind::Image {
+                            handled = true;
+                            // Decode image and create ThreadProtocol in background
+                            if let (Some(picker), Some(resize_tx)) =
+                                (self.image_picker.clone(), self.resize_tx.clone())
+                            {
+                                let file_info = loaded.file_info.clone();
+                                let tx = image_tx.clone();
+                                let path_clone = path.clone();
+                                tokio::task::spawn_blocking(move || {
+                                    if let Ok(proto) = crate::preview::image::load_image(&path_clone, &picker) {
+                                        let thread_proto =
+                                            ratatui_image::thread::ThreadProtocol::new(
+                                                resize_tx,
+                                                Some(proto),
+                                            );
+                                        let _ = tx.blocking_send((path_clone, file_info, thread_proto));
+                                    }
+                                });
+                            }
+                        }
+                        if !handled {
+                            self.preview_state.apply(path, loaded.kind, loaded.content, loaded.file_info);
+                        }
                     }
+                }
+                result = image_rx.recv() => {
+                    #[cfg(feature = "image-preview")]
+                    if let Some((path, file_info, thread_proto)) = result {
+                        // Staleness check: only apply if still viewing this path
+                        let still_selected = self.tree.selected()
+                            .is_some_and(|n| n.path == path);
+                        if still_selected {
+                            self.preview_state.apply_image(path, file_info, thread_proto);
+                        }
+                    }
+                    #[cfg(not(feature = "image-preview"))]
+                    let _ = result;
                 }
             }
 
@@ -1094,6 +1193,17 @@ impl App {
     }
 
     fn handle_preview_action(&mut self, action: &Action) {
+        #[cfg(feature = "image-preview")]
+        if self.preview_state.kind == PreviewKind::Image {
+            // Only allow focus switching for image previews
+            if let Action::SwitchFocus = action {
+                self.focus = match self.focus {
+                    FocusPane::Tree => FocusPane::Preview,
+                    FocusPane::Preview => FocusPane::Tree,
+                };
+            }
+            return;
+        }
         match action {
             Action::PreviewScrollUp(n) => self.preview_state.scroll_up(*n as usize),
             Action::PreviewScrollDown(n) => self.preview_state.scroll_down(*n as usize),
@@ -1108,6 +1218,10 @@ impl App {
     }
 
     fn handle_selection_action(&mut self, action: &Action) {
+        #[cfg(feature = "image-preview")]
+        if self.preview_state.kind == PreviewKind::Image {
+            return;
+        }
         match action {
             Action::SelectionStart(col, row) => {
                 self.focus = FocusPane::Preview;
@@ -1201,6 +1315,7 @@ impl App {
         let syntax_highlight = self.config.preview.syntax_highlight;
         let render_markdown = self.preview_state.render_markdown;
         let preview_width = self.preview_content_width as usize;
+        let image_preview = self.config.preview.image_preview;
 
         self.preview_debounce_handle = Some(tokio::spawn(async move {
             tokio::time::sleep(delay).await;
@@ -1213,6 +1328,7 @@ impl App {
                     syntax_highlight,
                     render_markdown,
                     preview_width,
+                    image_preview,
                 )
             })
             .await;
@@ -2334,7 +2450,14 @@ mod tests {
     fn test_app() -> App {
         let dir = std::env::temp_dir().join("croot_test_app");
         let _ = std::fs::create_dir_all(&dir);
-        App::new(dir, false, Config::default()).expect("test app creation")
+        App::new(
+            dir,
+            false,
+            Config::default(),
+            #[cfg(feature = "image-preview")]
+            None,
+        )
+        .expect("test app creation")
     }
 
     #[test]

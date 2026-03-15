@@ -8,6 +8,8 @@ use crate::render::colors;
 
 use super::highlight;
 use super::render_md;
+#[cfg(feature = "image-preview")]
+use super::state::is_image_extension;
 use super::state::{PreviewKind, StyledSpan};
 
 /// Result of loading a file for preview.
@@ -28,6 +30,7 @@ pub fn load_preview(
     syntax_highlight: bool,
     render_markdown: bool,
     preview_width: usize,
+    image_preview: bool,
 ) -> LoadedPreview {
     // Directories
     if path.is_dir() {
@@ -62,6 +65,18 @@ pub fn load_preview(
         };
     }
 
+    // Image detection — before binary probe since images are binary
+    #[cfg(feature = "image-preview")]
+    if image_preview && is_image_file(path) {
+        return LoadedPreview {
+            kind: PreviewKind::Image,
+            content: Vec::new(),
+            file_info,
+        };
+    }
+    #[cfg(not(feature = "image-preview"))]
+    let _ = image_preview;
+
     // Read first 8KB to detect content type
     let probe = match read_prefix(path, 8192) {
         Ok(data) => data,
@@ -86,6 +101,14 @@ pub fn load_preview(
         render_markdown,
         preview_width,
     )
+}
+
+#[cfg(feature = "image-preview")]
+fn is_image_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase)
+        .is_some_and(|ext| is_image_extension(&ext))
 }
 
 fn is_markdown_file(path: &Path) -> bool {
@@ -301,5 +324,61 @@ fn format_size(bytes: u64) -> String {
         format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
     } else {
         format!("{:.1} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn is_image_file_matches_common_extensions() {
+        assert!(is_image_file(Path::new("photo.png")));
+        assert!(is_image_file(Path::new("photo.jpg")));
+        assert!(is_image_file(Path::new("photo.jpeg")));
+        assert!(is_image_file(Path::new("photo.gif")));
+        assert!(is_image_file(Path::new("photo.webp")));
+        assert!(is_image_file(Path::new("photo.bmp")));
+        assert!(is_image_file(Path::new("photo.ico")));
+        assert!(is_image_file(Path::new("photo.tiff")));
+        assert!(is_image_file(Path::new("photo.tif")));
+    }
+
+    #[test]
+    fn is_image_file_case_insensitive() {
+        assert!(is_image_file(Path::new("photo.PNG")));
+        assert!(is_image_file(Path::new("photo.JPG")));
+    }
+
+    #[test]
+    fn is_image_file_rejects_non_image() {
+        assert!(!is_image_file(Path::new("code.rs")));
+        assert!(!is_image_file(Path::new("readme.md")));
+        assert!(!is_image_file(Path::new("no_extension")));
+    }
+
+    #[cfg(feature = "image-preview")]
+    #[test]
+    fn load_preview_returns_image_kind_for_png() {
+        let dir = tempfile::tempdir().unwrap();
+        let png_path = dir.path().join("test.png");
+        // Write minimal valid PNG header
+        std::fs::write(&png_path, b"\x89PNG\r\n\x1a\n").unwrap();
+
+        let result = load_preview(&png_path, 1024, true, true, 80, true);
+        assert_eq!(result.kind, PreviewKind::Image);
+        assert!(result.content.is_empty());
+    }
+
+    #[cfg(feature = "image-preview")]
+    #[test]
+    fn load_preview_returns_binary_when_image_preview_disabled() {
+        let dir = tempfile::tempdir().unwrap();
+        let png_path = dir.path().join("test.png");
+        std::fs::write(&png_path, b"\x89PNG\r\n\x1a\n").unwrap();
+
+        let result = load_preview(&png_path, 1024, true, true, 80, false);
+        assert_eq!(result.kind, PreviewKind::Binary);
     }
 }

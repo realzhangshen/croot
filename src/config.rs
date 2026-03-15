@@ -560,6 +560,8 @@ pub struct PreviewConfig {
     pub split_ratio: f32,
     #[serde(default = "default_true")]
     pub render_markdown: bool,
+    #[serde(default = "default_true")]
+    pub image_preview: bool,
 }
 
 fn default_true() -> bool {
@@ -607,6 +609,7 @@ impl Default for PreviewConfig {
             syntax_highlight: true,
             split_ratio: 0.5,
             render_markdown: true,
+            image_preview: true,
         }
     }
 }
@@ -679,6 +682,7 @@ auto_preview = false
 # syntax_highlight = true
 # split_ratio = 0.5
 # render_markdown = true
+# image_preview = true
 
 [editor]
 # command = "vim"    # Falls back to $VISUAL, $EDITOR, vi

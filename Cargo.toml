@@ -36,6 +36,12 @@ globset = "0.4"
 regex = "1"
 shell-words = "1"
 clap_complete = "4"
+ratatui-image = { version = "10", default-features = false, features = ["crossterm"], optional = true }
+image = { version = "0.25", optional = true }
+
+[features]
+default = ["image-preview"]
+image-preview = ["dep:ratatui-image", "dep:image"]
 
 [dev-dependencies]
 tempfile = "3"
