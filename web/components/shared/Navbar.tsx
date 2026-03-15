@@ -32,7 +32,7 @@ export function Navbar() {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 h-14 border-b border-border bg-bg">
+      <nav className="sticky top-0 z-50 h-14 border-b border-border bg-bg-surface">
         <div className="mx-auto max-w-7xl h-full px-4 sm:px-6 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link
