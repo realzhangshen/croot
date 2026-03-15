@@ -1,5 +1,9 @@
 import { Sidebar } from "@/components/docs/Sidebar";
-import { MobileNav } from "@/components/docs/MobileNav";
+import dynamic from "next/dynamic";
+
+const MobileNav = dynamic(
+  () => import("@/components/docs/MobileNav").then((m) => ({ default: m.MobileNav }))
+);
 
 export default function DocsLayout({
   children,

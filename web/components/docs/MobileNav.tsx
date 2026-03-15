@@ -23,7 +23,7 @@ export function MobileNav() {
       {open && (
         <div className="fixed inset-0 z-50">
           <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/40"
             onClick={() => setOpen(false)}
           />
           <div className="absolute top-0 left-0 bottom-0 w-72 bg-bg-surface border-r border-border overflow-y-auto">

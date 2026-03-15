@@ -23,16 +23,21 @@ export function SearchDialog({
   const [data, setData] = useState<SearchEntry[]>([]);
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const router = useRouter();
 
+  // Lazy-load search data only when dialog opens
+  const dataLoaded = useRef(false);
   useEffect(() => {
+    if (!open || dataLoaded.current) return;
+    dataLoaded.current = true;
     const basePath =
       process.env.NODE_ENV === "production" ? "/croot" : "";
     fetch(`${basePath}/search-data.json`)
       .then((r) => r.json())
       .then(setData)
       .catch(() => {});
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     if (open) {
@@ -46,18 +51,22 @@ export function SearchDialog({
   const search = useCallback(
     (q: string) => {
       setQuery(q);
-      setSelected(0);
+      clearTimeout(timerRef.current);
       if (!q.trim()) {
         setResults([]);
+        setSelected(0);
         return;
       }
-      const lower = q.toLowerCase();
-      const matched = data.filter(
-        (entry) =>
-          entry.title.toLowerCase().includes(lower) ||
-          entry.content.toLowerCase().includes(lower)
-      );
-      setResults(matched.slice(0, 10));
+      timerRef.current = setTimeout(() => {
+        const lower = q.toLowerCase();
+        const matched = data.filter(
+          (entry) =>
+            entry.title.toLowerCase().includes(lower) ||
+            entry.content.toLowerCase().includes(lower)
+        );
+        setResults(matched.slice(0, 10));
+        setSelected(0);
+      }, 150);
     },
     [data]
   );

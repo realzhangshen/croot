@@ -5,7 +5,12 @@ import { usePathname } from "next/navigation";
 import { Github, Search } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { useState, useEffect, useCallback } from "react";
-import { SearchDialog } from "../docs/SearchDialog";
+import dynamic from "next/dynamic";
+
+const SearchDialog = dynamic(
+  () => import("../docs/SearchDialog").then((m) => ({ default: m.SearchDialog })),
+  { ssr: false }
+);
 
 export function Navbar() {
   const pathname = usePathname();
