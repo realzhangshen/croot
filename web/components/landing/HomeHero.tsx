@@ -18,7 +18,7 @@ export default function HomeHero() {
     <section
       className="text-center"
       style={{
-        padding: '160px 24px 80px',
+        padding: '100px 24px 80px',
         background: 'var(--croot-bg)',
         fontFamily: 'var(--croot-font-sans)',
       }}
@@ -104,7 +104,7 @@ export default function HomeHero() {
           style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}
         >
           <a
-            href="/croot/docs/guide/getting-started/"
+            href="/docs/guide/getting-started/"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -164,7 +164,7 @@ export default function HomeHero() {
         .reveal-delay-2 { animation-delay: 80ms; }
         .reveal-delay-3 { animation-delay: 120ms; }
         @media (max-width: 640px) {
-          section { padding: 120px 16px 60px !important; }
+          section { padding: 72px 16px 60px !important; }
         }
       `}</style>
     </section>

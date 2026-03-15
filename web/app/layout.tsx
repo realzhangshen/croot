@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   title: 'croot — The VS Code sidebar for your terminal',
   description:
     'Navigate files, preview code, and manage your project — all from the command line.',
-  icons: { icon: '/croot/favicon.svg' },
+  icons: { icon: '/favicon.svg' },
   other: { 'theme-color': '#f7f7f4' },
 }
 

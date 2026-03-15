@@ -10,16 +10,16 @@ export default function Navbar() {
   const [searchOpen, setSearchOpen] = useState(false)
 
   const navLinks = [
-    { text: 'Docs', href: '/croot/docs/guide/getting-started/', match: /\/(guide|advanced)\// },
-    { text: 'Features', href: '/croot/docs/features/git-integration/', match: /\/features\// },
+    { text: 'Docs', href: '/docs/guide/getting-started/', match: /\/(guide|advanced)\// },
+    { text: 'Features', href: '/docs/features/git-integration/', match: /\/features\// },
   ]
 
   return (
     <>
       <nav className="navbar">
         <div className="navbar-inner">
-          <Link href="/croot/" className="navbar-brand">
-            <img src="/croot/favicon.svg" alt="" width={24} height={24} />
+          <Link href="/" className="navbar-brand">
+            <img src="/favicon.svg" alt="" width={24} height={24} />
             <span>croot</span>
           </Link>
 

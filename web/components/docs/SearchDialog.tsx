@@ -23,7 +23,7 @@ export default function SearchDialog({
 
   useEffect(() => {
     if (open && data.length === 0) {
-      fetch('/croot/search-data.json')
+      fetch('/search-data.json')
         .then((r) => r.json())
         .then(setData)
         .catch(() => {})
@@ -74,7 +74,7 @@ export default function SearchDialog({
         setSelectedIndex((i) => Math.max(i - 1, 0))
       } else if (e.key === 'Enter' && results[selectedIndex]) {
         e.preventDefault()
-        window.location.href = `/croot/docs/${results[selectedIndex].slug}/`
+        window.location.href = `/docs/${results[selectedIndex].slug}/`
         onClose()
       }
     },
@@ -115,7 +115,7 @@ export default function SearchDialog({
               results.map((entry, i) => (
                 <a
                   key={entry.slug}
-                  href={`/croot/docs/${entry.slug}/`}
+                  href={`/docs/${entry.slug}/`}
                   className={`search-result ${i === selectedIndex ? 'selected' : ''}`}
                   onClick={onClose}
                 >

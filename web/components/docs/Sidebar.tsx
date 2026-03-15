@@ -15,8 +15,8 @@ export default function Sidebar() {
             <div className="group-title">{group.text}</div>
             <ul>
               {group.items.map((item) => {
-                const href = `/croot${item.link}/`
-                const isActive = pathname === href || pathname === `/croot${item.link}`
+                const href = `${item.link}/`
+                const isActive = pathname === href || pathname === item.link
                 return (
                   <li key={item.link}>
                     <Link
