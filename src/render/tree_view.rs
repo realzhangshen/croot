@@ -39,6 +39,7 @@ impl StatefulWidget for TreeView<'_> {
         #[derive(PartialEq)]
         enum RowMode {
             Cursor,
+            Selected,
             Hover,
             None,
         }
@@ -95,8 +96,12 @@ impl StatefulWidget for TreeView<'_> {
 
             let mut spans = Vec::new();
 
+            let is_selected = state.selection.contains(&absolute_idx);
+
             let row_mode = if is_cursor {
                 RowMode::Cursor
+            } else if is_selected {
+                RowMode::Selected
             } else if is_hovered {
                 RowMode::Hover
             } else {
@@ -111,6 +116,10 @@ impl StatefulWidget for TreeView<'_> {
                             | (base.add_modifier
                                 & (Modifier::BOLD | Modifier::DIM | Modifier::UNDERLINED)),
                     ),
+                    RowMode::Selected => {
+                        // Preserve base fg + modifiers, add selection bg
+                        base.bg(colors::selection_bg())
+                    }
                     RowMode::Hover => Style::default().add_modifier(
                         Modifier::REVERSED
                             | Modifier::DIM
@@ -239,6 +248,7 @@ impl StatefulWidget for TreeView<'_> {
             if row_mode != RowMode::None {
                 let fill_style = match &row_mode {
                     RowMode::Cursor => Style::default().add_modifier(Modifier::REVERSED),
+                    RowMode::Selected => Style::default().bg(colors::selection_bg()),
                     RowMode::Hover => colors::hover_style(),
                     RowMode::None => unreachable!(),
                 };
@@ -688,6 +698,8 @@ mod tests {
             rendered_indices: vec![],
             file_count: 2,
             dir_count: 0,
+            selection: std::collections::BTreeSet::new(),
+            selection_anchor: None,
         }
     }
 
@@ -705,6 +717,41 @@ mod tests {
         };
         widget.render(area, &mut buf, tree);
         buf
+    }
+
+    #[test]
+    fn selected_row_has_bg_color() {
+        let mut tree = make_test_tree();
+        tree.cursor = 0;
+        tree.selection.insert(1); // select row 1
+        let buf = render_tree(&mut tree, None);
+        let cell = buf.cell((5, 1)).unwrap();
+        assert_eq!(
+            cell.bg,
+            colors::selection_bg(),
+            "selected row should have selection bg, got {:?}",
+            cell.bg
+        );
+        // Should NOT be reversed like cursor/hover
+        assert!(
+            !cell.modifier.contains(Modifier::REVERSED),
+            "selected row should NOT have REVERSED"
+        );
+    }
+
+    #[test]
+    fn cursor_overrides_selection() {
+        let mut tree = make_test_tree();
+        tree.cursor = 0;
+        tree.selection.insert(0); // both cursor and selected on row 0
+        let buf = render_tree(&mut tree, None);
+        let cell = buf.cell((5, 0)).unwrap();
+        // Cursor style should win (REVERSED)
+        assert!(
+            cell.modifier.contains(Modifier::REVERSED),
+            "cursor should override selection with REVERSED, got {:?}",
+            cell.modifier
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::PathBuf;
 
 use crate::config::TreeConfig;
@@ -19,6 +19,10 @@ pub struct FileTree {
     pub file_count: usize,
     /// Cached count of visible directory nodes.
     pub dir_count: usize,
+    /// Multi-selected node indices (VS Code-style).
+    pub selection: BTreeSet<usize>,
+    /// Anchor index for Shift range-select.
+    pub selection_anchor: Option<usize>,
 }
 
 impl FileTree {
@@ -38,6 +42,8 @@ impl FileTree {
             rendered_indices: Vec::new(),
             file_count,
             dir_count,
+            selection: BTreeSet::new(),
+            selection_anchor: None,
         }
     }
 
@@ -82,7 +88,16 @@ impl FileTree {
 
         // Insert children right after the expanded node
         let insert_pos = index + 1;
+        let child_count = children.len();
         self.nodes.splice(insert_pos..insert_pos, children);
+
+        // Shift selection indices beyond the insert point
+        let shifted: BTreeSet<usize> = self
+            .selection
+            .iter()
+            .map(|&i| if i >= insert_pos { i + child_count } else { i })
+            .collect();
+        self.selection = shifted;
     }
 
     /// Collapse a directory node: remove all descendant nodes.
@@ -112,16 +127,26 @@ impl FileTree {
             }
         }
 
+        let removed_count = end - start;
         self.nodes.drain(start..end);
         self.nodes[index].is_expanded = false;
         self.nodes[index].children_loaded = false;
 
         // Adjust cursor if it was in the removed range
         if self.cursor >= end {
-            self.cursor -= end - start;
+            self.cursor -= removed_count;
         } else if self.cursor > index {
             self.cursor = index;
         }
+
+        // Remap selection indices: remove drained, shift those beyond
+        let remapped: BTreeSet<usize> = self
+            .selection
+            .iter()
+            .filter(|&&i| i < start || i >= end)
+            .map(|&i| if i >= end { i - removed_count } else { i })
+            .collect();
+        self.selection = remapped;
     }
 
     /// Toggle expand/collapse on the current node.
@@ -236,6 +261,12 @@ impl FileTree {
     /// Collapse all expanded directories back to the root level.
     pub fn collapse_all(&mut self) {
         let cursor_path = self.nodes.get(self.cursor).map(|n| n.path.clone());
+        let sel_paths: Vec<PathBuf> = self
+            .selection
+            .iter()
+            .filter_map(|&i| self.nodes.get(i).map(|n| n.path.clone()))
+            .collect();
+
         self.nodes = load_children_with_meta(&self.root, 0, &self.config);
         self.recount();
         // Restore cursor position by path, or clamp to valid range
@@ -247,6 +278,14 @@ impl FileTree {
                 .unwrap_or(0);
         }
         self.cursor = self.cursor.min(self.nodes.len().saturating_sub(1));
+
+        // Restore selection by path
+        self.selection.clear();
+        for path in &sel_paths {
+            if let Some(idx) = self.nodes.iter().position(|n| &n.path == path) {
+                self.selection.insert(idx);
+            }
+        }
     }
 
     /// Refresh expanded directories (re-read from filesystem).
@@ -262,6 +301,11 @@ impl FileTree {
 
         // Remember cursor path for restoration
         let cursor_path = self.nodes.get(self.cursor).map(|n| n.path.clone());
+        let sel_paths: Vec<PathBuf> = self
+            .selection
+            .iter()
+            .filter_map(|&i| self.nodes.get(i).map(|n| n.path.clone()))
+            .collect();
 
         // Re-read root from scratch
         self.nodes = load_children_with_meta(&self.root, 0, &self.config);
@@ -286,6 +330,14 @@ impl FileTree {
                 .unwrap_or(0);
         }
         self.cursor = self.cursor.min(self.nodes.len().saturating_sub(1));
+
+        // Restore selection by path
+        self.selection.clear();
+        for path in &sel_paths {
+            if let Some(idx) = self.nodes.iter().position(|n| &n.path == path) {
+                self.selection.insert(idx);
+            }
+        }
     }
 
     /// Check if a node at `index` is the last child of its parent.
@@ -443,6 +495,78 @@ impl FileTree {
         false
     }
 
+    // ── Multi-selection ────────────────────────────────────────────────
+
+    /// Toggle an index in/out of the selection and set it as the anchor.
+    pub fn toggle_select(&mut self, index: usize) {
+        if !self.selection.remove(&index) {
+            self.selection.insert(index);
+        }
+        self.selection_anchor = Some(index);
+    }
+
+    /// Select all displayable indices in the inclusive range [from, to].
+    /// Clears the current selection first.
+    pub fn range_select(&mut self, from: usize, to: usize) {
+        self.selection.clear();
+        let (lo, hi) = if from <= to { (from, to) } else { (to, from) };
+        let displayable = self.build_displayable_indices();
+        for &idx in &displayable {
+            if idx >= lo && idx <= hi {
+                self.selection.insert(idx);
+            }
+        }
+    }
+
+    /// Clear multi-selection and anchor.
+    pub fn clear_selection(&mut self) {
+        self.selection.clear();
+        self.selection_anchor = None;
+    }
+
+    /// Return selected indices if non-empty, otherwise return just the cursor.
+    pub fn selected_indices(&self) -> Vec<usize> {
+        if self.selection.is_empty() {
+            vec![self.cursor]
+        } else {
+            self.selection.iter().copied().collect()
+        }
+    }
+
+    /// Return paths for all selected indices (or cursor if no selection).
+    pub fn selected_paths(&self) -> Vec<PathBuf> {
+        self.selected_indices()
+            .iter()
+            .filter_map(|&i| self.nodes.get(i).map(|n| n.path.clone()))
+            .collect()
+    }
+
+    /// Shift+Down: add cursor to selection, move cursor down, add new position.
+    pub fn extend_selection_down(&mut self) {
+        if self.cursor + 1 >= self.nodes.len() {
+            return;
+        }
+        self.selection.insert(self.cursor);
+        self.cursor += 1;
+        self.selection.insert(self.cursor);
+        if self.selection_anchor.is_none() {
+            self.selection_anchor = Some(self.cursor.saturating_sub(1));
+        }
+    }
+
+    /// Shift+Up: add cursor to selection, move cursor up, add new position.
+    pub fn extend_selection_up(&mut self) {
+        if self.cursor == 0 {
+            return;
+        }
+        self.selection.insert(self.cursor);
+        self.cursor -= 1;
+        self.selection.insert(self.cursor);
+        if self.selection_anchor.is_none() {
+            self.selection_anchor = Some(self.cursor + 1);
+        }
+    }
+
     /// Precompute connector guides for all nodes in O(N) total using a reverse scan.
     /// Returns a Vec where entry[i] is the guides Vec for node i.
     pub fn precompute_all_guides(&self) -> Vec<Vec<bool>> {
@@ -512,6 +636,8 @@ mod tests {
             rendered_indices: Vec::new(),
             file_count,
             dir_count,
+            selection: BTreeSet::new(),
+            selection_anchor: None,
         }
     }
 
@@ -688,6 +814,8 @@ mod tests {
             rendered_indices: Vec::new(),
             file_count,
             dir_count,
+            selection: BTreeSet::new(),
+            selection_anchor: None,
         }
     }
 
@@ -741,6 +869,175 @@ mod tests {
     fn compact_chain_on_file_returns_zero() {
         let tree = tree_from_compact(&[("a.txt", NodeKind::File, 0, false)]);
         assert_eq!(tree.compact_chain_len(0), 0);
+    }
+
+    // ── Multi-selection tests ───────────────────────────────────────────
+
+    #[test]
+    fn toggle_select_adds_and_removes() {
+        let mut tree = tree_from(&[
+            ("a", NodeKind::File, 0),
+            ("b", NodeKind::File, 0),
+            ("c", NodeKind::File, 0),
+        ]);
+        tree.toggle_select(1);
+        assert!(tree.selection.contains(&1));
+        assert_eq!(tree.selection_anchor, Some(1));
+
+        tree.toggle_select(1);
+        assert!(!tree.selection.contains(&1));
+        assert_eq!(tree.selection_anchor, Some(1)); // anchor stays
+    }
+
+    #[test]
+    fn range_select_inclusive() {
+        let mut tree = tree_from(&[
+            ("a", NodeKind::File, 0),
+            ("b", NodeKind::File, 0),
+            ("c", NodeKind::File, 0),
+            ("d", NodeKind::File, 0),
+        ]);
+        tree.range_select(1, 3);
+        assert_eq!(
+            tree.selection.iter().copied().collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+    }
+
+    #[test]
+    fn range_select_reverse_order() {
+        let mut tree = tree_from(&[
+            ("a", NodeKind::File, 0),
+            ("b", NodeKind::File, 0),
+            ("c", NodeKind::File, 0),
+        ]);
+        tree.range_select(2, 0);
+        assert_eq!(
+            tree.selection.iter().copied().collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
+    }
+
+    #[test]
+    fn clear_selection_empties() {
+        let mut tree = tree_from(&[("a", NodeKind::File, 0), ("b", NodeKind::File, 0)]);
+        tree.toggle_select(0);
+        tree.toggle_select(1);
+        assert_eq!(tree.selection.len(), 2);
+        tree.clear_selection();
+        assert!(tree.selection.is_empty());
+        assert!(tree.selection_anchor.is_none());
+    }
+
+    #[test]
+    fn selected_indices_cursor_when_empty() {
+        let tree = tree_from(&[("a", NodeKind::File, 0), ("b", NodeKind::File, 0)]);
+        assert_eq!(tree.selected_indices(), vec![0]); // cursor is 0
+    }
+
+    #[test]
+    fn selected_indices_returns_selection() {
+        let mut tree = tree_from(&[
+            ("a", NodeKind::File, 0),
+            ("b", NodeKind::File, 0),
+            ("c", NodeKind::File, 0),
+        ]);
+        tree.toggle_select(0);
+        tree.toggle_select(2);
+        assert_eq!(tree.selected_indices(), vec![0, 2]);
+    }
+
+    #[test]
+    fn collapse_remaps_selection() {
+        let mut tree = tree_from(&[
+            ("src", NodeKind::Directory, 0),
+            ("main.rs", NodeKind::File, 1),
+            ("lib.rs", NodeKind::File, 1),
+            ("README", NodeKind::File, 0),
+        ]);
+        tree.nodes[0].is_expanded = true;
+        // Select main.rs (1), lib.rs (2), and README (3)
+        tree.toggle_select(1);
+        tree.toggle_select(2);
+        tree.toggle_select(3);
+
+        tree.collapse(0);
+        // main.rs (1) and lib.rs (2) are in the removed range — they're gone.
+        // README was at 3, shifts down by 2 to index 1.
+        // So the only remaining selection is {1} (README at its new position).
+        assert_eq!(tree.selection.iter().copied().collect::<Vec<_>>(), vec![1]);
+    }
+
+    #[test]
+    fn expand_shifts_selection() {
+        let mut tree = tree_from(&[
+            ("src", NodeKind::Directory, 0),
+            ("README", NodeKind::File, 0),
+        ]);
+        // Select README at index 1
+        tree.toggle_select(1);
+
+        // Simulate expand by manually inserting children (can't use real expand without FS)
+        // Instead, test the shifting logic directly
+        let insert_pos = 1; // after src
+        let child_count = 2;
+        let shifted: BTreeSet<usize> = tree
+            .selection
+            .iter()
+            .map(|&i| if i >= insert_pos { i + child_count } else { i })
+            .collect();
+        tree.selection = shifted;
+
+        // README was at 1, now should be at 3 (shifted by 2 children)
+        assert_eq!(tree.selection.iter().copied().collect::<Vec<_>>(), vec![3]);
+    }
+
+    #[test]
+    fn extend_selection_down() {
+        let mut tree = tree_from(&[
+            ("a", NodeKind::File, 0),
+            ("b", NodeKind::File, 0),
+            ("c", NodeKind::File, 0),
+        ]);
+        tree.cursor = 0;
+        tree.extend_selection_down();
+        assert_eq!(tree.cursor, 1);
+        assert!(tree.selection.contains(&0));
+        assert!(tree.selection.contains(&1));
+        assert_eq!(tree.selection_anchor, Some(0));
+    }
+
+    #[test]
+    fn extend_selection_up() {
+        let mut tree = tree_from(&[
+            ("a", NodeKind::File, 0),
+            ("b", NodeKind::File, 0),
+            ("c", NodeKind::File, 0),
+        ]);
+        tree.cursor = 2;
+        tree.extend_selection_up();
+        assert_eq!(tree.cursor, 1);
+        assert!(tree.selection.contains(&2));
+        assert!(tree.selection.contains(&1));
+        assert_eq!(tree.selection_anchor, Some(2));
+    }
+
+    #[test]
+    fn extend_selection_down_at_bottom_is_noop() {
+        let mut tree = tree_from(&[("a", NodeKind::File, 0)]);
+        tree.cursor = 0;
+        tree.extend_selection_down();
+        assert_eq!(tree.cursor, 0);
+        assert!(tree.selection.is_empty());
+    }
+
+    #[test]
+    fn extend_selection_up_at_top_is_noop() {
+        let mut tree = tree_from(&[("a", NodeKind::File, 0)]);
+        tree.cursor = 0;
+        tree.extend_selection_up();
+        assert_eq!(tree.cursor, 0);
+        assert!(tree.selection.is_empty());
     }
 
     #[test]

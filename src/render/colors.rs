@@ -185,6 +185,11 @@ pub fn hover_style() -> Style {
     Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
 }
 
+/// Tree-view selected row background: dark blue (subtle but distinct).
+pub fn selection_bg() -> Color {
+    Color::Indexed(17) // dark blue
+}
+
 /// Popup / menu base: REVERSED uses the terminal's default fg/bg pair,
 /// which themes carefully tune for optimal contrast.
 pub fn popup_base() -> Style {
