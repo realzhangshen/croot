@@ -681,6 +681,9 @@ impl Config {
 # Mouse enabled, basic keyboard shortcuts work.
 # Arrow keys, /, f, s, S, m, Home/End, Esc, Ctrl+C all work.
 
+[general]
+# use_trash = true   # Move to OS trash instead of permanent delete
+
 [tree]
 show_hidden = true
 dirs_first = true

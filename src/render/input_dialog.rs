@@ -39,6 +39,8 @@ pub struct InputDialogState {
     pub context_path: std::path::PathBuf,
     /// Display name of the target (for delete confirmation).
     pub target_name: String,
+    /// Whether to move to trash (true) or permanently delete (false).
+    pub use_trash: bool,
 }
 
 impl InputDialogState {
@@ -55,6 +57,7 @@ impl InputDialogState {
             cursor_pos,
             context_path,
             target_name,
+            use_trash: false,
         }
     }
 
@@ -155,7 +158,11 @@ impl Widget for InputDialogWidget<'_> {
 
         if matches!(self.state.kind, DialogKind::ConfirmDelete) {
             // Show confirmation message
-            let msg = format!("Delete '{}'?", self.state.target_name);
+            let msg = if self.state.use_trash {
+                format!("Move '{}' to Trash?", self.state.target_name)
+            } else {
+                format!("Permanently delete '{}'?", self.state.target_name)
+            };
             let msg_x = dialog_rect.x + 2;
             buf.set_string(msg_x, dialog_rect.y + 2, &msg, text_style);
 
@@ -264,6 +271,46 @@ mod tests {
         let widget = InputDialogWidget { state };
         widget.render(area, &mut buf);
         buf
+    }
+
+    /// Helper to extract the rendered text from a buffer row.
+    fn row_text(buf: &ratatui::buffer::Buffer, y: u16, x_start: u16, x_end: u16) -> String {
+        (x_start..x_end)
+            .filter_map(|x| buf.cell((x, y)).map(|c| c.symbol().to_string()))
+            .collect::<String>()
+    }
+
+    #[test]
+    fn delete_dialog_shows_trash_message_when_use_trash() {
+        let mut state = InputDialogState::new(
+            DialogKind::ConfirmDelete,
+            std::path::PathBuf::from("/tmp"),
+            "foo.txt".to_string(),
+        );
+        state.use_trash = true;
+        let buf = render_dialog(&state);
+        // Dialog centered: x=5, y=7 (height=6), message at y+2=9
+        let text = row_text(&buf, 9, 5, 55);
+        assert!(
+            text.contains("Move 'foo.txt' to Trash?"),
+            "Expected trash message, got: {text}"
+        );
+    }
+
+    #[test]
+    fn delete_dialog_shows_permanent_message_when_no_trash() {
+        let mut state = InputDialogState::new(
+            DialogKind::ConfirmDelete,
+            std::path::PathBuf::from("/tmp"),
+            "foo.txt".to_string(),
+        );
+        state.use_trash = false;
+        let buf = render_dialog(&state);
+        let text = row_text(&buf, 9, 5, 55);
+        assert!(
+            text.contains("Permanently delete 'foo.txt'?"),
+            "Expected permanent delete message, got: {text}"
+        );
     }
 
     #[test]

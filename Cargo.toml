@@ -35,6 +35,7 @@ pulldown-cmark = { version = "0.12", default-features = false }
 globset = "0.4"
 regex = "1"
 shell-words = "1"
+trash = "5"
 clap_complete = "4"
 ratatui-image = { version = "10", default-features = false, features = ["crossterm"], optional = true }
 image = { version = "0.25", optional = true }

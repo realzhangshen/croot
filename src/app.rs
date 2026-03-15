@@ -1775,7 +1775,9 @@ impl App {
         if let Some(node) = self.tree.selected() {
             let name = node.name.clone();
             let path = node.path.clone();
-            self.input_dialog = Some(InputDialogState::new(DialogKind::ConfirmDelete, path, name));
+            let mut dialog = InputDialogState::new(DialogKind::ConfirmDelete, path, name);
+            dialog.use_trash = self.config.general.use_trash;
+            self.input_dialog = Some(dialog);
             self.input_mode = InputMode::Dialog;
         }
     }
@@ -1813,7 +1815,9 @@ impl App {
         if let Some(node) = self.tree.nodes.get(node_idx) {
             let name = node.name.clone();
             let path = node.path.clone();
-            self.input_dialog = Some(InputDialogState::new(DialogKind::ConfirmDelete, path, name));
+            let mut dialog = InputDialogState::new(DialogKind::ConfirmDelete, path, name);
+            dialog.use_trash = self.config.general.use_trash;
+            self.input_dialog = Some(dialog);
             self.input_mode = InputMode::Dialog;
         }
     }
@@ -1877,7 +1881,11 @@ impl App {
             // R1: ConfirmDelete always deletes only the context_path node
             DialogKind::ConfirmDelete => {
                 let path = &dialog.context_path;
-                if path.is_dir() {
+                if dialog.use_trash {
+                    if let Err(e) = trash::delete(path) {
+                        self.show_error(format!("Trash failed: {e}"));
+                    }
+                } else if path.is_dir() {
                     if let Err(e) = std::fs::remove_dir_all(path) {
                         self.show_error(format!("Delete failed: {e}"));
                     }
