@@ -18,7 +18,7 @@ export default function HomeHero() {
     <section
       className="text-center"
       style={{
-        padding: '100px 24px 80px',
+        padding: 'min(20vh, 160px) 24px 120px',
         background: 'var(--croot-bg)',
         fontFamily: 'var(--croot-font-sans)',
       }}
