@@ -30,7 +30,7 @@ export function TableOfContents({ entries }: { entries: TocEntry[] }) {
 
   return (
     <aside className="hidden min-[1200px]:block w-[200px] shrink-0 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto py-8 pl-6">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted mb-3">
+      <p className="text-[13px] font-medium text-text-muted mb-3">
         On this page
       </p>
       <ul className="space-y-1">
