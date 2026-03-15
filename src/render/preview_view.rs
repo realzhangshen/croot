@@ -59,6 +59,10 @@ impl StatefulWidget for PreviewView<'_> {
             | PreviewKind::Directory => {
                 self.render_content(content_area, buf, state);
             }
+            #[cfg(feature = "image-preview")]
+            PreviewKind::Image => {
+                self.render_image(content_area, buf, state);
+            }
         }
     }
 }
@@ -108,6 +112,17 @@ impl PreviewView<'_> {
             ));
         }
 
+        #[cfg(feature = "image-preview")]
+        if state.kind == PreviewKind::Image {
+            spans.push(Span::styled(
+                " [IMG]",
+                Style::default()
+                    .fg(Color::Magenta)
+                    .bg(bg)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+
         if !state.file_info.is_empty() {
             spans.push(Span::styled(
                 format!("  {}", state.file_info),
@@ -136,6 +151,19 @@ impl PreviewView<'_> {
         } else {
             let line = Line::from(spans);
             buf.set_line(area.x, area.y, &line, area.width);
+        }
+    }
+
+    #[cfg(feature = "image-preview")]
+    #[allow(clippy::unused_self)]
+    fn render_image(&self, area: Rect, buf: &mut Buffer, state: &mut PreviewState) {
+        use ratatui_image::{thread::ThreadProtocol, StatefulImage};
+
+        if let Some(ref mut thread_proto) = state.image_state {
+            let image_widget = StatefulImage::<ThreadProtocol>::new();
+            image_widget.render(area, buf, thread_proto);
+        } else {
+            render_centered_message(area, buf, "Image preview not available", Color::DarkGray);
         }
     }
 

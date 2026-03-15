@@ -35,7 +35,7 @@ export default function Sidebar() {
 
       <style jsx>{`
         .sidebar {
-          width: 240px;
+          width: 256px;
           flex-shrink: 0;
           padding: 24px 0 24px 24px;
           border-right: 1px solid var(--croot-border);
@@ -49,7 +49,7 @@ export default function Sidebar() {
           .sidebar { display: block; }
         }
         .sidebar-group {
-          margin-bottom: 24px;
+          margin-bottom: 28px;
         }
         .group-title {
           text-transform: uppercase;
@@ -70,19 +70,23 @@ export default function Sidebar() {
       <style jsx global>{`
         .sidebar-link {
           display: block;
-          padding: 4px 8px;
+          padding: 6px 8px;
           font-size: 0.9rem;
           color: var(--croot-text-secondary);
           text-decoration: none;
           border-radius: 6px;
-          transition: color var(--croot-dur-fast) var(--croot-ease);
+          border-left: 2px solid transparent;
+          transition: color var(--croot-dur-fast) var(--croot-ease),
+                      background var(--croot-dur-fast) var(--croot-ease);
         }
         .sidebar-link:hover {
           color: var(--croot-accent-orange);
+          background: var(--croot-bg-hover);
         }
         .sidebar-link.active {
           color: var(--croot-accent-orange);
           font-weight: 600;
+          border-left-color: var(--croot-accent-orange);
         }
       `}</style>
     </aside>

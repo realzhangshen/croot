@@ -39,10 +39,17 @@ export function getAllSlugs(): string[][] {
   })
 }
 
+export interface DocHeading {
+  id: string
+  text: string
+  level: number
+}
+
 export async function getDocBySlug(slug: string[]): Promise<{
   title: string
   html: string
   editPath: string
+  headings: DocHeading[]
 }> {
   const filePath = path.join(DOCS_DIR, ...slug) + '.md'
   const source = fs.readFileSync(filePath, 'utf-8')
@@ -66,10 +73,22 @@ export async function getDocBySlug(slug: string[]): Promise<{
   const relativePath = slug.join('/') + '.md'
   const title = data.title || slug[slug.length - 1].replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
 
+  const html = String(result)
+
+  // Extract h2/h3 headings from rendered HTML
+  const headings: DocHeading[] = []
+  const headingRegex = /<h([23])\s+id="([^"]+)"[^>]*>([\s\S]*?)<\/h[23]>/g
+  let match
+  while ((match = headingRegex.exec(html)) !== null) {
+    const text = match[3].replace(/<[^>]+>/g, '').trim()
+    headings.push({ id: match[2], text, level: Number(match[1]) })
+  }
+
   return {
     title,
-    html: String(result),
+    html,
     editPath: `https://github.com/realzhangshen/croot/edit/main/docs/${relativePath}`,
+    headings,
   }
 }
 

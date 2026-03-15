@@ -191,7 +191,7 @@ export default function SearchDialog({
         .search-result {
           display: block;
           padding: 10px 12px;
-          border-radius: 8px;
+          border-radius: 6px;
           text-decoration: none;
           color: var(--croot-text);
           transition: background var(--croot-dur-fast) var(--croot-ease);

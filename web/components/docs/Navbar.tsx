@@ -106,7 +106,7 @@ export default function Navbar() {
           font-size: 0.9rem;
           color: var(--croot-text-secondary);
           text-decoration: none;
-          border-radius: 6px;
+          border-radius: 4px;
           transition: color var(--croot-dur-fast) var(--croot-ease);
           position: relative;
         }
@@ -137,7 +137,7 @@ export default function Navbar() {
           gap: 8px;
           padding: 6px 12px;
           border: 1px solid var(--croot-border);
-          border-radius: 8px;
+          border-radius: 6px;
           background: var(--croot-bg);
           color: var(--croot-text-muted);
           font-size: 0.85rem;

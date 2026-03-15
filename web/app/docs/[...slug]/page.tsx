@@ -3,6 +3,7 @@ import { getAllSlugs, getDocBySlug } from '@/lib/docs'
 import { sidebar } from '@/lib/sidebar'
 import DocBreadcrumb from '@/components/docs/DocBreadcrumb'
 import DocContent from '@/components/docs/DocContent'
+import TableOfContents from '@/components/docs/TableOfContents'
 
 export async function generateStaticParams() {
   const slugs = getAllSlugs()
@@ -39,9 +40,12 @@ export default async function DocPage({
   }
 
   return (
-    <article>
-      <DocBreadcrumb groupName={groupName} />
-      <DocContent html={doc.html} editPath={doc.editPath} />
-    </article>
+    <div style={{ display: 'flex', gap: 0 }}>
+      <article style={{ flex: 1, minWidth: 0 }}>
+        <DocBreadcrumb groupName={groupName} />
+        <DocContent html={doc.html} editPath={doc.editPath} />
+      </article>
+      <TableOfContents headings={doc.headings} />
+    </div>
   )
 }

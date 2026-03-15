@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+/* ── BerkeleyMono font-face ─────────────────── */
+
+@font-face {
+  font-family: "BerkeleyMono";
+  src: url("https://cursor.com/marketing-static/_next/static/media/BerkeleyMono_Regular.p.e4888174.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "BerkeleyMono";
+  src: url("https://cursor.com/marketing-static/_next/static/media/BerkeleyMono_Oblique.p.f08c3069.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
 /* ── CursorGothic font-face ──────────────────── */
 
 @font-face {
@@ -42,9 +59,9 @@
   --croot-bg: #f7f7f4;
   --croot-bg-surface: #ffffff;
   --croot-bg-elevated: #eeeee8;
-  --croot-bg-hover: rgba(38, 37, 30, 0.08);
-  --croot-border: rgba(38, 37, 30, 0.18);
-  --croot-border-strong: rgba(38, 37, 30, 0.3);
+  --croot-bg-hover: rgba(38, 37, 30, 0.04);
+  --croot-border: rgba(38, 37, 30, 0.08);
+  --croot-border-strong: rgba(38, 37, 30, 0.15);
   --croot-text: #26251e;
   --croot-text-secondary: rgba(38, 37, 30, 0.7);
   --croot-text-muted: rgba(38, 37, 30, 0.55);
@@ -53,11 +70,11 @@
   --croot-accent-white: #f7f7f4;
 
   --croot-font-sans: CursorGothic, "CursorGothic Fallback", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --croot-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, Consolas, monospace;
-  --croot-max-width: 1200px;
+  --croot-font-mono: BerkeleyMono, ui-monospace, 'Cascadia Code', 'Fira Code', Menlo, Consolas, monospace;
+  --croot-max-width: 1280px;
 
-  --croot-radius-sm: 12px;
-  --croot-radius-md: 16px;
+  --croot-radius-sm: 6px;
+  --croot-radius-md: 8px;
   --croot-radius-pill: 999px;
 
   --croot-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -99,7 +116,7 @@
   letter-spacing: -0.01em;
   font-family: var(--croot-font-sans);
   color: var(--croot-text);
-  max-width: 740px;
+  max-width: 768px;
 }
 
 .prose-doc h1 {
@@ -146,7 +163,7 @@
 .prose-doc pre {
   background: var(--croot-bg-elevated) !important;
   border: 1px solid var(--croot-border);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 16px;
   overflow-x: auto;
   font-family: var(--croot-font-mono);
@@ -173,7 +190,7 @@
   font-size: 0.875em;
   font-weight: 500;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 3px;
   color: var(--croot-text);
 }
 

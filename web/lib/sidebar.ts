@@ -5,12 +5,14 @@ export interface SidebarItem {
 
 export interface SidebarGroup {
   text: string
+  description: string
   items: SidebarItem[]
 }
 
 export const sidebar: SidebarGroup[] = [
   {
     text: 'Get Started',
+    description: 'Install and configure croot in minutes',
     items: [
       { text: 'Quickstart', link: '/docs/guide/getting-started' },
       { text: 'Installation', link: '/docs/guide/installation' },
@@ -20,6 +22,7 @@ export const sidebar: SidebarGroup[] = [
   },
   {
     text: 'Features',
+    description: 'Git integration, file preview, fuzzy search, and more',
     items: [
       { text: 'Git Integration', link: '/docs/features/git-integration' },
       { text: 'File Preview', link: '/docs/features/file-preview' },
@@ -31,6 +34,7 @@ export const sidebar: SidebarGroup[] = [
   },
   {
     text: 'Workflow',
+    description: 'Advanced workflows and development setup',
     items: [
       { text: 'Pair with cmux', link: '/docs/advanced/cmux-workflow' },
       { text: 'Development', link: '/docs/advanced/development' },
