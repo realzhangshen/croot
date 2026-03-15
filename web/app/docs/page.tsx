@@ -14,7 +14,7 @@ const sectionIcons: Record<string, React.ElementType> = {
 
 export default function DocsIndex() {
   return (
-    <div className="py-8 max-w-3xl">
+    <div className="py-8 max-w-3xl mx-auto">
       <h1 className="text-3xl font-bold text-text mb-2">Documentation</h1>
       <p className="text-text-secondary mb-8">
         Everything you need to know about croot.

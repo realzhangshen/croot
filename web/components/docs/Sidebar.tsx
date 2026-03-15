@@ -8,7 +8,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden min-[960px]:block w-[220px] shrink-0 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto py-6 pl-2 border-r border-border">
+    <aside className="hidden min-[960px]:block w-[220px] shrink-0 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto py-6 pl-5 border-r border-border">
       <nav className="space-y-8">
         {sidebarSections.map((section) => (
           <div key={section.label}>

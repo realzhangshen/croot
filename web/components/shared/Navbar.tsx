@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Github, Search } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { useState, useEffect, useCallback } from "react";
 import { SearchDialog } from "../docs/SearchDialog";
 
 export function Navbar() {
+  const pathname = usePathname();
+  const isDocsActive = pathname.startsWith("/docs");
   const [searchOpen, setSearchOpen] = useState(false);
 
   const handleClose = useCallback(() => setSearchOpen(false), []);
@@ -24,7 +27,7 @@ export function Navbar() {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 h-14 border-b border-border bg-bg-surface/80 backdrop-blur-md">
+      <nav className="sticky top-0 z-50 h-14 border-b border-border bg-bg-surface">
         <div className="mx-auto max-w-7xl h-full px-4 sm:px-6 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link
@@ -36,7 +39,11 @@ export function Navbar() {
             <div className="hidden sm:flex items-center gap-4">
               <Link
                 href="/docs"
-                className="text-sm text-text-secondary hover:text-text transition-colors"
+                className={`text-sm transition-colors ${
+                  isDocsActive
+                    ? "text-sidebar-active font-medium"
+                    : "text-text-secondary hover:text-text"
+                }`}
               >
                 Docs
               </Link>
