@@ -7,7 +7,7 @@ export function Footer() {
         <p>Built with Rust & Ratatui</p>
         <div className="flex items-center gap-6">
           <a
-            href="https://github.com/dxmq/croot"
+            href="https://github.com/realzhangshen/croot"
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-text transition-colors"
@@ -18,7 +18,7 @@ export function Footer() {
             Docs
           </Link>
           <a
-            href="https://github.com/dxmq/croot/blob/main/CHANGELOG.md"
+            href="https://github.com/realzhangshen/croot/blob/main/CHANGELOG.md"
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-text transition-colors"

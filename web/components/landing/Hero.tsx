@@ -27,7 +27,7 @@ export function Hero() {
             <ArrowRight size={16} />
           </Link>
           <a
-            href="https://github.com/dxmq/croot"
+            href="https://github.com/realzhangshen/croot"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 border border-border px-5 py-2.5 rounded-lg text-sm font-medium text-text hover:bg-bg-elevated transition-colors"

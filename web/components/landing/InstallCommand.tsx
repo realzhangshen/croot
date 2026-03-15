@@ -5,7 +5,7 @@ import { useState } from "react";
 
 export function InstallCommand() {
   const [copied, setCopied] = useState(false);
-  const command = "brew install dxmq/tap/croot";
+  const command = "brew install realzhangshen/croot/croot";
 
   const copy = async () => {
     await navigator.clipboard.writeText(command);

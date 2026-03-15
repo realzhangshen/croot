@@ -68,7 +68,7 @@ export function Navbar() {
             </button>
             <ThemeToggle />
             <a
-              href="https://github.com/dxmq/croot"
+              href="https://github.com/realzhangshen/croot"
               target="_blank"
               rel="noopener noreferrer"
               className="p-2 rounded-sm text-text-muted hover:text-text hover:bg-bg-elevated transition-colors"
