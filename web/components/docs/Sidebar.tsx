@@ -8,14 +8,14 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden min-[960px]:block w-64 shrink-0 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto py-6 pr-6">
-      <nav className="space-y-5">
+    <aside className="hidden min-[960px]:block w-[220px] shrink-0 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto py-6 pl-2 border-r border-border">
+      <nav className="space-y-8">
         {sidebarSections.map((section) => (
           <div key={section.label}>
-            <h4 className="text-[13px] font-normal text-text-muted mb-1.5 px-2">
+            <h4 className="text-xs font-normal text-text-muted tracking-[0.6px] mb-1">
               {section.label}
             </h4>
-            <ul className="space-y-px">
+            <ul>
               {section.links.map((link) => {
                 const href = `/docs/${link.slug}`;
                 const isActive = pathname === href;
@@ -23,10 +23,10 @@ export function Sidebar() {
                   <li key={link.slug}>
                     <Link
                       href={href}
-                      className={`block px-2 py-1 text-[14px] transition-colors ${
+                      className={`block h-[29px] leading-[29px] text-base transition-colors rounded-sm hover:bg-bg-elevated/70 ${
                         isActive
-                          ? "text-accent font-medium"
-                          : "text-text hover:text-accent"
+                          ? "text-sidebar-active font-medium"
+                          : "text-text"
                       }`}
                     >
                       {link.title}

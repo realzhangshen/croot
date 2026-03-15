@@ -14,6 +14,7 @@
   --text-muted: rgba(38, 37, 30, 0.55);
   --accent: #26251e;
   --accent-fg: #f7f7f4;
+  --sidebar-active: #eb5600;
 }
 
 [data-theme="dark"] {
@@ -27,6 +28,7 @@
   --text-muted: rgba(237, 236, 236, 0.55);
   --accent: #edecec;
   --accent-fg: #14120b;
+  --sidebar-active: #f97316;
 }
 
 @theme {
@@ -40,6 +42,7 @@
   --color-text-muted: var(--text-muted);
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
+  --color-sidebar-active: var(--sidebar-active);
 }
 
 /* ── Base ──────────────────────────────────────── */

@@ -37,13 +37,13 @@ export function MobileNav() {
                 <X size={18} />
               </button>
             </div>
-            <nav className="p-4 space-y-5">
+            <nav className="p-4 space-y-8">
               {sidebarSections.map((section) => (
                 <div key={section.label}>
-                  <h4 className="text-[13px] font-normal text-text-muted mb-1.5 px-2">
+                  <h4 className="text-xs font-normal text-text-muted tracking-[0.6px] mb-1">
                     {section.label}
                   </h4>
-                  <ul className="space-y-px">
+                  <ul>
                     {section.links.map((link) => {
                       const href = `/docs/${link.slug}`;
                       const isActive = pathname === href;
@@ -52,10 +52,10 @@ export function MobileNav() {
                           <Link
                             href={href}
                             onClick={() => setOpen(false)}
-                            className={`block px-2 py-1 text-[14px] transition-colors ${
+                            className={`block h-[29px] leading-[29px] text-base transition-colors rounded-sm hover:bg-bg-elevated/70 ${
                               isActive
-                                ? "text-accent font-medium"
-                                : "text-text hover:text-accent"
+                                ? "text-sidebar-active font-medium"
+                                : "text-text"
                             }`}
                           >
                             {link.title}
