@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Menu, X, ChevronRight } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { sidebarSections } from "@/lib/sidebar";
@@ -9,12 +9,6 @@ import { sidebarSections } from "@/lib/sidebar";
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(sidebarSections.map((s) => [s.label, true]))
-  );
-
-  const toggle = (label: string) =>
-    setExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
 
   return (
     <div className="min-[960px]:hidden">
@@ -43,52 +37,35 @@ export function MobileNav() {
                 <X size={18} />
               </button>
             </div>
-            <nav className="p-4 space-y-4">
-              {sidebarSections.map((section, i) => {
-                const isExpanded = expanded[section.label] ?? true;
-                return (
-                  <div
-                    key={section.label}
-                    className={i > 0 ? "border-t border-border pt-4" : ""}
-                  >
-                    <button
-                      onClick={() => toggle(section.label)}
-                      className="flex items-center gap-1 w-full text-left text-[13px] font-medium text-text-muted hover:text-text transition-colors mb-1 px-2"
-                    >
-                      <ChevronRight
-                        size={14}
-                        className={`shrink-0 transition-transform duration-150 ${
-                          isExpanded ? "rotate-90" : ""
-                        }`}
-                      />
-                      {section.label}
-                    </button>
-                    {isExpanded && (
-                      <ul className="space-y-0.5">
-                        {section.links.map((link) => {
-                          const href = `/docs/${link.slug}`;
-                          const isActive = pathname === href;
-                          return (
-                            <li key={link.slug}>
-                              <Link
-                                href={href}
-                                onClick={() => setOpen(false)}
-                                className={`block px-2 py-1 text-sm rounded-md transition-colors ${
-                                  isActive
-                                    ? "text-text font-medium bg-bg-elevated"
-                                    : "text-text-secondary hover:text-text hover:bg-bg-elevated"
-                                }`}
-                              >
-                                {link.title}
-                              </Link>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })}
+            <nav className="p-4 space-y-5">
+              {sidebarSections.map((section) => (
+                <div key={section.label}>
+                  <h4 className="text-[13px] font-normal text-text-muted mb-1.5 px-2">
+                    {section.label}
+                  </h4>
+                  <ul className="space-y-px">
+                    {section.links.map((link) => {
+                      const href = `/docs/${link.slug}`;
+                      const isActive = pathname === href;
+                      return (
+                        <li key={link.slug}>
+                          <Link
+                            href={href}
+                            onClick={() => setOpen(false)}
+                            className={`block px-2 py-1 text-[14px] transition-colors ${
+                              isActive
+                                ? "text-accent font-medium"
+                                : "text-text hover:text-accent"
+                            }`}
+                          >
+                            {link.title}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
             </nav>
           </div>
         </div>
