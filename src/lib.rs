@@ -1,6 +1,7 @@
 pub mod app;
 pub mod cmux;
 pub mod config;
+pub mod file_ops;
 pub mod git;
 pub mod input;
 pub mod layout;

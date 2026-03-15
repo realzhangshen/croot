@@ -263,6 +263,8 @@ pub fn handle_key(
     }
 
     // Hardcoded: Esc clears preview selection
+    // (intentionally not collapsed — Esc without selection falls through to keybinding lookup)
+    #[allow(clippy::collapsible_if)]
     if key.code == KeyCode::Esc {
         if preview_has_selection {
             return Action::ClearSelection;
@@ -448,6 +450,352 @@ mod tests {
         assert_eq!(
             handle_key_menu(make_key(KeyCode::Enter), &map),
             Action::MenuSelect(MenuAction::CopyPath)
+        );
+    }
+
+    // ── Normal mode: handle_key ─────────────────────────────────────────
+
+    fn make_key_mod(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
+        KeyEvent::new(code, modifiers)
+    }
+
+    #[test]
+    fn ctrl_c_quits_without_selection() {
+        let map = KeybindingMap::new();
+        let action = handle_key(
+            make_key_mod(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            false,
+            false, // no selection
+            &map,
+        );
+        assert_eq!(action, Action::Quit);
+    }
+
+    #[test]
+    fn ctrl_c_copies_with_active_selection() {
+        let map = KeybindingMap::new();
+        let action = handle_key(
+            make_key_mod(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            true,
+            true, // has selection
+            &map,
+        );
+        assert_eq!(action, Action::CopySelection);
+    }
+
+    #[test]
+    fn super_c_copies_with_active_selection() {
+        let map = KeybindingMap::new();
+        let action = handle_key(
+            make_key_mod(KeyCode::Char('c'), KeyModifiers::SUPER),
+            true,
+            true,
+            &map,
+        );
+        assert_eq!(action, Action::CopySelection);
+    }
+
+    #[test]
+    fn esc_clears_selection_when_active() {
+        let map = KeybindingMap::new();
+        let action = handle_key(make_key(KeyCode::Esc), true, true, &map);
+        assert_eq!(action, Action::ClearSelection);
+    }
+
+    #[test]
+    fn esc_returns_none_without_selection() {
+        let map = KeybindingMap::new();
+        let action = handle_key(make_key(KeyCode::Esc), true, false, &map);
+        assert_eq!(action, Action::None);
+    }
+
+    #[test]
+    fn keybinding_map_lookup_works() {
+        let mut map = KeybindingMap::new();
+        map.insert(
+            KeyBinding {
+                code: KeyCode::Char('j'),
+                modifiers: KeyModifiers::NONE,
+            },
+            Action::CursorDown,
+        );
+        let action = handle_key(make_key(KeyCode::Char('j')), false, false, &map);
+        assert_eq!(action, Action::CursorDown);
+    }
+
+    #[test]
+    fn kitty_uppercase_normalization() {
+        // Kitty sends Char('S') + SHIFT; we store Char('S') without SHIFT
+        let mut map = KeybindingMap::new();
+        map.insert(
+            KeyBinding {
+                code: KeyCode::Char('s'),
+                modifiers: KeyModifiers::NONE,
+            },
+            Action::StartGlobalSearch,
+        );
+        // Legacy terminal: Char('S') without SHIFT modifier (not handled by normalization)
+        // Kitty protocol: Char('S') with SHIFT modifier → should normalize
+        let action = handle_key(
+            make_key_mod(KeyCode::Char('S'), KeyModifiers::SHIFT),
+            false,
+            false,
+            &map,
+        );
+        assert_eq!(action, Action::StartGlobalSearch);
+    }
+
+    #[test]
+    fn unbound_key_returns_none() {
+        let map = KeybindingMap::new();
+        let action = handle_key(make_key(KeyCode::Char('z')), false, false, &map);
+        assert_eq!(action, Action::None);
+    }
+
+    // ── Search mode ─────────────────────────────────────────────────────
+
+    #[test]
+    fn search_esc_cancels() {
+        assert_eq!(
+            handle_key_search(make_key(KeyCode::Esc)),
+            Action::SearchCancel
+        );
+    }
+
+    #[test]
+    fn search_enter_confirms() {
+        assert_eq!(
+            handle_key_search(make_key(KeyCode::Enter)),
+            Action::SearchConfirm
+        );
+    }
+
+    #[test]
+    fn search_tab_goes_next() {
+        assert_eq!(
+            handle_key_search(make_key(KeyCode::Tab)),
+            Action::SearchNext
+        );
+    }
+
+    #[test]
+    fn search_backtab_goes_prev() {
+        assert_eq!(
+            handle_key_search(make_key(KeyCode::BackTab)),
+            Action::SearchPrev
+        );
+    }
+
+    #[test]
+    fn search_char_input() {
+        assert_eq!(
+            handle_key_search(make_key(KeyCode::Char('a'))),
+            Action::SearchChar('a')
+        );
+    }
+
+    #[test]
+    fn search_backspace() {
+        assert_eq!(
+            handle_key_search(make_key(KeyCode::Backspace)),
+            Action::SearchBackspace
+        );
+    }
+
+    #[test]
+    fn search_cursor_movement() {
+        assert_eq!(
+            handle_key_search(make_key(KeyCode::Left)),
+            Action::SearchLeft
+        );
+        assert_eq!(
+            handle_key_search(make_key(KeyCode::Right)),
+            Action::SearchRight
+        );
+    }
+
+    // ── Dialog mode ─────────────────────────────────────────────────────
+
+    #[test]
+    fn dialog_esc_cancels() {
+        assert_eq!(
+            handle_key_dialog(make_key(KeyCode::Esc)),
+            Action::DialogCancel
+        );
+    }
+
+    #[test]
+    fn dialog_enter_confirms() {
+        assert_eq!(
+            handle_key_dialog(make_key(KeyCode::Enter)),
+            Action::DialogConfirm
+        );
+    }
+
+    #[test]
+    fn dialog_char_input() {
+        assert_eq!(
+            handle_key_dialog(make_key(KeyCode::Char('x'))),
+            Action::DialogChar('x')
+        );
+    }
+
+    #[test]
+    fn dialog_cursor_movement() {
+        assert_eq!(
+            handle_key_dialog(make_key(KeyCode::Left)),
+            Action::DialogLeft
+        );
+        assert_eq!(
+            handle_key_dialog(make_key(KeyCode::Right)),
+            Action::DialogRight
+        );
+    }
+
+    // ── Picker mode ─────────────────────────────────────────────────────
+
+    #[test]
+    fn picker_navigation() {
+        assert_eq!(handle_key_picker(make_key(KeyCode::Up)), Action::PickerUp);
+        assert_eq!(
+            handle_key_picker(make_key(KeyCode::Down)),
+            Action::PickerDown
+        );
+        assert_eq!(
+            handle_key_picker(make_key(KeyCode::Tab)),
+            Action::PickerDown
+        );
+        assert_eq!(
+            handle_key_picker(make_key(KeyCode::BackTab)),
+            Action::PickerUp
+        );
+    }
+
+    #[test]
+    fn picker_confirm_cancel() {
+        assert_eq!(
+            handle_key_picker(make_key(KeyCode::Enter)),
+            Action::PickerConfirm
+        );
+        assert_eq!(
+            handle_key_picker(make_key(KeyCode::Esc)),
+            Action::PickerCancel
+        );
+    }
+
+    // ── Global search mode ──────────────────────────────────────────────
+
+    #[test]
+    fn global_search_navigation() {
+        assert_eq!(
+            handle_key_global_search(make_key(KeyCode::Up)),
+            Action::GlobalSearchUp
+        );
+        assert_eq!(
+            handle_key_global_search(make_key(KeyCode::Down)),
+            Action::GlobalSearchDown
+        );
+    }
+
+    #[test]
+    fn global_search_confirm_cancel() {
+        assert_eq!(
+            handle_key_global_search(make_key(KeyCode::Enter)),
+            Action::GlobalSearchConfirm
+        );
+        assert_eq!(
+            handle_key_global_search(make_key(KeyCode::Esc)),
+            Action::GlobalSearchCancel
+        );
+    }
+
+    #[test]
+    fn global_search_char_input() {
+        assert_eq!(
+            handle_key_global_search(make_key(KeyCode::Char('t'))),
+            Action::GlobalSearchChar('t')
+        );
+    }
+
+    // ── build_keybinding_map ────────────────────────────────────────────
+
+    #[test]
+    fn default_keybindings_include_arrows_and_search() {
+        let config = KeybindingsConfig::default();
+        let map = build_keybinding_map(&config);
+        // Arrow keys should be mapped by default
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Up,
+                modifiers: KeyModifiers::NONE,
+            }),
+            Some(&Action::CursorUp)
+        );
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Down,
+                modifiers: KeyModifiers::NONE,
+            }),
+            Some(&Action::CursorDown)
+        );
+        // "/" should start find
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('/'),
+                modifiers: KeyModifiers::NONE,
+            }),
+            Some(&Action::StartFind)
+        );
+    }
+
+    #[test]
+    fn user_override_replaces_default() {
+        let mut config = KeybindingsConfig::default();
+        config.search = Some("?".to_string()); // override "/" with "?"
+        let map = build_keybinding_map(&config);
+        // "/" should no longer be bound
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('/'),
+                modifiers: KeyModifiers::NONE,
+            }),
+            None
+        );
+        // "?" should now start find
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('?'),
+                modifiers: KeyModifiers::NONE,
+            }),
+            Some(&Action::StartFind)
+        );
+    }
+
+    #[test]
+    fn empty_string_disables_binding() {
+        let mut config = KeybindingsConfig::default();
+        config.search = Some(String::new()); // disable search key
+        let map = build_keybinding_map(&config);
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('/'),
+                modifiers: KeyModifiers::NONE,
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn opt_in_binding_added_when_configured() {
+        let mut config = KeybindingsConfig::default();
+        config.quit = Some("q".to_string());
+        let map = build_keybinding_map(&config);
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('q'),
+                modifiers: KeyModifiers::NONE,
+            }),
+            Some(&Action::Quit)
         );
     }
 }

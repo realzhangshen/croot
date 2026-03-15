@@ -118,4 +118,154 @@ mod tests {
         let action = handle_mouse(event, 0, 10, None, &mut tracker);
         assert_eq!(action, Action::ClickRow(1));
     }
+
+    #[test]
+    fn double_click_detected() {
+        let mut tracker = ClickTracker::new();
+        // First click
+        let event = make_left_click(5, 2);
+        let action = handle_mouse(event, 0, 10, None, &mut tracker);
+        assert_eq!(action, Action::ClickRow(2));
+        // Second click on same row immediately → double-click
+        let event2 = make_left_click(5, 2);
+        let action2 = handle_mouse(event2, 0, 10, None, &mut tracker);
+        assert_eq!(action2, Action::DoubleClick(2));
+    }
+
+    #[test]
+    fn double_click_resets_after_detection() {
+        let mut tracker = ClickTracker::new();
+        // First click + double click
+        handle_mouse(make_left_click(5, 2), 0, 10, None, &mut tracker);
+        handle_mouse(make_left_click(5, 2), 0, 10, None, &mut tracker);
+        // Third click should be a single click again (not triple)
+        let action = handle_mouse(make_left_click(5, 2), 0, 10, None, &mut tracker);
+        assert_eq!(action, Action::ClickRow(2));
+    }
+
+    #[test]
+    fn click_different_row_not_double_click() {
+        let mut tracker = ClickTracker::new();
+        handle_mouse(make_left_click(5, 2), 0, 10, None, &mut tracker);
+        let action = handle_mouse(make_left_click(5, 3), 0, 10, None, &mut tracker);
+        assert_eq!(action, Action::ClickRow(3));
+    }
+
+    #[test]
+    fn click_outside_tree_area_returns_none() {
+        let mut tracker = ClickTracker::new();
+        // Tree starts at y=2, height=5 → valid rows 2..7
+        let event = make_left_click(5, 0); // above tree area
+        let action = handle_mouse(event, 2, 5, None, &mut tracker);
+        assert_eq!(action, Action::None);
+        // Below tree area
+        let event2 = make_left_click(5, 8);
+        let action2 = handle_mouse(event2, 2, 5, None, &mut tracker);
+        assert_eq!(action2, Action::None);
+    }
+
+    #[test]
+    fn click_adjusts_for_tree_area_offset() {
+        let mut tracker = ClickTracker::new();
+        // Tree starts at y=3
+        let event = make_left_click(5, 5);
+        let action = handle_mouse(event, 3, 10, None, &mut tracker);
+        assert_eq!(action, Action::ClickRow(2)); // 5 - 3 = 2
+    }
+
+    #[test]
+    fn right_click_returns_right_click_action() {
+        let mut tracker = ClickTracker::new();
+        let event = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Right),
+            column: 10,
+            row: 5,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        let action = handle_mouse(event, 0, 10, None, &mut tracker);
+        assert_eq!(action, Action::RightClick(10, 5));
+    }
+
+    #[test]
+    fn scroll_up_in_tree_area() {
+        let mut tracker = ClickTracker::new();
+        let event = MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 5,
+            row: 3,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        let action = handle_mouse(event, 0, 10, None, &mut tracker);
+        assert_eq!(action, Action::ScrollUp(3));
+    }
+
+    #[test]
+    fn scroll_down_in_preview_area() {
+        let mut tracker = ClickTracker::new();
+        let event = MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 50, // in preview area
+            row: 3,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        let action = handle_mouse(event, 0, 10, Some(40), &mut tracker);
+        assert_eq!(action, Action::PreviewScrollDown(3));
+    }
+
+    #[test]
+    fn scroll_up_in_preview_area() {
+        let mut tracker = ClickTracker::new();
+        let event = MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 50,
+            row: 3,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        let action = handle_mouse(event, 0, 10, Some(40), &mut tracker);
+        assert_eq!(action, Action::PreviewScrollUp(3));
+    }
+
+    #[test]
+    fn drag_returns_drag_update() {
+        let mut tracker = ClickTracker::new();
+        let event = MouseEvent {
+            kind: MouseEventKind::Drag(MouseButton::Left),
+            column: 20,
+            row: 5,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        let action = handle_mouse(event, 0, 10, None, &mut tracker);
+        assert_eq!(action, Action::DragUpdate(20, 5));
+    }
+
+    #[test]
+    fn mouse_move_returns_hover() {
+        let mut tracker = ClickTracker::new();
+        let event = MouseEvent {
+            kind: MouseEventKind::Moved,
+            column: 10,
+            row: 3,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        let action = handle_mouse(event, 0, 10, None, &mut tracker);
+        assert_eq!(action, Action::Hover(10, 3));
+    }
+
+    #[test]
+    fn click_on_separator_starts_drag() {
+        let mut tracker = ClickTracker::new();
+        // Preview starts at col 40, separator at 39
+        let event = make_left_click(39, 5);
+        let action = handle_mouse(event, 0, 10, Some(40), &mut tracker);
+        assert_eq!(action, Action::SeparatorDragStart);
+    }
+
+    #[test]
+    fn click_in_preview_starts_selection() {
+        let mut tracker = ClickTracker::new();
+        // Click in the preview area (col >= preview_x)
+        let event = make_left_click(45, 5);
+        let action = handle_mouse(event, 0, 10, Some(40), &mut tracker);
+        assert_eq!(action, Action::SelectionStart(45, 5));
+    }
 }

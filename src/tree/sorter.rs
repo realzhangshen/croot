@@ -139,4 +139,67 @@ mod tests {
         sort_nodes(&mut nodes, true);
         assert_eq!(names(&nodes), vec!["file1.txt", "file2.txt", "file10.txt"]);
     }
+
+    // ── Property-based tests ────────────────────────────────────────────
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+        use std::cmp::Ordering;
+
+        proptest! {
+            #[test]
+            fn natural_cmp_reflexive(ref s in "[a-zA-Z0-9_.]{1,30}") {
+                prop_assert_eq!(natural_cmp(s, s), Ordering::Equal);
+            }
+
+            #[test]
+            fn natural_cmp_antisymmetric(
+                ref a in "[a-zA-Z0-9_.]{1,20}",
+                ref b in "[a-zA-Z0-9_.]{1,20}",
+            ) {
+                let ab = natural_cmp(a, b);
+                let ba = natural_cmp(b, a);
+                match ab {
+                    Ordering::Less => prop_assert_eq!(ba, Ordering::Greater),
+                    Ordering::Greater => prop_assert_eq!(ba, Ordering::Less),
+                    Ordering::Equal => prop_assert_eq!(ba, Ordering::Equal),
+                }
+            }
+
+            #[test]
+            fn natural_cmp_transitive(
+                ref a in "[a-z0-9]{1,10}",
+                ref b in "[a-z0-9]{1,10}",
+                ref c in "[a-z0-9]{1,10}",
+            ) {
+                let ab = natural_cmp(a, b);
+                let bc = natural_cmp(b, c);
+                let ac = natural_cmp(a, c);
+                // If a <= b and b <= c, then a <= c
+                if ab != Ordering::Greater && bc != Ordering::Greater {
+                    prop_assert_ne!(ac, Ordering::Greater);
+                }
+                // If a >= b and b >= c, then a >= c
+                if ab != Ordering::Less && bc != Ordering::Less {
+                    prop_assert_ne!(ac, Ordering::Less);
+                }
+            }
+
+            #[test]
+            fn sort_nodes_is_idempotent(
+                names in prop::collection::vec("[a-zA-Z0-9_.]{1,15}", 0..50),
+            ) {
+                let mut nodes: Vec<TreeNode> = names
+                    .iter()
+                    .map(|n| file_node(n))
+                    .collect();
+                sort_nodes(&mut nodes, true);
+                let first_sort: Vec<String> = nodes.iter().map(|n| n.name.clone()).collect();
+                sort_nodes(&mut nodes, true);
+                let second_sort: Vec<String> = nodes.iter().map(|n| n.name.clone()).collect();
+                prop_assert_eq!(first_sort, second_sort);
+            }
+        }
+    }
 }

@@ -107,46 +107,8 @@ pub struct App {
     >,
 }
 
-/// Check whether `target` (which may contain `..` or be absolute) resolves
-/// to a path within `root`. Works purely on path components — no filesystem access.
-fn is_path_within_root(root: &std::path::Path, target: &std::path::Path) -> bool {
-    use std::path::Component;
-    let mut normalized = PathBuf::new();
-    for comp in target.components() {
-        match comp {
-            Component::ParentDir => {
-                normalized.pop();
-            }
-            Component::CurDir => {}
-            _ => normalized.push(comp),
-        }
-    }
-    normalized.starts_with(root)
-}
-
-/// Strict path-within-root check that canonicalizes the nearest existing
-/// ancestor to defeat symlink-based path traversal.
-fn is_path_within_root_strict(root: &std::path::Path, target: &std::path::Path) -> bool {
-    // Fast lexical check first
-    if !is_path_within_root(root, target) {
-        return false;
-    }
-    // Canonicalize the nearest existing ancestor
-    let mut check = target.to_path_buf();
-    loop {
-        match check.canonicalize() {
-            Ok(canonical) => {
-                let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-                return canonical.starts_with(&canonical_root);
-            }
-            Err(_) => {
-                if !check.pop() {
-                    return false;
-                }
-            }
-        }
-    }
-}
+// Path validation functions are in crate::file_ops
+use crate::file_ops;
 
 impl App {
     pub fn new(
@@ -252,7 +214,11 @@ impl App {
 
         // Set up file watcher with 100ms debounce
         let (fs_tx, mut fs_rx) = mpsc::channel::<()>(1);
-        let _watcher = crate::watcher::setup_watcher(&self.root, fs_tx);
+        let watcher_result = crate::watcher::setup_watcher(&self.root, fs_tx);
+        if let Some(err) = watcher_result.error {
+            self.show_error(err);
+        }
+        let _watcher = watcher_result.debouncer;
         let mut watcher_active = true;
 
         // Channel for receiving loaded preview results
@@ -1840,66 +1806,16 @@ impl App {
         };
         self.input_mode = InputMode::Normal;
 
-        match dialog.kind {
-            DialogKind::NewFile => {
-                if !dialog.input.is_empty() {
-                    let new_path = dialog.context_path.join(&dialog.input);
-                    if is_path_within_root_strict(&self.root, &new_path) {
-                        // Create parent dirs if needed
-                        if let Some(parent) = new_path.parent() {
-                            if let Err(e) = std::fs::create_dir_all(parent) {
-                                self.show_error(format!("Create dirs failed: {e}"));
-                            }
-                        }
-                        if let Err(e) = std::fs::File::create(&new_path) {
-                            self.show_error(format!("Create file failed: {e}"));
-                        }
-                    } else {
-                        self.show_error("Path escapes workspace root".to_string());
-                    }
-                }
-            }
-            DialogKind::NewDir => {
-                if !dialog.input.is_empty() {
-                    let new_path = dialog.context_path.join(&dialog.input);
-                    if is_path_within_root_strict(&self.root, &new_path) {
-                        if let Err(e) = std::fs::create_dir_all(&new_path) {
-                            self.show_error(format!("Create directory failed: {e}"));
-                        }
-                    } else {
-                        self.show_error("Path escapes workspace root".to_string());
-                    }
-                }
-            }
-            DialogKind::Rename => {
-                if !dialog.input.is_empty() && dialog.input != dialog.target_name {
-                    if let Some(parent) = dialog.context_path.parent() {
-                        let new_path = parent.join(&dialog.input);
-                        if is_path_within_root_strict(&self.root, &new_path) {
-                            if let Err(e) = std::fs::rename(&dialog.context_path, &new_path) {
-                                self.show_error(format!("Rename failed: {e}"));
-                            }
-                        } else {
-                            self.show_error("Path escapes workspace root".to_string());
-                        }
-                    }
-                }
-            }
-            // R1: ConfirmDelete always deletes only the context_path node
-            DialogKind::ConfirmDelete => {
-                let path = &dialog.context_path;
-                if dialog.use_trash {
-                    if let Err(e) = trash::delete(path) {
-                        self.show_error(format!("Trash failed: {e}"));
-                    }
-                } else if path.is_dir() {
-                    if let Err(e) = std::fs::remove_dir_all(path) {
-                        self.show_error(format!("Delete failed: {e}"));
-                    }
-                } else if let Err(e) = std::fs::remove_file(path) {
-                    self.show_error(format!("Delete failed: {e}"));
-                }
-            }
+        let result = file_ops::execute_dialog(
+            &dialog.kind,
+            &dialog.input,
+            &dialog.target_name,
+            &dialog.context_path,
+            &self.root,
+            dialog.use_trash,
+        );
+        if let file_ops::FileOpResult::Error(msg) = result {
+            self.show_error(msg);
         }
 
         // Refresh tree after any file operation
@@ -1914,11 +1830,7 @@ impl App {
     /// Get the directory context for the currently selected node.
     fn current_dir(&self) -> PathBuf {
         if let Some(node) = self.tree.selected() {
-            if node.is_dir() {
-                node.path.clone()
-            } else {
-                node.path.parent().unwrap_or(&self.root).to_path_buf()
-            }
+            file_ops::dir_for_path(&node.path, node.is_dir(), &self.root)
         } else {
             self.root.clone()
         }
@@ -1927,11 +1839,7 @@ impl App {
     /// Get the directory for a given node (node itself if dir, or its parent).
     fn dir_for_node(&self, node_idx: usize) -> PathBuf {
         if let Some(node) = self.tree.nodes.get(node_idx) {
-            if node.is_dir() {
-                node.path.clone()
-            } else {
-                node.path.parent().unwrap_or(&self.root).to_path_buf()
-            }
+            file_ops::dir_for_path(&node.path, node.is_dir(), &self.root)
         } else {
             self.root.clone()
         }
@@ -2594,45 +2502,7 @@ mod tests {
         assert_eq!(parts, vec!["/path/to/my editor", "--wait"]);
     }
 
-    #[test]
-    fn rejects_absolute_path() {
-        let root = std::path::Path::new("/home/user/project");
-        let target = std::path::PathBuf::from("/etc/passwd");
-        assert!(
-            !is_path_within_root(root, &target),
-            "Absolute path outside root should be rejected"
-        );
-    }
-
-    #[test]
-    fn rejects_dotdot_escape() {
-        let root = std::path::Path::new("/home/user/project");
-        let target = root.join("../../etc");
-        assert!(
-            !is_path_within_root(root, &target),
-            "Path with ../ escaping root should be rejected"
-        );
-    }
-
-    #[test]
-    fn allows_normal_subpath() {
-        let root = std::path::Path::new("/home/user/project");
-        let target = root.join("subdir/file.txt");
-        assert!(
-            is_path_within_root(root, &target),
-            "Normal subpath should be allowed"
-        );
-    }
-
-    #[test]
-    fn allows_dotdot_within_root() {
-        let root = std::path::Path::new("/home/user/project");
-        let target = root.join("a/../b");
-        assert!(
-            is_path_within_root(root, &target),
-            "Path with ../ that stays within root should be allowed"
-        );
-    }
+    // Path validation tests are now in crate::file_ops::tests
 
     #[test]
     fn confirm_dialog_refreshes_search_state() {
@@ -2721,45 +2591,7 @@ mod tests {
         let _ = std::fs::remove_file(&test_file);
     }
 
-    // ── Bug 5: symlink path traversal ───────────────────────────────────
-
-    #[test]
-    fn test_is_path_within_root_strict_rejects_symlink_escape() {
-        use std::os::unix::fs::symlink;
-        let tmp = std::env::temp_dir().join("croot_symlink_test");
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(tmp.join("workspace")).unwrap();
-        std::fs::create_dir_all(tmp.join("outside")).unwrap();
-
-        // Create a symlink inside workspace pointing outside
-        let link_path = tmp.join("workspace/escape_link");
-        symlink(tmp.join("outside"), &link_path).unwrap();
-
-        let workspace = tmp.join("workspace");
-        let target = link_path.join("evil.txt");
-
-        // Lexical check passes (path looks like workspace/escape_link/evil.txt)
-        assert!(is_path_within_root(&workspace, &target));
-        // Strict check rejects (resolves through symlink to outside)
-        assert!(!is_path_within_root_strict(&workspace, &target));
-
-        // Cleanup
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
-
-    #[test]
-    fn test_is_path_within_root_strict_allows_normal_paths() {
-        let tmp = std::env::temp_dir().join("croot_strict_test");
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(tmp.join("workspace/subdir")).unwrap();
-
-        let workspace = tmp.join("workspace");
-        let target = workspace.join("subdir/new_file.txt");
-
-        assert!(is_path_within_root_strict(&workspace, &target));
-
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
+    // Symlink path traversal tests are now in crate::file_ops::tests
 
     // ── Bug 4: fd/rg shell-split ────────────────────────────────────────
 

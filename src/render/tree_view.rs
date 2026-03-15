@@ -978,6 +978,64 @@ mod tests {
         assert!(spans[0].style.add_modifier.contains(Modifier::UNDERLINED));
     }
 
+    // ── git status computation tests ──────────────────────────────────
+
+    #[test]
+    fn git_status_marker_modified_variants() {
+        assert_eq!(git_status_marker(GitStatus::Modified), "M");
+        assert_eq!(git_status_marker(GitStatus::StagedModified), "M");
+    }
+
+    #[test]
+    fn git_status_marker_added_variants() {
+        assert_eq!(git_status_marker(GitStatus::Added), "A");
+        assert_eq!(git_status_marker(GitStatus::StagedAdded), "A");
+    }
+
+    #[test]
+    fn git_status_marker_deleted_variants() {
+        assert_eq!(git_status_marker(GitStatus::Deleted), "D");
+        assert_eq!(git_status_marker(GitStatus::StagedDeleted), "D");
+    }
+
+    #[test]
+    fn git_status_marker_special() {
+        assert_eq!(git_status_marker(GitStatus::Untracked), "U");
+        assert_eq!(git_status_marker(GitStatus::Conflicted), "C");
+        assert_eq!(git_status_marker(GitStatus::Ignored), "");
+        assert_eq!(git_status_marker(GitStatus::Clean), "");
+    }
+
+    #[test]
+    fn git_status_style_staged_has_dim() {
+        let style = git_status_style(GitStatus::StagedModified);
+        assert!(style.add_modifier.contains(Modifier::DIM));
+        let style2 = git_status_style(GitStatus::StagedAdded);
+        assert!(style2.add_modifier.contains(Modifier::DIM));
+        let style3 = git_status_style(GitStatus::StagedDeleted);
+        assert!(style3.add_modifier.contains(Modifier::DIM));
+    }
+
+    #[test]
+    fn git_status_style_conflicted_has_bold() {
+        let style = git_status_style(GitStatus::Conflicted);
+        assert!(style.add_modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn git_status_style_clean_no_modifiers() {
+        let style = git_status_style(GitStatus::Clean);
+        assert!(!style.add_modifier.contains(Modifier::DIM));
+        assert!(!style.add_modifier.contains(Modifier::BOLD));
+    }
+
+    // ── format_size edge cases ──────────────────────────────────────────
+
+    #[test]
+    fn format_size_gigabytes() {
+        assert_eq!(format_size(2_200_000_000), "2.0G");
+    }
+
     #[test]
     fn precompute_filtered_guides_skips_oob_index() {
         use crate::tree::node::{NodeKind, TreeNode};
