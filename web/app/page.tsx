@@ -4,10 +4,10 @@ import { TerminalDemo } from "@/components/landing/TerminalDemo";
 
 export default function HomePage() {
   return (
-    <>
+    <div className="pb-16">
       <Hero />
       <TerminalDemo />
       <FeatureGrid />
-    </>
+    </div>
   );
 }

@@ -11,7 +11,7 @@ export default function DocsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-bg-surface">
+    <div className="flex-1 bg-bg-surface">
       <div className="flex items-center gap-2 border-b border-border bg-bg-surface px-4 py-3 min-[960px]:hidden">
         <MobileNav />
         <span className="text-sm font-medium text-text-muted">Documentation</span>
