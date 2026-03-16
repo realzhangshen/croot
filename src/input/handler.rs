@@ -798,4 +798,190 @@ mod tests {
             Some(&Action::Quit)
         );
     }
+
+    // ── Modifier key handling ────────────────────────────────────────────
+
+    #[test]
+    fn ctrl_modifier_keybinding() {
+        let mut config = KeybindingsConfig::default();
+        config.quit = Some("Ctrl+q".to_string());
+        let map = build_keybinding_map(&config);
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('q'),
+                modifiers: KeyModifiers::CONTROL,
+            }),
+            Some(&Action::Quit)
+        );
+    }
+
+    #[test]
+    fn alt_modifier_keybinding() {
+        let mut config = KeybindingsConfig::default();
+        config.toggle_preview = Some("Alt+p".to_string());
+        let map = build_keybinding_map(&config);
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('p'),
+                modifiers: KeyModifiers::ALT,
+            }),
+            Some(&Action::TogglePreview)
+        );
+    }
+
+    #[test]
+    fn function_key_binding() {
+        let mut config = KeybindingsConfig::default();
+        config.refresh = Some("F5".to_string());
+        let map = build_keybinding_map(&config);
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::F(5),
+                modifiers: KeyModifiers::NONE,
+            }),
+            Some(&Action::Refresh)
+        );
+    }
+
+    // ── Conflict resolution ──────────────────────────────────────────────
+
+    #[test]
+    fn last_binding_wins_on_conflict() {
+        let mut config = KeybindingsConfig::default();
+        // Both map to the same key "r"
+        config.refresh = Some("r".to_string());
+        config.rename = Some("r".to_string());
+        let map = build_keybinding_map(&config);
+        let binding = KeyBinding {
+            code: KeyCode::Char('r'),
+            modifiers: KeyModifiers::NONE,
+        };
+        // Last in opt-in list wins (rename comes after refresh)
+        assert_eq!(map.get(&binding), Some(&Action::RenameNode));
+    }
+
+    // ── Multiple opt-in bindings ─────────────────────────────────────────
+
+    #[test]
+    fn multiple_opt_in_bindings_coexist() {
+        let mut config = KeybindingsConfig::default();
+        config.new_file = Some("a".to_string());
+        config.new_dir = Some("A".to_string());
+        config.delete = Some("D".to_string());
+        let map = build_keybinding_map(&config);
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('a'),
+                modifiers: KeyModifiers::NONE,
+            }),
+            Some(&Action::NewFile)
+        );
+        // "A" parses to Char('a') + SHIFT
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('a'),
+                modifiers: KeyModifiers::SHIFT,
+            }),
+            Some(&Action::NewDir)
+        );
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('d'),
+                modifiers: KeyModifiers::SHIFT,
+            }),
+            Some(&Action::DeleteNode)
+        );
+    }
+
+    // ── handle_key with special keys ─────────────────────────────────────
+
+    #[test]
+    fn handle_key_enter_binding() {
+        let mut config = KeybindingsConfig::default();
+        config.enter = Some("Enter".to_string());
+        let map = build_keybinding_map(&config);
+        let action = handle_key(make_key(KeyCode::Enter), false, false, &map);
+        assert_eq!(action, Action::EnterKey);
+    }
+
+    #[test]
+    fn handle_key_space_binding() {
+        let mut config = KeybindingsConfig::default();
+        config.toggle = Some("Space".to_string());
+        let map = build_keybinding_map(&config);
+        let action = handle_key(make_key(KeyCode::Char(' ')), false, false, &map);
+        assert_eq!(action, Action::Toggle);
+    }
+
+    // ── Global search mode key mapping ───────────────────────────────────
+
+    #[test]
+    fn global_search_backspace() {
+        assert_eq!(
+            handle_key_global_search(make_key(KeyCode::Backspace)),
+            Action::GlobalSearchBackspace
+        );
+    }
+
+    #[test]
+    fn global_search_tab_goes_down() {
+        assert_eq!(
+            handle_key_global_search(make_key(KeyCode::Tab)),
+            Action::GlobalSearchDown
+        );
+    }
+
+    #[test]
+    fn global_search_backtab_goes_up() {
+        assert_eq!(
+            handle_key_global_search(make_key(KeyCode::BackTab)),
+            Action::GlobalSearchUp
+        );
+    }
+
+    #[test]
+    fn global_search_unknown_key_returns_none() {
+        assert_eq!(
+            handle_key_global_search(make_key(KeyCode::F(12))),
+            Action::None
+        );
+    }
+
+    // ── Dialog mode completeness ─────────────────────────────────────────
+
+    #[test]
+    fn dialog_backspace() {
+        assert_eq!(
+            handle_key_dialog(make_key(KeyCode::Backspace)),
+            Action::DialogBackspace
+        );
+    }
+
+    #[test]
+    fn dialog_unknown_key_returns_none() {
+        assert_eq!(handle_key_dialog(make_key(KeyCode::F(12))), Action::None);
+    }
+
+    // ── Picker mode completeness ─────────────────────────────────────────
+
+    #[test]
+    fn picker_char_input() {
+        assert_eq!(
+            handle_key_picker(make_key(KeyCode::Char('a'))),
+            Action::PickerChar('a')
+        );
+    }
+
+    #[test]
+    fn picker_backspace() {
+        assert_eq!(
+            handle_key_picker(make_key(KeyCode::Backspace)),
+            Action::PickerBackspace
+        );
+    }
+
+    #[test]
+    fn picker_unknown_key_returns_none() {
+        assert_eq!(handle_key_picker(make_key(KeyCode::F(12))), Action::None);
+    }
 }

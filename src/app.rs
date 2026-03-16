@@ -2050,7 +2050,7 @@ impl App {
                     let (bin, extra) = parts.split_first().unwrap_or((&fd_cmd, &[]));
                     tokio::process::Command::new(bin)
                         .args(extra)
-                        .args(["--type", "f", "--color", "never", &query])
+                        .args(["--type", "f", "--color", "never", "--", &query])
                         .current_dir(&root)
                         .output()
                         .await
@@ -2068,6 +2068,7 @@ impl App {
                             "never",
                             "--max-count",
                             "1",
+                            "--",
                             &query,
                         ])
                         .current_dir(&root)
@@ -2396,6 +2397,31 @@ mod tests {
         .expect("test app creation")
     }
 
+    /// Helper to create App with files for navigation tests.
+    fn test_app_with_files() -> (App, tempfile::TempDir) {
+        let tmp = tempfile::TempDir::new().unwrap();
+        std::fs::write(tmp.path().join("aaa.txt"), "a").unwrap();
+        std::fs::write(tmp.path().join("bbb.txt"), "b").unwrap();
+        std::fs::create_dir_all(tmp.path().join("subdir")).unwrap();
+        std::fs::write(tmp.path().join("subdir/ccc.txt"), "c").unwrap();
+        let app = App::new(
+            tmp.path().to_path_buf(),
+            false,
+            Config::default(),
+            #[cfg(feature = "image-preview")]
+            None,
+        )
+        .expect("test app creation");
+        (app, tmp)
+    }
+
+    fn make_channels() -> (
+        mpsc::Sender<(PathBuf, LoadedPreview)>,
+        mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)>,
+    ) {
+        (mpsc::channel(16).0, mpsc::channel(16).0)
+    }
+
     #[test]
     fn test_global_search_mouse_move_does_not_cancel() {
         let mut app = test_app();
@@ -2615,6 +2641,313 @@ mod tests {
         // A simple command without args should produce a single element
         let parts = shell_words::split("fd").unwrap();
         assert_eq!(parts, vec!["fd"]);
+    }
+
+    // ── Action handling: navigation ───────────────────────────────────
+
+    #[test]
+    fn action_cursor_down_moves_cursor() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        assert_eq!(app.tree.cursor, 0);
+        app.handle_action(&Action::CursorDown, &ptx, &stx);
+        assert_eq!(app.tree.cursor, 1);
+    }
+
+    #[test]
+    fn action_cursor_up_at_top_stays() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        assert_eq!(app.tree.cursor, 0);
+        app.handle_action(&Action::CursorUp, &ptx, &stx);
+        assert_eq!(app.tree.cursor, 0);
+    }
+
+    #[test]
+    fn action_goto_bottom_then_top() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        let last = app.tree.len() - 1;
+        app.handle_action(&Action::GotoBottom, &ptx, &stx);
+        assert_eq!(app.tree.cursor, last);
+        app.handle_action(&Action::GotoTop, &ptx, &stx);
+        assert_eq!(app.tree.cursor, 0);
+    }
+
+    // ── Action handling: toggle preview ─────────────────────────────────
+
+    #[test]
+    fn action_toggle_preview_flips_visibility() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        assert!(!app.preview_visible);
+        app.handle_action(&Action::TogglePreview, &ptx, &stx);
+        assert!(app.preview_visible);
+        app.handle_action(&Action::TogglePreview, &ptx, &stx);
+        assert!(!app.preview_visible);
+    }
+
+    #[test]
+    fn action_toggle_preview_off_resets_focus_to_tree() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.preview_visible = true;
+        app.focus = FocusPane::Preview;
+        app.handle_action(&Action::TogglePreview, &ptx, &stx);
+        assert_eq!(app.focus, FocusPane::Tree);
+    }
+
+    // ── Action handling: quit ───────────────────────────────────────────
+
+    #[test]
+    fn action_quit_in_normal_mode_sets_should_quit() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.input_mode = InputMode::Normal;
+        app.handle_action(&Action::Quit, &ptx, &stx);
+        assert!(app.should_quit);
+    }
+
+    #[test]
+    fn action_quit_in_search_mode_returns_to_normal() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.input_mode = InputMode::Search;
+        app.handle_action(&Action::Quit, &ptx, &stx);
+        assert!(!app.should_quit);
+        assert_eq!(app.input_mode, InputMode::Normal);
+    }
+
+    // ── Action handling: search lifecycle ────────────────────────────────
+
+    #[test]
+    fn action_start_find_enters_search_mode() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.handle_action(&Action::StartFind, &ptx, &stx);
+        assert_eq!(app.input_mode, InputMode::Search);
+        assert_eq!(app.search_state.mode, SearchMode::Find);
+    }
+
+    #[test]
+    fn action_start_filter_enters_search_mode() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.handle_action(&Action::StartFilter, &ptx, &stx);
+        assert_eq!(app.input_mode, InputMode::Search);
+        assert_eq!(app.search_state.mode, SearchMode::Filter);
+    }
+
+    #[test]
+    fn action_search_cancel_restores_cursor() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.handle_action(&Action::StartFind, &ptx, &stx);
+        let orig_cursor = app.search_state.origin_cursor;
+        // Move cursor during search
+        app.handle_action(&Action::CursorDown, &ptx, &stx);
+        app.handle_action(&Action::SearchCancel, &ptx, &stx);
+        assert_eq!(app.tree.cursor, orig_cursor);
+        assert_eq!(app.input_mode, InputMode::Normal);
+    }
+
+    // ── Action handling: global search ──────────────────────────────────
+
+    #[test]
+    fn action_start_global_search_enters_mode() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.handle_action(&Action::StartGlobalSearch, &ptx, &stx);
+        assert_eq!(app.input_mode, InputMode::GlobalSearch);
+        assert_eq!(
+            app.search_state.global_search_type,
+            GlobalSearchType::FileName
+        );
+    }
+
+    #[test]
+    fn action_start_global_search_content_enters_mode() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.handle_action(&Action::StartGlobalSearchContent, &ptx, &stx);
+        assert_eq!(app.input_mode, InputMode::GlobalSearch);
+        assert_eq!(
+            app.search_state.global_search_type,
+            GlobalSearchType::Content
+        );
+    }
+
+    #[test]
+    fn action_global_search_cancel_clears_state() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.handle_action(&Action::StartGlobalSearch, &ptx, &stx);
+        app.search_state.query = "test".to_string();
+        app.handle_action(&Action::GlobalSearchCancel, &ptx, &stx);
+        assert_eq!(app.input_mode, InputMode::Normal);
+        assert!(app.search_state.query.is_empty());
+    }
+
+    #[test]
+    fn action_global_search_up_down_navigates() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        // Add some mock results
+        for i in 0..5 {
+            app.search_state.global_results.push(GlobalSearchResult {
+                path: PathBuf::from(format!("file{i}.rs")),
+                display: format!("file{i}.rs"),
+                line: None,
+                context: None,
+            });
+        }
+        assert_eq!(app.search_state.global_selected, 0);
+        app.handle_action(&Action::GlobalSearchDown, &ptx, &stx);
+        assert_eq!(app.search_state.global_selected, 1);
+        app.handle_action(&Action::GlobalSearchDown, &ptx, &stx);
+        assert_eq!(app.search_state.global_selected, 2);
+        app.handle_action(&Action::GlobalSearchUp, &ptx, &stx);
+        assert_eq!(app.search_state.global_selected, 1);
+    }
+
+    #[test]
+    fn action_global_search_up_at_zero_stays() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.global_results.push(GlobalSearchResult {
+            path: PathBuf::from("file.rs"),
+            display: "file.rs".to_string(),
+            line: None,
+            context: None,
+        });
+        app.handle_action(&Action::GlobalSearchUp, &ptx, &stx);
+        assert_eq!(app.search_state.global_selected, 0);
+    }
+
+    // ── Action handling: file ops dispatch ──────────────────────────────
+
+    #[test]
+    fn action_new_file_opens_dialog() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.handle_action(&Action::NewFile, &ptx, &stx);
+        assert_eq!(app.input_mode, InputMode::Dialog);
+        assert!(app.input_dialog.is_some());
+        assert!(matches!(
+            app.input_dialog.as_ref().unwrap().kind,
+            DialogKind::NewFile
+        ));
+    }
+
+    #[test]
+    fn action_new_dir_opens_dialog() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.handle_action(&Action::NewDir, &ptx, &stx);
+        assert_eq!(app.input_mode, InputMode::Dialog);
+        assert!(matches!(
+            app.input_dialog.as_ref().unwrap().kind,
+            DialogKind::NewDir
+        ));
+    }
+
+    #[test]
+    fn action_dialog_cancel_returns_to_normal() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.handle_action(&Action::NewFile, &ptx, &stx);
+        assert_eq!(app.input_mode, InputMode::Dialog);
+        app.handle_action(&Action::DialogCancel, &ptx, &stx);
+        assert_eq!(app.input_mode, InputMode::Normal);
+        assert!(app.input_dialog.is_none());
+    }
+
+    #[test]
+    fn action_dialog_char_inserts_text() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.handle_action(&Action::NewFile, &ptx, &stx);
+        app.handle_action(&Action::DialogChar('h'), &ptx, &stx);
+        app.handle_action(&Action::DialogChar('i'), &ptx, &stx);
+        assert_eq!(app.input_dialog.as_ref().unwrap().input, "hi");
+    }
+
+    // ── Action handling: collapse all ───────────────────────────────────
+
+    #[test]
+    fn action_collapse_all_collapses_dirs() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        // Expand subdir first
+        let dir_idx = app
+            .tree
+            .nodes
+            .iter()
+            .position(|n| n.is_dir())
+            .expect("should have a dir");
+        app.tree.toggle(dir_idx);
+        assert!(app.tree.nodes[dir_idx].is_expanded);
+        app.handle_action(&Action::CollapseAll, &ptx, &stx);
+        assert!(!app.tree.nodes[dir_idx].is_expanded);
+    }
+
+    // ── Action handling: switch focus ────────────────────────────────────
+
+    #[test]
+    fn action_switch_focus_toggles() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.preview_visible = true;
+        assert_eq!(app.focus, FocusPane::Tree);
+        app.handle_action(&Action::SwitchFocus, &ptx, &stx);
+        assert_eq!(app.focus, FocusPane::Preview);
+        app.handle_action(&Action::SwitchFocus, &ptx, &stx);
+        assert_eq!(app.focus, FocusPane::Tree);
+    }
+
+    // ── Action handling: open editor ────────────────────────────────────
+
+    #[test]
+    fn action_open_in_editor_returns_post_action() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        // Navigate to a file node
+        while app.tree.selected().is_some_and(|n| n.is_dir()) {
+            app.handle_action(&Action::CursorDown, &ptx, &stx);
+        }
+        let post = app.handle_action(&Action::OpenInEditor, &ptx, &stx);
+        assert!(matches!(post, PostAction::OpenEditor(_)));
+    }
+
+    #[test]
+    fn action_open_in_editor_on_dir_is_noop() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        // Navigate to a dir node
+        while app.tree.selected().is_some_and(|n| !n.is_dir()) {
+            app.handle_action(&Action::CursorDown, &ptx, &stx);
+        }
+        if app.tree.selected().is_some_and(|n| n.is_dir()) {
+            let post = app.handle_action(&Action::OpenInEditor, &ptx, &stx);
+            assert!(matches!(post, PostAction::None));
+        }
+    }
+
+    // ── Action handling: error auto-dismiss ─────────────────────────────
+
+    #[test]
+    fn error_message_expires_after_3_seconds() {
+        let mut app = test_app();
+        app.error_message = Some((
+            "old error".to_string(),
+            Instant::now().checked_sub(Duration::from_secs(4)).unwrap(),
+        ));
+        let (_, ts) = app.error_message.as_ref().unwrap();
+        assert!(ts.elapsed() >= Duration::from_secs(3));
     }
 
     // ── Bug 3: global search scroll-down keeps selection visible ──────

@@ -135,123 +135,49 @@ pub const DEFAULT_COLORS: ColorDefaults = ColorDefaults {
     popup_selected_danger_bg: "red",
 };
 
+/// Resolve a user color override, falling back to the default if unset.
+fn resolve_color(user: Option<&String>, default: &str) -> Option<String> {
+    user.cloned().or_else(|| Some(default.to_string()))
+}
+
 impl ColorConfig {
     /// Return a copy with `None` fields filled in with built-in defaults.
     #[must_use]
     pub fn resolved(&self) -> Self {
+        macro_rules! r {
+            ($field:ident) => {
+                resolve_color(self.$field.as_ref(), DEFAULT_COLORS.$field)
+            };
+        }
         Self {
-            git_modified: self
-                .git_modified
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.git_modified.to_string())),
-            git_added: self
-                .git_added
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.git_added.to_string())),
-            git_deleted: self
-                .git_deleted
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.git_deleted.to_string())),
-            git_ignored: self
-                .git_ignored
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.git_ignored.to_string())),
-            git_conflicted: self
-                .git_conflicted
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.git_conflicted.to_string())),
-            git_staged_modified: self
-                .git_staged_modified
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.git_staged_modified.to_string())),
-            git_staged_added: self
-                .git_staged_added
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.git_staged_added.to_string())),
-            git_staged_deleted: self
-                .git_staged_deleted
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.git_staged_deleted.to_string())),
-            unfocused_header_bg: self
-                .unfocused_header_bg
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.unfocused_header_bg.to_string())),
-            unfocused_header_fg: self
-                .unfocused_header_fg
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.unfocused_header_fg.to_string())),
-            hex_values: self
-                .hex_values
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.hex_values.to_string())),
-            hex_ascii: self
-                .hex_ascii
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.hex_ascii.to_string())),
-            preview_dir_name: self
-                .preview_dir_name
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.preview_dir_name.to_string())),
-            inline_code: self
-                .inline_code
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.inline_code.to_string())),
-            tree_line: self
-                .tree_line
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.tree_line.to_string())),
-            status_bar_bg: self
-                .status_bar_bg
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.status_bar_bg.to_string())),
-            status_bar_fg: self
-                .status_bar_fg
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.status_bar_fg.to_string())),
-            dir_color: self
-                .dir_color
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.dir_color.to_string())),
-            default_fg: self
-                .default_fg
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.default_fg.to_string())),
-            find_match: self
-                .find_match
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.find_match.to_string())),
-            popup_fg: self
-                .popup_fg
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.popup_fg.to_string())),
-            popup_bg: self
-                .popup_bg
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.popup_bg.to_string())),
-            popup_accent: self
-                .popup_accent
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.popup_accent.to_string())),
-            popup_border_fg: self
-                .popup_border_fg
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.popup_border_fg.to_string())),
-            popup_dim_fg: self
-                .popup_dim_fg
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.popup_dim_fg.to_string())),
-            popup_input_bg: self
-                .popup_input_bg
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.popup_input_bg.to_string())),
-            popup_input_fg: self
-                .popup_input_fg
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.popup_input_fg.to_string())),
-            popup_selected_danger_bg: self
-                .popup_selected_danger_bg
-                .clone()
-                .or_else(|| Some(DEFAULT_COLORS.popup_selected_danger_bg.to_string())),
+            git_modified: r!(git_modified),
+            git_added: r!(git_added),
+            git_deleted: r!(git_deleted),
+            git_ignored: r!(git_ignored),
+            git_conflicted: r!(git_conflicted),
+            git_staged_modified: r!(git_staged_modified),
+            git_staged_added: r!(git_staged_added),
+            git_staged_deleted: r!(git_staged_deleted),
+            unfocused_header_bg: r!(unfocused_header_bg),
+            unfocused_header_fg: r!(unfocused_header_fg),
+            hex_values: r!(hex_values),
+            hex_ascii: r!(hex_ascii),
+            preview_dir_name: r!(preview_dir_name),
+            inline_code: r!(inline_code),
+            tree_line: r!(tree_line),
+            status_bar_bg: r!(status_bar_bg),
+            status_bar_fg: r!(status_bar_fg),
+            dir_color: r!(dir_color),
+            default_fg: r!(default_fg),
+            find_match: r!(find_match),
+            popup_fg: r!(popup_fg),
+            popup_bg: r!(popup_bg),
+            popup_accent: r!(popup_accent),
+            popup_border_fg: r!(popup_border_fg),
+            popup_dim_fg: r!(popup_dim_fg),
+            popup_input_bg: r!(popup_input_bg),
+            popup_input_fg: r!(popup_input_fg),
+            popup_selected_danger_bg: r!(popup_selected_danger_bg),
         }
     }
 }

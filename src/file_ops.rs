@@ -40,7 +40,9 @@ pub fn is_path_within_root_strict(root: &Path, target: &Path) -> bool {
     loop {
         match check.canonicalize() {
             Ok(canonical) => {
-                let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+                let Ok(canonical_root) = root.canonicalize() else {
+                    return false;
+                };
                 return canonical.starts_with(&canonical_root);
             }
             Err(_) => {
@@ -141,6 +143,7 @@ pub fn dir_for_path(path: &Path, is_dir: bool, root: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     // ── Path validation ─────────────────────────────────────────────────
 
@@ -175,99 +178,101 @@ mod tests {
     #[test]
     fn strict_rejects_symlink_escape() {
         use std::os::unix::fs::symlink;
-        let tmp = std::env::temp_dir().join("croot_fileops_symlink_test");
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(tmp.join("workspace")).unwrap();
-        std::fs::create_dir_all(tmp.join("outside")).unwrap();
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join("workspace")).unwrap();
+        std::fs::create_dir_all(tmp.path().join("outside")).unwrap();
 
-        let link_path = tmp.join("workspace/escape_link");
-        symlink(tmp.join("outside"), &link_path).unwrap();
+        let link_path = tmp.path().join("workspace/escape_link");
+        symlink(tmp.path().join("outside"), &link_path).unwrap();
 
-        let workspace = tmp.join("workspace");
+        let workspace = tmp.path().join("workspace");
         let target = link_path.join("evil.txt");
 
         assert!(is_path_within_root(&workspace, &target));
         assert!(!is_path_within_root_strict(&workspace, &target));
-
-        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
     fn strict_allows_normal_paths() {
-        let tmp = std::env::temp_dir().join("croot_fileops_strict_test");
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(tmp.join("workspace/subdir")).unwrap();
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join("workspace/subdir")).unwrap();
 
-        let workspace = tmp.join("workspace");
+        let workspace = tmp.path().join("workspace");
         let target = workspace.join("subdir/new_file.txt");
 
         assert!(is_path_within_root_strict(&workspace, &target));
+    }
 
-        let _ = std::fs::remove_dir_all(&tmp);
+    #[test]
+    fn strict_returns_false_when_root_cannot_be_canonicalized() {
+        let tmp = TempDir::new().unwrap();
+        let workspace = tmp.path().join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+
+        // Use a nonexistent root — canonicalize will fail
+        let bad_root = Path::new("/nonexistent_croot_test_root_xyz");
+        let target = workspace.join("file.txt");
+
+        // Should return false because root can't be canonicalized
+        assert!(!is_path_within_root_strict(bad_root, &target));
     }
 
     // ── execute_dialog ──────────────────────────────────────────────────
 
     #[test]
     fn new_file_creates_file() {
-        let tmp = std::env::temp_dir().join("croot_fileops_newfile");
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
 
-        let result = execute_dialog(&DialogKind::NewFile, "test.txt", "", &tmp, &tmp, false);
+        let result = execute_dialog(&DialogKind::NewFile, "test.txt", "", dir, dir, false);
         assert!(matches!(result, FileOpResult::Ok));
-        assert!(tmp.join("test.txt").exists());
-
-        let _ = std::fs::remove_dir_all(&tmp);
+        assert!(dir.join("test.txt").exists());
     }
 
     #[test]
     fn new_file_empty_input_is_noop() {
-        let tmp = std::env::temp_dir();
-        let result = execute_dialog(&DialogKind::NewFile, "", "", &tmp, &tmp, false);
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let result = execute_dialog(&DialogKind::NewFile, "", "", dir, dir, false);
         assert!(matches!(result, FileOpResult::Noop));
     }
 
     #[test]
     fn new_file_rejects_path_escape() {
-        let tmp = std::env::temp_dir().join("croot_fileops_escape");
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
 
         let result = execute_dialog(
             &DialogKind::NewFile,
             "../../escape.txt",
             "",
-            &tmp,
-            &tmp,
+            dir,
+            dir,
             false,
         );
         assert!(matches!(result, FileOpResult::Error(_)));
-
-        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
     fn new_dir_creates_directory() {
-        let tmp = std::env::temp_dir().join("croot_fileops_newdir");
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
 
-        let result = execute_dialog(&DialogKind::NewDir, "subdir", "", &tmp, &tmp, false);
+        let result = execute_dialog(&DialogKind::NewDir, "subdir", "", dir, dir, false);
         assert!(matches!(result, FileOpResult::Ok));
-        assert!(tmp.join("subdir").is_dir());
-
-        let _ = std::fs::remove_dir_all(&tmp);
+        assert!(dir.join("subdir").is_dir());
     }
 
     #[test]
     fn rename_same_name_is_noop() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
         let result = execute_dialog(
             &DialogKind::Rename,
             "same.txt",
             "same.txt",
-            &std::env::temp_dir().join("same.txt"),
-            &std::env::temp_dir(),
+            &dir.join("same.txt"),
+            dir,
             false,
         );
         assert!(matches!(result, FileOpResult::Noop));
@@ -275,32 +280,30 @@ mod tests {
 
     #[test]
     fn rename_nonexistent_returns_error() {
-        let tmp = std::env::temp_dir().join("croot_fileops_rename_test");
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
 
         let result = execute_dialog(
             &DialogKind::Rename,
             "new_name.txt",
             "old_name.txt",
-            &tmp.join("old_name.txt"),
-            &tmp,
+            &dir.join("old_name.txt"),
+            dir,
             false,
         );
         assert!(matches!(result, FileOpResult::Error(_)));
-
-        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
     fn delete_nonexistent_returns_error() {
-        let fake_path = std::env::temp_dir().join("croot_fileops_ghost_delete");
+        let tmp = TempDir::new().unwrap();
+        let fake_path = tmp.path().join("ghost_file");
         let result = execute_dialog(
             &DialogKind::ConfirmDelete,
             "",
             "",
             &fake_path,
-            &std::env::temp_dir(),
+            tmp.path(),
             false,
         );
         assert!(matches!(result, FileOpResult::Error(_)));
@@ -308,17 +311,14 @@ mod tests {
 
     #[test]
     fn delete_file_succeeds() {
-        let tmp = std::env::temp_dir().join("croot_fileops_delete_file");
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
-        let file = tmp.join("delete_me.txt");
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let file = dir.join("delete_me.txt");
         std::fs::write(&file, "content").unwrap();
 
-        let result = execute_dialog(&DialogKind::ConfirmDelete, "", "", &file, &tmp, false);
+        let result = execute_dialog(&DialogKind::ConfirmDelete, "", "", &file, dir, false);
         assert!(matches!(result, FileOpResult::Ok));
         assert!(!file.exists());
-
-        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     // ── dir_for_path ────────────────────────────────────────────────────

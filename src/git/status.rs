@@ -173,6 +173,7 @@ fn convert_status(status: git2::Status) -> GitStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tree::node::{NodeKind, TreeNode};
 
     // --- convert_status tests ---
 
@@ -326,5 +327,114 @@ mod tests {
             state.status_for(Path::new("/repo/unknown.txt"), false),
             GitStatus::Clean
         );
+    }
+
+    // --- apply_to_nodes tests ---
+
+    #[test]
+    fn apply_to_nodes_sets_file_statuses() {
+        let state = make_state(
+            "/repo",
+            vec![
+                ("/repo/src/main.rs", GitStatus::Modified),
+                ("/repo/src/lib.rs", GitStatus::StagedAdded),
+            ],
+            vec![],
+        );
+        let mut nodes = vec![
+            TreeNode::new(PathBuf::from("/repo/src/main.rs"), NodeKind::File, 1),
+            TreeNode::new(PathBuf::from("/repo/src/lib.rs"), NodeKind::File, 1),
+            TreeNode::new(PathBuf::from("/repo/src/other.rs"), NodeKind::File, 1),
+        ];
+        state.apply_to_nodes(&mut nodes);
+        assert_eq!(nodes[0].git_status, GitStatus::Modified);
+        assert_eq!(nodes[1].git_status, GitStatus::StagedAdded);
+        assert_eq!(nodes[2].git_status, GitStatus::Clean);
+    }
+
+    #[test]
+    fn apply_to_nodes_sets_dir_statuses() {
+        let state = make_state("/repo", vec![], vec![("/repo/src", GitStatus::Modified)]);
+        let mut nodes = vec![TreeNode::new(
+            PathBuf::from("/repo/src"),
+            NodeKind::Directory,
+            1,
+        )];
+        state.apply_to_nodes(&mut nodes);
+        assert_eq!(nodes[0].git_status, GitStatus::Modified);
+    }
+
+    #[test]
+    fn apply_to_nodes_propagates_ignored_to_children() {
+        let state = make_state("/repo", vec![("/repo/vendor", GitStatus::Ignored)], vec![]);
+        let mut nodes = vec![TreeNode::new(
+            PathBuf::from("/repo/vendor/pkg/file.go"),
+            NodeKind::File,
+            3,
+        )];
+        state.apply_to_nodes(&mut nodes);
+        assert_eq!(nodes[0].git_status, GitStatus::Ignored);
+    }
+
+    // --- status_for edge cases ---
+
+    #[test]
+    fn status_for_dir_falls_back_to_file_statuses() {
+        // git2 reports some dirs (like ignored dirs) in file_statuses
+        let state = make_state(
+            "/repo",
+            vec![("/repo/build", GitStatus::Ignored)],
+            vec![], // no dir_statuses entry
+        );
+        assert_eq!(
+            state.status_for(Path::new("/repo/build"), true),
+            GitStatus::Ignored
+        );
+    }
+
+    #[test]
+    fn status_for_dir_prefers_dir_statuses_over_file() {
+        let state = make_state(
+            "/repo",
+            vec![("/repo/src", GitStatus::Ignored)],
+            vec![("/repo/src", GitStatus::Modified)],
+        );
+        // dir_statuses should take priority for directories
+        assert_eq!(
+            state.status_for(Path::new("/repo/src"), true),
+            GitStatus::Modified
+        );
+    }
+
+    // --- convert_status edge cases ---
+
+    #[test]
+    fn wt_renamed_maps_to_modified() {
+        assert_eq!(
+            convert_status(git2::Status::WT_RENAMED),
+            GitStatus::Modified
+        );
+    }
+
+    #[test]
+    fn index_renamed_maps_to_staged_modified() {
+        assert_eq!(
+            convert_status(git2::Status::INDEX_RENAMED),
+            GitStatus::StagedModified
+        );
+    }
+
+    #[test]
+    fn conflicted_takes_priority_over_other_flags() {
+        // Even with other flags set, CONFLICTED should win
+        let status = git2::Status::CONFLICTED | git2::Status::WT_MODIFIED;
+        assert_eq!(convert_status(status), GitStatus::Conflicted);
+    }
+
+    #[test]
+    fn wt_changes_take_priority_over_index() {
+        // WT_MODIFIED + INDEX_NEW should show as Modified (unstaged wins)
+        let status = git2::Status::WT_MODIFIED | git2::Status::INDEX_NEW;
+        assert_eq!(convert_status(status), GitStatus::Modified);
     }
 }
