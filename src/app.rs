@@ -103,6 +103,8 @@ pub struct App {
     error_message: Option<(String, Instant)>,
     // Channel for receiving branch switch results
     branch_switch_rx: Option<mpsc::Receiver<BranchSwitchResult>>,
+    // Cached terminal area from last draw, used by mouse handlers
+    last_terminal_area: ratatui::layout::Rect,
     // Image preview support
     #[cfg(feature = "image-preview")]
     image_picker: Option<ratatui_image::picker::Picker>,
@@ -178,6 +180,7 @@ impl App {
             status_bar_branch_region: None,
             error_message: None,
             branch_switch_rx: None,
+            last_terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24),
             #[cfg(feature = "image-preview")]
             image_picker,
             #[cfg(feature = "image-preview")]
@@ -489,6 +492,7 @@ impl App {
 
     fn draw(&mut self, frame: &mut ratatui::Frame) {
         let size = frame.area();
+        self.last_terminal_area = size;
 
         let show_search_bar = self.input_mode == InputMode::Search
             || (!self.search_state.is_empty() && self.search_state.mode != SearchMode::Global);
@@ -1459,8 +1463,7 @@ impl App {
     fn handle_picker_mouse(&mut self, mouse: crossterm::event::MouseEvent) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
 
-        let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
-        let area = ratatui::layout::Rect::new(0, 0, cols, rows);
+        let area = self.last_terminal_area;
 
         let layout = match self.picker_state.as_ref().and_then(|p| p.layout(area)) {
             Some(l) => l,
@@ -1646,8 +1649,7 @@ impl App {
         }
 
         // Check if click is outside the dialog area
-        let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
-        let area = ratatui::layout::Rect::new(0, 0, cols, rows);
+        let area = self.last_terminal_area;
 
         if let Some(ref dialog) = self.input_dialog {
             let dialog_rect = crate::render::input_dialog::input_dialog_rect(area, &dialog.kind);
@@ -2360,8 +2362,7 @@ impl App {
         }
 
         // Compute overlay rect (shared with GlobalSearchOverlay::render)
-        let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
-        let area = ratatui::layout::Rect::new(0, 0, cols, rows);
+        let area = self.last_terminal_area;
         let overlay = crate::render::global_search::global_search_rect(area);
 
         let inside = mouse.column >= overlay.x

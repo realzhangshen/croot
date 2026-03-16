@@ -121,6 +121,11 @@ impl ResolvedColors {
     }
 }
 
+/// Global color palette. Must be initialized exactly once via `init()` before
+/// any `palette()` call. Subsequent `init()` calls are silently ignored by
+/// `OnceLock` — this is fine for production (single init at startup) but means
+/// tests that need custom colors should construct `ResolvedColors::from_config()`
+/// directly rather than going through the global.
 static COLORS: OnceLock<ResolvedColors> = OnceLock::new();
 
 fn palette() -> &'static ResolvedColors {
