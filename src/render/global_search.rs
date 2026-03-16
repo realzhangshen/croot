@@ -5,6 +5,20 @@ use super::colors;
 use super::input_dialog::draw_border;
 use crate::render::search_bar::{GlobalSearchType, SearchState};
 
+/// Compute the centered overlay rect for the global search dialog.
+/// Shared between render and mouse-hit-test to avoid layout drift.
+pub fn global_search_rect(area: Rect) -> Rect {
+    let width = (area.width * 3 / 5)
+        .max(40)
+        .min(area.width.saturating_sub(4));
+    let height = (area.height * 3 / 5)
+        .max(10)
+        .min(area.height.saturating_sub(4));
+    let x = area.x + (area.width.saturating_sub(width)) / 2;
+    let y = area.y + (area.height.saturating_sub(height)) / 2;
+    Rect::new(x, y, width, height)
+}
+
 /// Overlay widget for global file/content search (fd/rg).
 pub struct GlobalSearchOverlay<'a> {
     pub state: &'a SearchState,
@@ -17,16 +31,7 @@ impl Widget for GlobalSearchOverlay<'_> {
             return;
         }
 
-        // Dialog dimensions: centered, ~60% width, ~60% height
-        let width = (area.width * 3 / 5)
-            .max(40)
-            .min(area.width.saturating_sub(4));
-        let height = (area.height * 3 / 5)
-            .max(10)
-            .min(area.height.saturating_sub(4));
-        let x = area.x + (area.width.saturating_sub(width)) / 2;
-        let y = area.y + (area.height.saturating_sub(height)) / 2;
-        let dialog = Rect::new(x, y, width, height);
+        let dialog = global_search_rect(area);
 
         let base = colors::popup_base();
         let border_style = colors::popup_border();

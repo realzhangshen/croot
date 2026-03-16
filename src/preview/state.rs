@@ -311,4 +311,109 @@ mod tests {
         state.clear();
         assert!(state.image_state.is_none());
     }
+
+    // --- extract_line_range tests ---
+
+    fn span(s: &str) -> StyledSpan {
+        (s.to_string(), Style::default())
+    }
+
+    #[test]
+    fn extract_line_range_full_span() {
+        let spans = vec![span("hello")];
+        assert_eq!(extract_line_range(&spans, 0, usize::MAX), "hello");
+    }
+
+    #[test]
+    fn extract_line_range_substring() {
+        let spans = vec![span("hello world")];
+        assert_eq!(extract_line_range(&spans, 2, 7), "llo w");
+    }
+
+    #[test]
+    fn extract_line_range_multi_span() {
+        let spans = vec![span("ab"), span("cd"), span("ef")];
+        assert_eq!(extract_line_range(&spans, 1, 5), "bcde");
+    }
+
+    #[test]
+    fn extract_line_range_cjk_characters() {
+        // CJK characters are 2 display columns wide
+        let spans = vec![span("你好世界")]; // 8 display columns
+                                            // col 0-1: 你, col 2-3: 好, col 4-5: 世, col 6-7: 界
+        assert_eq!(extract_line_range(&spans, 0, 4), "你好");
+        assert_eq!(extract_line_range(&spans, 2, 6), "好世");
+    }
+
+    #[test]
+    fn extract_line_range_empty() {
+        let spans: Vec<StyledSpan> = vec![];
+        assert_eq!(extract_line_range(&spans, 0, 10), "");
+    }
+
+    // --- extract_selected_text tests ---
+
+    fn state_with_content(lines: Vec<Vec<StyledSpan>>) -> PreviewState {
+        let mut s = PreviewState::new();
+        s.total_lines = lines.len();
+        s.content = lines;
+        s.kind = PreviewKind::Text;
+        s
+    }
+
+    #[test]
+    fn extract_selected_text_single_line() {
+        let mut state = state_with_content(vec![vec![span("hello world")]]);
+        state.selection.anchor = Some(ContentPos { line: 0, col: 2 });
+        state.selection.cursor = Some(ContentPos { line: 0, col: 7 });
+        assert_eq!(state.extract_selected_text().unwrap(), "llo w");
+    }
+
+    #[test]
+    fn extract_selected_text_multi_line() {
+        let mut state = state_with_content(vec![
+            vec![span("line one")],
+            vec![span("line two")],
+            vec![span("line three")],
+        ]);
+        state.selection.anchor = Some(ContentPos { line: 0, col: 5 });
+        state.selection.cursor = Some(ContentPos { line: 2, col: 4 });
+        assert_eq!(
+            state.extract_selected_text().unwrap(),
+            "one\nline two\nline"
+        );
+    }
+
+    #[test]
+    fn extract_selected_text_reversed_selection() {
+        let mut state = state_with_content(vec![vec![span("abcdef")]]);
+        // Drag upward: cursor before anchor
+        state.selection.anchor = Some(ContentPos { line: 0, col: 4 });
+        state.selection.cursor = Some(ContentPos { line: 0, col: 1 });
+        assert_eq!(state.extract_selected_text().unwrap(), "bcd");
+    }
+
+    #[test]
+    fn extract_selected_text_same_position_returns_none() {
+        let mut state = state_with_content(vec![vec![span("hello")]]);
+        state.selection.anchor = Some(ContentPos { line: 0, col: 3 });
+        state.selection.cursor = Some(ContentPos { line: 0, col: 3 });
+        assert!(state.extract_selected_text().is_none());
+    }
+
+    #[test]
+    fn extract_selected_text_no_selection_returns_none() {
+        let state = state_with_content(vec![vec![span("hello")]]);
+        assert!(state.extract_selected_text().is_none());
+    }
+
+    #[test]
+    fn extract_selected_text_past_content_len() {
+        let mut state = state_with_content(vec![vec![span("only line")]]);
+        state.selection.anchor = Some(ContentPos { line: 0, col: 0 });
+        state.selection.cursor = Some(ContentPos { line: 5, col: 0 });
+        // Should not panic; extracts what's available
+        let text = state.extract_selected_text().unwrap();
+        assert!(text.contains("only line"));
+    }
 }

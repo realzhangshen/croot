@@ -1617,19 +1617,12 @@ impl App {
         let area = ratatui::layout::Rect::new(0, 0, cols, rows);
 
         if let Some(ref dialog) = self.input_dialog {
-            let dialog_width = 50u16.min(area.width.saturating_sub(4));
-            let dialog_height = if matches!(dialog.kind, DialogKind::ConfirmDelete) {
-                6
-            } else {
-                5
-            };
-            let dx = (area.width.saturating_sub(dialog_width)) / 2;
-            let dy = (area.height.saturating_sub(dialog_height)) / 2;
+            let dialog_rect = crate::render::input_dialog::input_dialog_rect(area, &dialog.kind);
 
-            let inside = mouse.column >= dx
-                && mouse.column < dx + dialog_width
-                && mouse.row >= dy
-                && mouse.row < dy + dialog_height;
+            let inside = mouse.column >= dialog_rect.x
+                && mouse.column < dialog_rect.x + dialog_rect.width
+                && mouse.row >= dialog_rect.y
+                && mouse.row < dialog_rect.y + dialog_rect.height;
 
             if inside {
                 let (confirm_rect, cancel_rect) = dialog.button_positions(area);
@@ -2052,7 +2045,7 @@ impl App {
             return;
         }
 
-        self.search_state.request_id += 1;
+        self.search_state.request_id = self.search_state.request_id.wrapping_add(1);
         self.search_state.global_loading = true;
         let id = self.search_state.request_id;
         let query = self.search_state.query.clone();
@@ -2343,22 +2336,15 @@ impl App {
             return PostAction::None;
         }
 
-        // Compute overlay rect (same formula as GlobalSearchOverlay::render)
+        // Compute overlay rect (shared with GlobalSearchOverlay::render)
         let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
         let area = ratatui::layout::Rect::new(0, 0, cols, rows);
-        let width = (area.width * 3 / 5)
-            .max(40)
-            .min(area.width.saturating_sub(4));
-        let height = (area.height * 3 / 5)
-            .max(10)
-            .min(area.height.saturating_sub(4));
-        let x = area.x + (area.width.saturating_sub(width)) / 2;
-        let y = area.y + (area.height.saturating_sub(height)) / 2;
+        let overlay = crate::render::global_search::global_search_rect(area);
 
-        let inside = mouse.column >= x
-            && mouse.column < x + width
-            && mouse.row >= y
-            && mouse.row < y + height;
+        let inside = mouse.column >= overlay.x
+            && mouse.column < overlay.x + overlay.width
+            && mouse.row >= overlay.y
+            && mouse.row < overlay.y + overlay.height;
 
         if !inside {
             // Click outside overlay → cancel
@@ -2373,8 +2359,8 @@ impl App {
         }
 
         // Click inside the results area → select + confirm that result
-        let results_y = y + 3;
-        let results_end_y = y + height.saturating_sub(2);
+        let results_y = overlay.y + 3;
+        let results_end_y = overlay.y + overlay.height.saturating_sub(2);
         if mouse.row >= results_y && mouse.row < results_end_y {
             let scroll = self.search_state.global_scroll_offset;
             let clicked_index = scroll + (mouse.row - results_y) as usize;

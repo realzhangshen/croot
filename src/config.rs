@@ -356,7 +356,7 @@ pub fn parse_key(s: &str) -> Option<(KeyCode, KeyModifiers)> {
         "pageup" | "pgup" => KeyCode::PageUp,
         "pagedown" | "pgdn" => KeyCode::PageDown,
         "insert" | "ins" => KeyCode::Insert,
-        s if s.len() == 1 => {
+        s if s.chars().count() == 1 => {
             let ch = s.chars().next().unwrap();
             // Use the original case from key_part, not lowered
             let original_ch = key_part.chars().next().unwrap();
@@ -826,10 +826,12 @@ fn insert_at_key(root: &mut toml::Value, key: &str, value: toml::Value) -> Resul
                     );
             }
         }
-        current = current.get_mut(part).unwrap();
+        current = current
+            .get_mut(part)
+            .expect("key just inserted or verified to exist");
     }
 
-    let leaf = parts.last().unwrap();
+    let leaf = parts.last().expect("non-empty after early return");
     current
         .as_table_mut()
         .ok_or_else(|| format!("Expected table for key '{key}'"))?

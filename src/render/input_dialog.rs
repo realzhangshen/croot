@@ -43,6 +43,20 @@ pub struct InputDialogState {
     pub use_trash: bool,
 }
 
+/// Compute the centered dialog rect for an input dialog of the given kind.
+/// Shared between render and mouse-hit-test to avoid layout drift.
+pub fn input_dialog_rect(area: Rect, kind: &DialogKind) -> Rect {
+    let dialog_width = 50u16.min(area.width.saturating_sub(4));
+    let dialog_height = if matches!(kind, DialogKind::ConfirmDelete) {
+        6
+    } else {
+        5
+    };
+    let x = area.x + (area.width.saturating_sub(dialog_width)) / 2;
+    let y = area.y + (area.height.saturating_sub(dialog_height)) / 2;
+    Rect::new(x, y, dialog_width, dialog_height)
+}
+
 impl InputDialogState {
     pub fn new(kind: DialogKind, context_path: std::path::PathBuf, target_name: String) -> Self {
         let input = if kind == DialogKind::Rename {
@@ -99,17 +113,9 @@ impl InputDialogState {
 
     /// Returns `(confirm_rect, cancel_rect)` in screen coordinates for the button row.
     pub fn button_positions(&self, area: Rect) -> (Rect, Rect) {
-        let dialog_width = 50u16.min(area.width.saturating_sub(4));
-        let dialog_height = if matches!(self.kind, DialogKind::ConfirmDelete) {
-            6
-        } else {
-            5
-        };
-        let x = area.x + (area.width.saturating_sub(dialog_width)) / 2;
-        let y = area.y + (area.height.saturating_sub(dialog_height)) / 2;
-
-        let btn_y = y + 3;
-        let confirm_x = x + 2;
+        let dialog = input_dialog_rect(area, &self.kind);
+        let btn_y = dialog.y + 3;
+        let confirm_x = dialog.x + 2;
         let confirm_w = 9; // "[Confirm]".len()
         let cancel_x = confirm_x + confirm_w + 2;
         let cancel_w = 8; // "[Cancel]".len()
@@ -127,17 +133,7 @@ pub struct InputDialogWidget<'a> {
 
 impl Widget for InputDialogWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let dialog_width = 50u16.min(area.width.saturating_sub(4));
-        let dialog_height = if matches!(self.state.kind, DialogKind::ConfirmDelete) {
-            6
-        } else {
-            5
-        };
-
-        let x = area.x + (area.width.saturating_sub(dialog_width)) / 2;
-        let y = area.y + (area.height.saturating_sub(dialog_height)) / 2;
-
-        let dialog_rect = Rect::new(x, y, dialog_width, dialog_height);
+        let dialog_rect = input_dialog_rect(area, &self.state.kind);
 
         let base = colors::popup_base();
         let border_style = colors::popup_border();

@@ -35,3 +35,56 @@ pub fn screen_to_content(
 
     Some(ContentPos { line, col })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn layout() -> PreviewLayout {
+        PreviewLayout {
+            x: 10,
+            y: 5,
+            height: 20,
+        }
+    }
+
+    #[test]
+    fn within_layout_returns_content_pos() {
+        let pos = screen_to_content(layout(), 0, 15, 10).unwrap();
+        assert_eq!(pos, ContentPos { line: 5, col: 5 });
+    }
+
+    #[test]
+    fn scroll_offset_added_to_line() {
+        let pos = screen_to_content(layout(), 100, 10, 5).unwrap();
+        assert_eq!(pos, ContentPos { line: 100, col: 0 });
+    }
+
+    #[test]
+    fn above_layout_returns_none() {
+        assert!(screen_to_content(layout(), 0, 15, 4).is_none());
+    }
+
+    #[test]
+    fn left_of_layout_returns_none() {
+        assert!(screen_to_content(layout(), 0, 9, 10).is_none());
+    }
+
+    #[test]
+    fn at_bottom_boundary_returns_none() {
+        // y=5, height=20 → valid rows are 5..25, so row 25 is out
+        assert!(screen_to_content(layout(), 0, 10, 25).is_none());
+    }
+
+    #[test]
+    fn last_valid_row() {
+        let pos = screen_to_content(layout(), 0, 10, 24).unwrap();
+        assert_eq!(pos, ContentPos { line: 19, col: 0 });
+    }
+
+    #[test]
+    fn top_left_corner() {
+        let pos = screen_to_content(layout(), 0, 10, 5).unwrap();
+        assert_eq!(pos, ContentPos { line: 0, col: 0 });
+    }
+}

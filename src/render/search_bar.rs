@@ -388,7 +388,7 @@ pub fn exact_match_positions(query: &str, target: &str) -> Option<Vec<usize>> {
     let target_lower = target.to_ascii_lowercase();
     let query_lower = query.to_ascii_lowercase();
     let start = target_lower.find(&query_lower)?;
-    let end = start + query.len();
+    let end = start + query_lower.len();
     Some((start..end).collect())
 }
 
