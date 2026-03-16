@@ -172,9 +172,9 @@ mod tests {
 
             #[test]
             fn natural_cmp_transitive(
-                ref a in "[a-z0-9]{1,10}",
-                ref b in "[a-z0-9]{1,10}",
-                ref c in "[a-z0-9]{1,10}",
+                ref a in "[a-zA-Z0-9]{1,10}",
+                ref b in "[a-zA-Z0-9]{1,10}",
+                ref c in "[a-zA-Z0-9]{1,10}",
             ) {
                 let ab = natural_cmp(a, b);
                 let bc = natural_cmp(b, c);

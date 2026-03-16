@@ -808,8 +808,7 @@ fn insert_at_key(root: &mut toml::Value, key: &str, value: toml::Value) -> Resul
     // Navigate/create intermediate tables
     for part in &parts[..parts.len() - 1] {
         match current.get(part) {
-            Some(v) if v.is_table() => {
-                // Navigate into existing table
+            Some(v) if v.is_table() => { /* exists and is a table — fall through to navigate below */
             }
             Some(_) => {
                 return Err(format!(

@@ -14,6 +14,10 @@ pub enum FileOpResult {
 
 /// Check whether `target` (which may contain `..` or be absolute) resolves
 /// to a path within `root`. Works purely on path components — no filesystem access.
+///
+/// **Note:** This is a lexical check only — it does not resolve symlinks or access
+/// the filesystem. Callers performing security-sensitive operations (e.g. mutations)
+/// should pass canonicalized paths or use `is_path_within_root_strict` instead.
 pub fn is_path_within_root(root: &Path, target: &Path) -> bool {
     let normalize = |p: &Path| -> PathBuf {
         let mut out = PathBuf::new();

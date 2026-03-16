@@ -329,6 +329,10 @@ impl MdRenderer {
 
         for hl_line in &highlighted {
             let mut line: Vec<StyledSpan> = Vec::new();
+            if self.in_blockquote {
+                let bq_style = Style::default().fg(Color::DarkGray);
+                line.push(("│ ".to_string(), bq_style));
+            }
             line.push(("│ ".to_string(), border_style));
             for span in hl_line {
                 line.push(span.clone());

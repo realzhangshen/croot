@@ -332,6 +332,7 @@ mod tests {
     use super::*;
     use std::path::Path;
 
+    #[cfg(feature = "image-preview")]
     #[test]
     fn is_image_file_matches_common_extensions() {
         assert!(is_image_file(Path::new("photo.png")));
@@ -345,12 +346,14 @@ mod tests {
         assert!(is_image_file(Path::new("photo.tif")));
     }
 
+    #[cfg(feature = "image-preview")]
     #[test]
     fn is_image_file_case_insensitive() {
         assert!(is_image_file(Path::new("photo.PNG")));
         assert!(is_image_file(Path::new("photo.JPG")));
     }
 
+    #[cfg(feature = "image-preview")]
     #[test]
     fn is_image_file_rejects_non_image() {
         assert!(!is_image_file(Path::new("code.rs")));

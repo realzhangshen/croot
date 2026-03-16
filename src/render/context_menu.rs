@@ -214,6 +214,7 @@ impl ContextMenuState {
     }
 
     pub fn selected_action(&self) -> &MenuAction {
+        debug_assert!(self.selected < self.items.len());
         &self.items[self.selected].action
     }
 
