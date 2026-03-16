@@ -234,14 +234,23 @@ impl PreviewView<'_> {
                             break;
                         }
                         let w = UnicodeWidthChar::width(ch).unwrap_or(0);
-                        if w == 0 {
-                            continue;
-                        }
                         let s = if col >= sel_col_start && col < sel_col_end {
                             highlight_style
                         } else {
                             *style
                         };
+                        if w == 0 {
+                            // Zero-width combining char: append to previous cell
+                            if col > 0 {
+                                let prev_x = x + (col as u16).saturating_sub(1);
+                                if let Some(cell) = buf.cell_mut((prev_x, y)) {
+                                    let mut sym = cell.symbol().to_string();
+                                    sym.push(ch);
+                                    cell.set_symbol(&sym);
+                                }
+                            }
+                            continue;
+                        }
                         let mut char_buf = [0u8; 4];
                         let char_str = ch.encode_utf8(&mut char_buf);
                         buf.set_string(x + col as u16, y, char_str, s);
@@ -280,6 +289,7 @@ fn render_centered_message(area: Rect, buf: &mut Buffer, msg: &str, fg: Color) {
         return;
     }
     let y = area.y + area.height / 2;
-    let x = area.x + area.width.saturating_sub(msg.len() as u16) / 2;
+    let msg_width = unicode_width::UnicodeWidthStr::width(msg) as u16;
+    let x = area.x + area.width.saturating_sub(msg_width) / 2;
     buf.set_string(x, y, msg, Style::default().fg(fg));
 }

@@ -67,7 +67,7 @@ pub fn highlight_file(path: &Path, content: &str, max_lines: usize) -> Vec<Vec<S
     }
 
     let mut highlighter = syntect::easy::HighlightLines::new(syntax, theme);
-    let mut result = Vec::with_capacity(max_lines.min(content.lines().count()));
+    let mut result = Vec::with_capacity(max_lines);
 
     for (i, line) in content.lines().enumerate() {
         if i >= max_lines {
@@ -104,7 +104,7 @@ pub fn highlight_code(lang: &str, code: &str, max_lines: usize) -> Vec<Vec<Style
         .unwrap_or_else(|| ss.find_syntax_plain_text());
 
     let mut highlighter = syntect::easy::HighlightLines::new(syntax, theme);
-    let mut result = Vec::with_capacity(max_lines.min(code.lines().count()));
+    let mut result = Vec::with_capacity(max_lines);
 
     for (i, line) in code.lines().enumerate() {
         if i >= max_lines {

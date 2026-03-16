@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::config::TreeConfig;
@@ -19,6 +19,10 @@ pub struct FileTree {
     pub file_count: usize,
     /// Cached count of visible directory nodes.
     pub dir_count: usize,
+    /// Cached compact chain lengths (`node_index` → `chain_len`), invalidated on mutation.
+    pub(crate) chain_len_cache: HashMap<usize, usize>,
+    /// Whether `chain_len_cache` is valid.
+    pub(crate) chain_cache_valid: bool,
 }
 
 impl FileTree {
@@ -38,6 +42,8 @@ impl FileTree {
             rendered_indices: Vec::new(),
             file_count,
             dir_count,
+            chain_len_cache: HashMap::new(),
+            chain_cache_valid: false,
         }
     }
 
@@ -51,6 +57,27 @@ impl FileTree {
 
     pub fn selected(&self) -> Option<&TreeNode> {
         self.nodes.get(self.cursor)
+    }
+
+    /// Mark the chain length cache as stale. Must be called after any node list mutation.
+    fn invalidate_chain_cache(&mut self) {
+        self.chain_cache_valid = false;
+    }
+
+    /// Get the compact chain length for a node, using the cache if available.
+    /// If the cache is stale, recomputes all chain lengths in a single O(N) pass.
+    pub fn cached_chain_len(&mut self, index: usize) -> usize {
+        if !self.chain_cache_valid {
+            self.chain_len_cache.clear();
+            let mut i = 0;
+            while i < self.nodes.len() {
+                let chain = self.compact_chain_len(i);
+                self.chain_len_cache.insert(i, chain);
+                i += chain + 1;
+            }
+            self.chain_cache_valid = true;
+        }
+        self.chain_len_cache.get(&index).copied().unwrap_or(0)
     }
 
     /// Expand a directory node: load its children and insert them after it.
@@ -83,6 +110,7 @@ impl FileTree {
         // Insert children right after the expanded node
         let insert_pos = index + 1;
         self.nodes.splice(insert_pos..insert_pos, children);
+        self.invalidate_chain_cache();
     }
 
     /// Collapse a directory node: remove all descendant nodes.
@@ -116,6 +144,7 @@ impl FileTree {
         self.nodes.drain(start..end);
         self.nodes[index].is_expanded = false;
         self.nodes[index].children_loaded = false;
+        self.invalidate_chain_cache();
 
         // Adjust cursor if it was in the removed range
         if self.cursor >= end {
@@ -164,7 +193,10 @@ impl FileTree {
                 return;
             }
             // Move to parent: find the nearest node above with depth - 1
-            let target_depth = node.depth.saturating_sub(1);
+            if node.depth == 0 {
+                return; // already at root level, no parent to navigate to
+            }
+            let target_depth = node.depth - 1;
             for i in (0..self.cursor).rev() {
                 if self.nodes[i].depth == target_depth && self.nodes[i].is_dir() {
                     self.cursor = i;
@@ -240,6 +272,7 @@ impl FileTree {
 
         self.nodes = load_children_with_meta(&self.root, 0, &self.config);
         self.recount();
+        self.invalidate_chain_cache();
         // Restore cursor position by path, or clamp to valid range
         if let Some(ref target) = cursor_path {
             self.cursor = self
@@ -363,38 +396,14 @@ impl FileTree {
         parts.join("/") + "/"
     }
 
-    /// For rendering tree connectors: determine which depths have a continuing vertical line.
-    /// Returns a Vec of bools where index = depth, true = has more siblings below.
-    /// Note: This is O(D×N) per call. Prefer `precompute_all_guides` for batch rendering.
-    #[allow(dead_code)]
-    pub fn connector_guides(&self, index: usize) -> Vec<bool> {
-        let node = &self.nodes[index];
-        let mut guides = vec![false; node.depth];
-
-        // For each ancestor depth, check if there are more nodes at that depth after this index
-        for (d, guide) in guides.iter_mut().enumerate() {
-            for i in (index + 1)..self.nodes.len() {
-                if self.nodes[i].depth < d {
-                    break;
-                }
-                if self.nodes[i].depth == d {
-                    *guide = true;
-                    break;
-                }
-            }
-        }
-
-        guides
-    }
-
     /// Build a list of node indices that are actually displayable on screen,
     /// skipping intermediate nodes in compact chains.
-    pub fn build_displayable_indices(&self) -> Vec<usize> {
+    pub fn build_displayable_indices(&mut self) -> Vec<usize> {
         let mut indices = Vec::with_capacity(self.nodes.len());
         let mut i = 0;
         while i < self.nodes.len() {
             indices.push(i);
-            let chain = self.compact_chain_len(i);
+            let chain = self.cached_chain_len(i);
             i += chain + 1;
         }
         indices
@@ -514,6 +523,8 @@ mod tests {
             rendered_indices: Vec::new(),
             file_count,
             dir_count,
+            chain_len_cache: HashMap::new(),
+            chain_cache_valid: false,
         }
     }
 
@@ -661,6 +672,18 @@ mod tests {
         assert!(tree.scroll_offset <= 2); // cursor 4 visible in window of 3
     }
 
+    #[test]
+    fn cursor_left_at_depth_0_stays_put() {
+        let mut tree = tree_from(&[
+            ("dir_a", NodeKind::Directory, 0),
+            ("file_b", NodeKind::File, 0),
+        ]);
+        tree.cursor = 1; // on file_b at depth 0
+        tree.cursor_left();
+        // Should not jump to dir_a — there's no parent at depth 0
+        assert_eq!(tree.cursor, 1);
+    }
+
     // ── Compact folders tests ───────────────────────────────────────────
 
     fn tree_from_compact(entries: &[(&str, NodeKind, usize, bool)]) -> FileTree {
@@ -690,6 +713,8 @@ mod tests {
             rendered_indices: Vec::new(),
             file_count,
             dir_count,
+            chain_len_cache: HashMap::new(),
+            chain_cache_valid: false,
         }
     }
 

@@ -44,7 +44,8 @@ pub struct GlobalSearchResult {
 #[derive(Debug, Clone)]
 pub struct SearchState {
     pub query: String,
-    pub cursor_pos: usize,
+    /// Byte offset into `query`. Must always be on a UTF-8 char boundary.
+    pub(crate) cursor_pos: usize,
     pub mode: SearchMode,
     /// Indices of nodes that match the query (sorted).
     pub match_indices: Vec<usize>,
@@ -234,7 +235,13 @@ impl Widget for SearchBar<'_> {
         );
 
         let input_x = area.x + prompt.len() as u16;
-        let input_width = area.width.saturating_sub(prompt.len() as u16 + 12) as usize;
+        // Reserve space for match info + optional close button on the right
+        let close_width: u16 = if self.show_close_button { 4 } else { 0 }; // "[×] "
+        let match_info_max: u16 = 8; // " 0/0 " or similar
+        let right_reserve = close_width + match_info_max;
+        let input_width = area
+            .width
+            .saturating_sub(prompt.len() as u16 + right_reserve) as usize;
 
         // Draw query text
         let display_text =

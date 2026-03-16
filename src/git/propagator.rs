@@ -70,11 +70,11 @@ mod tests {
     #[test]
     fn most_severe_status_wins() {
         let mut files = HashMap::new();
-        files.insert(PathBuf::from("/repo/src/a.rs"), GitStatus::Added);
+        files.insert(PathBuf::from("/repo/src/a.rs"), GitStatus::Modified);
         files.insert(PathBuf::from("/repo/src/b.rs"), GitStatus::Conflicted);
 
         let dirs = propagate_to_dirs(&files, Path::new("/repo"));
-        // Conflicted > Added, so src/ should be Conflicted
+        // Conflicted > Modified, so src/ should be Conflicted
         assert_eq!(
             dirs.get(Path::new("/repo/src")),
             Some(&GitStatus::Conflicted)

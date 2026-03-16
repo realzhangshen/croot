@@ -16,11 +16,12 @@ impl CmuxBridge {
 }
 
 #[cfg(test)]
+#[allow(deprecated)] // env::set_var/remove_var — tests serialized via ENV_LOCK
 mod tests {
     use super::*;
     use std::sync::Mutex;
 
-    // Serialize env-var tests to avoid races
+    // Serialize env-var tests to avoid races.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]

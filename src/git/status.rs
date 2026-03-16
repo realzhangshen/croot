@@ -13,6 +13,8 @@ pub struct GitState {
     file_statuses: HashMap<PathBuf, GitStatus>,
     dir_statuses: HashMap<PathBuf, GitStatus>,
     branch: Option<String>,
+    /// Last error from loading git statuses (e.g. locked index).
+    last_error: Option<String>,
 }
 
 impl GitState {
@@ -26,6 +28,7 @@ impl GitState {
             file_statuses: HashMap::new(),
             dir_statuses: HashMap::new(),
             branch: None,
+            last_error: None,
         };
 
         state.branch = Self::read_branch(&repo);
@@ -41,6 +44,7 @@ impl GitState {
             self.branch = Self::read_branch(&repo);
             self.file_statuses.clear();
             self.dir_statuses.clear();
+            self.last_error = None;
             self.load_statuses(&repo);
             self.dir_statuses = propagate_to_dirs(&self.file_statuses, &self.repo_root);
         }
@@ -98,6 +102,11 @@ impl GitState {
         &self.repo_root
     }
 
+    /// Returns the last error from loading git statuses, if any.
+    pub fn last_error(&self) -> Option<&str> {
+        self.last_error.as_deref()
+    }
+
     fn read_branch(repo: &Repository) -> Option<String> {
         let head = repo.head().ok()?;
         if head.is_branch() {
@@ -116,7 +125,10 @@ impl GitState {
 
         let statuses = match repo.statuses(Some(&mut opts)) {
             Ok(s) => s,
-            Err(_) => return,
+            Err(e) => {
+                self.last_error = Some(format!("git status: {e}"));
+                return;
+            }
         };
 
         for entry in statuses.iter() {
@@ -262,6 +274,7 @@ mod tests {
                 .map(|(p, s)| (PathBuf::from(p), s))
                 .collect(),
             branch: None,
+            last_error: None,
         }
     }
 

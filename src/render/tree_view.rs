@@ -72,6 +72,12 @@ impl StatefulWidget for TreeView<'_> {
             Vec::new()
         };
 
+        // Precompute chain lengths once (ensures cache is warm, avoids borrow conflicts)
+        if !is_filtered {
+            // Warm the cache with a single call; subsequent lookups are O(1)
+            let _ = state.cached_chain_len(0);
+        }
+
         for (row, &absolute_idx) in visible_indices.iter().enumerate() {
             let y = area.y + row as u16;
             if y >= area.y + area.height {
@@ -90,7 +96,11 @@ impl StatefulWidget for TreeView<'_> {
             let chain_len = if is_filtered {
                 0
             } else {
-                state.compact_chain_len(absolute_idx)
+                state
+                    .chain_len_cache
+                    .get(&absolute_idx)
+                    .copied()
+                    .unwrap_or(0)
             };
 
             let mut spans = Vec::new();
@@ -123,12 +133,12 @@ impl StatefulWidget for TreeView<'_> {
             // Tree connectors
             let guides: &[bool] = if let Some(ref fg) = filtered_guides {
                 // Look up position in the full filter_indices list
-                let pos = self
-                    .filter_indices
-                    .binary_search(&absolute_idx)
-                    .unwrap_or(0);
-                if pos < fg.len() {
-                    &fg[pos]
+                if let Ok(pos) = self.filter_indices.binary_search(&absolute_idx) {
+                    if pos < fg.len() {
+                        &fg[pos]
+                    } else {
+                        &[]
+                    }
                 } else {
                     &[]
                 }
@@ -149,11 +159,11 @@ impl StatefulWidget for TreeView<'_> {
             // Branch connector for this node
             if node.depth > 0 {
                 let is_last = if is_filtered {
-                    let pos = self
-                        .filter_indices
-                        .binary_search(&absolute_idx)
-                        .unwrap_or(0);
-                    is_last_visible_sibling(&state.nodes, self.filter_indices, pos)
+                    if let Ok(pos) = self.filter_indices.binary_search(&absolute_idx) {
+                        is_last_visible_sibling(&state.nodes, self.filter_indices, pos)
+                    } else {
+                        true // Not found in filter — treat as last to use └─
+                    }
                 } else {
                     state.is_last_sibling(absolute_idx)
                 };
@@ -163,7 +173,11 @@ impl StatefulWidget for TreeView<'_> {
 
             // Icon — for compacted dirs, use the last dir in the chain's expand state
             let icon_info = if node.is_dir() {
-                let last_in_chain = &state.nodes[absolute_idx + chain_len];
+                let chain_end = absolute_idx + chain_len;
+                let last_in_chain = state
+                    .nodes
+                    .get(chain_end)
+                    .unwrap_or(&state.nodes[absolute_idx]);
                 let dir_icon = icons::dir_icon(last_in_chain.is_expanded);
                 icons::IconInfo {
                     icon: dir_icon,
@@ -256,7 +270,7 @@ impl StatefulWidget for TreeView<'_> {
 
             // Render right-aligned info columns if present
             if !info_text.is_empty() {
-                let info_width = info_text.len() as u16;
+                let info_width = unicode_width::UnicodeWidthStr::width(info_text.as_str()) as u16;
                 let min_gap = 2;
                 if line_width + min_gap + info_width < area.width {
                     let info_x = area.x + area.width - info_width;
@@ -284,7 +298,7 @@ fn build_visible_indices(state: &mut FileTree, viewport_height: usize) -> Vec<us
     let mut i = 0;
     while i < state.nodes.len() {
         all_visible.push(i);
-        let chain = state.compact_chain_len(i);
+        let chain = state.cached_chain_len(i);
         // Skip the intermediate dirs in the chain (they're merged into the display)
         i += chain + 1;
     }
@@ -390,6 +404,10 @@ fn precompute_filtered_guides(nodes: &[TreeNode], visible_indices: &[usize]) -> 
             continue;
         };
         let depth = node.depth;
+        if depth > max_depth {
+            rev_results.push(Vec::new());
+            continue;
+        }
         let mut guides = vec![false; depth];
         for (d, guide) in guides.iter_mut().enumerate() {
             *guide = has_more[d];
@@ -499,7 +517,7 @@ fn build_name_spans(
 fn git_status_style(status: GitStatus) -> Style {
     match status {
         GitStatus::Modified => Style::default().fg(colors::git_modified()),
-        GitStatus::Added | GitStatus::Untracked => Style::default().fg(colors::git_added()),
+        GitStatus::Untracked => Style::default().fg(colors::git_added()),
         GitStatus::Deleted => Style::default().fg(colors::git_deleted()),
         GitStatus::Ignored => Style::default().fg(colors::git_ignored()),
         GitStatus::Conflicted => Style::default()
@@ -521,7 +539,7 @@ fn git_status_style(status: GitStatus) -> Style {
 fn git_status_marker(status: GitStatus) -> &'static str {
     match status {
         GitStatus::Modified | GitStatus::StagedModified => "M",
-        GitStatus::Added | GitStatus::StagedAdded => "A",
+        GitStatus::StagedAdded => "A",
         GitStatus::Deleted | GitStatus::StagedDeleted => "D",
         GitStatus::Untracked => "U",
         GitStatus::Conflicted => "C",
@@ -688,6 +706,8 @@ mod tests {
             rendered_indices: vec![],
             file_count: 2,
             dir_count: 0,
+            chain_len_cache: std::collections::HashMap::new(),
+            chain_cache_valid: false,
         }
     }
 
@@ -988,7 +1008,6 @@ mod tests {
 
     #[test]
     fn git_status_marker_added_variants() {
-        assert_eq!(git_status_marker(GitStatus::Added), "A");
         assert_eq!(git_status_marker(GitStatus::StagedAdded), "A");
     }
 

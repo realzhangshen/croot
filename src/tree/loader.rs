@@ -56,7 +56,14 @@ pub fn load_children_with_meta(dir: &Path, depth: usize, config: &TreeConfig) ->
         let mut node = TreeNode::new(path.clone(), kind, depth);
 
         if need_meta {
-            if let Ok(meta) = path.metadata() {
+            // Use symlink_metadata for symlinks to show the link's own size,
+            // fall back to metadata for regular files/dirs
+            let meta_result = if kind == NodeKind::Symlink {
+                path.symlink_metadata()
+            } else {
+                path.metadata()
+            };
+            if let Ok(meta) = meta_result {
                 if show_size && kind != NodeKind::Directory {
                     node.size = Some(meta.len());
                 }

@@ -122,6 +122,9 @@ pub fn execute_dialog(
         }
         DialogKind::ConfirmDelete => {
             let path = context_path;
+            if !is_path_within_root_strict(root, path) {
+                return FileOpResult::Error("Path escapes workspace root".to_string());
+            }
             if use_trash {
                 if let Err(e) = trash::delete(path) {
                     return FileOpResult::Error(format!("Trash failed: {e}"));
@@ -314,6 +317,34 @@ mod tests {
             false,
         );
         assert!(matches!(result, FileOpResult::Error(_)));
+    }
+
+    #[test]
+    fn delete_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+        let tmp = TempDir::new().unwrap();
+        let workspace = tmp.path().join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.txt"), "secret").unwrap();
+
+        let link = workspace.join("escape_link");
+        symlink(&outside, &link).unwrap();
+
+        let target = link.join("secret.txt");
+        let result = execute_dialog(
+            &DialogKind::ConfirmDelete,
+            "",
+            "",
+            &target,
+            &workspace,
+            false,
+        );
+        assert!(matches!(result, FileOpResult::Error(_)));
+        // File outside workspace should still exist
+        assert!(outside.join("secret.txt").exists());
     }
 
     #[test]

@@ -568,7 +568,11 @@ impl Config {
                     Self::default()
                 }
             },
-            Err(_) => Self::default(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Self::default(),
+            Err(e) => {
+                eprintln!("croot: warning: cannot read config: {e}; using defaults");
+                Self::default()
+            }
         }
     }
 

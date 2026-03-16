@@ -226,7 +226,7 @@ impl App {
         let _ = &image_tx; // suppress unused warning when feature is off
 
         // Set up file watcher with 100ms debounce
-        let (fs_tx, mut fs_rx) = mpsc::channel::<()>(1);
+        let (fs_tx, mut fs_rx) = mpsc::channel::<()>(4);
         let watcher_result = crate::watcher::setup_watcher(&self.root, fs_tx);
         if let Some(err) = watcher_result.error {
             self.show_error(err);
@@ -266,7 +266,15 @@ impl App {
                 self.emit_osc8_hyperlinks()?;
             }
 
+            // When an error message is displayed, set a tick to auto-dismiss it
+            // even if no user events occur.
+            let has_error = self.error_message.is_some();
+
             tokio::select! {
+                () = tokio::time::sleep(Duration::from_secs(1)), if has_error => {
+                    // Tick: re-draw will check if error should be dismissed
+                    continue;
+                }
                 event = reader.next() => {
                     match event {
                         Some(Ok(Event::Key(key))) => {
@@ -688,8 +696,10 @@ impl App {
         // Track branch click region for mouse routing
         self.status_bar_branch_region = branch.as_ref().map(|b| {
             // Branch is rendered as "  \u{e0a0} {branch} │ " starting at col 0
+            // +1 because Nerd Font glyphs like \u{e0a0} render as 2 columns
+            // but UnicodeWidthStr reports them as 1
             let span_text = format!("  \u{e0a0} {b} ");
-            let end = UnicodeWidthStr::width(span_text.as_str()) as u16;
+            let end = UnicodeWidthStr::width(span_text.as_str()) as u16 + 1;
             (0, end)
         });
 
@@ -865,9 +875,10 @@ impl App {
             Action::MenuSelect(ref _placeholder) => {
                 // Resolve actual action from selected menu item
                 if let Some(menu) = self.context_menu.take() {
-                    let menu_action = menu.selected_action().clone();
-                    self.input_mode = InputMode::Normal;
-                    post = self.execute_menu_action(&menu_action, menu.node_idx, preview_tx);
+                    if let Some(menu_action) = menu.selected_action().cloned() {
+                        self.input_mode = InputMode::Normal;
+                        post = self.execute_menu_action(&menu_action, menu.node_idx, preview_tx);
+                    }
                 }
             }
             // File operations (keyboard shortcuts)
@@ -1625,6 +1636,7 @@ impl App {
                 self.search_state.origin_scroll_offset = self.tree.scroll_offset;
                 self.input_mode = InputMode::Search;
             }
+            MenuAction::Separator => {} // inert — should not reach here
         }
 
         // Refresh preview after menu actions that modify files
@@ -2211,6 +2223,9 @@ impl App {
     fn reapply_git(&mut self) {
         if let Some(ref git) = self.git {
             git.apply_to_nodes(&mut self.tree.nodes);
+            if let Some(err) = git.last_error() {
+                self.show_error(err.to_string());
+            }
         }
     }
 
@@ -2295,7 +2310,7 @@ impl App {
 
     /// Suspend the terminal, spawn the editor, then resume.
     fn open_editor_suspend<B: ratatui::backend::Backend>(
-        &self,
+        &mut self,
         terminal: &mut Terminal<B>,
         path: &std::path::Path,
     ) -> anyhow::Result<()>
@@ -2324,8 +2339,7 @@ impl App {
             .status();
 
         if let Err(e) = status {
-            eprintln!("Failed to open editor '{editor_str}': {e}");
-            std::thread::sleep(Duration::from_secs(2));
+            self.show_error(format!("Failed to open editor '{editor_str}': {e}"));
         }
 
         // Restore terminal

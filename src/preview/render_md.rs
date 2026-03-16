@@ -1,5 +1,6 @@
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use ratatui::style::{Color, Modifier, Style};
+use unicode_width::UnicodeWidthStr;
 
 use crate::render::colors;
 
@@ -354,11 +355,11 @@ impl MdRenderer {
 
         let mut col_widths = vec![0usize; num_cols];
         for (c, cell) in head.iter().enumerate() {
-            col_widths[c] = col_widths[c].max(cell.len());
+            col_widths[c] = col_widths[c].max(UnicodeWidthStr::width(cell.as_str()));
         }
         for row in body {
             for (c, cell) in row.iter().enumerate() {
-                col_widths[c] = col_widths[c].max(cell.len());
+                col_widths[c] = col_widths[c].max(UnicodeWidthStr::width(cell.as_str()));
             }
         }
 
@@ -454,7 +455,9 @@ fn format_table_row(
     for (c, w) in col_widths.iter().enumerate() {
         line.push(("│ ".to_string(), border_style));
         let content = if c < row.len() { &row[c] } else { "" };
-        let padded = format!("{content:<w$}");
+        let display_w = UnicodeWidthStr::width(content);
+        let padding = w.saturating_sub(display_w);
+        let padded = format!("{content}{}", " ".repeat(padding));
         line.push((padded, text_style));
         line.push((" ".to_string(), border_style));
     }

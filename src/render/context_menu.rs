@@ -27,6 +27,8 @@ pub enum MenuAction {
     Refresh,
     CollapseAll,
     StartFind,
+    /// Inert separator — no action should be triggered.
+    Separator,
 }
 
 /// State for the visible context menu.
@@ -56,7 +58,7 @@ impl ContextMenuState {
             },
             MenuItem {
                 label: "─".into(),
-                action: MenuAction::CopyPath,
+                action: MenuAction::Separator,
             }, // separator (inert)
             MenuItem {
                 label: "Copy Relative Path".into(),
@@ -72,7 +74,7 @@ impl ContextMenuState {
             },
             MenuItem {
                 label: "─".into(),
-                action: MenuAction::CopyPath,
+                action: MenuAction::Separator,
             }, // separator (inert)
             MenuItem {
                 label: "Rename".into(),
@@ -143,7 +145,7 @@ impl ContextMenuState {
             },
             MenuItem {
                 label: "─".into(),
-                action: MenuAction::CopyPath,
+                action: MenuAction::Separator,
             },
             MenuItem {
                 label: "Collapse All".into(),
@@ -155,7 +157,7 @@ impl ContextMenuState {
             },
             MenuItem {
                 label: "─".into(),
-                action: MenuAction::CopyPath,
+                action: MenuAction::Separator,
             },
             MenuItem {
                 label: "Copy Relative Path".into(),
@@ -171,7 +173,7 @@ impl ContextMenuState {
             },
             MenuItem {
                 label: "─".into(),
-                action: MenuAction::CopyPath,
+                action: MenuAction::Separator,
             }, // separator
             MenuItem {
                 label: "Rename".into(),
@@ -195,7 +197,7 @@ impl ContextMenuState {
         if self.selected > 0 {
             self.selected -= 1;
             // Skip separator
-            if self.items[self.selected].label.starts_with('─') && self.selected > 0 {
+            if self.items[self.selected].action == MenuAction::Separator && self.selected > 0 {
                 self.selected -= 1;
             }
         }
@@ -205,7 +207,7 @@ impl ContextMenuState {
         if self.selected + 1 < self.items.len() {
             self.selected += 1;
             // Skip separator
-            if self.items[self.selected].label.starts_with('─')
+            if self.items[self.selected].action == MenuAction::Separator
                 && self.selected + 1 < self.items.len()
             {
                 self.selected += 1;
@@ -213,9 +215,13 @@ impl ContextMenuState {
         }
     }
 
-    pub fn selected_action(&self) -> &MenuAction {
-        debug_assert!(self.selected < self.items.len());
-        &self.items[self.selected].action
+    pub fn selected_action(&self) -> Option<&MenuAction> {
+        let item = self.items.get(self.selected)?;
+        if item.action == MenuAction::Separator {
+            None
+        } else {
+            Some(&item.action)
+        }
     }
 
     /// Return the menu rect, clamped to fit within the terminal area.
@@ -261,7 +267,7 @@ impl ContextMenuState {
             return None; // border rows
         }
         let idx = (row - rect.y - 1) as usize;
-        if idx < self.items.len() && !self.items[idx].label.starts_with('─') {
+        if idx < self.items.len() && self.items[idx].action != MenuAction::Separator {
             Some(idx)
         } else {
             None
@@ -344,7 +350,7 @@ impl Widget for ContextMenuWidget<'_> {
                 cell.set_style(border_style);
             }
 
-            let is_separator = item.label.starts_with('─');
+            let is_separator = item.action == MenuAction::Separator;
             let is_selected = i == self.state.selected && !is_separator;
             let is_delete = item.action == MenuAction::Delete;
 
@@ -553,7 +559,7 @@ mod tests {
         let copy_item = file_state
             .items
             .iter()
-            .find(|i| i.action == MenuAction::CopyPath && !i.label.starts_with('─'))
+            .find(|i| i.action == MenuAction::CopyPath)
             .expect("file menu should have a CopyPath item");
         assert_eq!(copy_item.label, "Copy Relative Path");
 
@@ -561,7 +567,7 @@ mod tests {
         let copy_item = dir_state
             .items
             .iter()
-            .find(|i| i.action == MenuAction::CopyPath && !i.label.starts_with('─'))
+            .find(|i| i.action == MenuAction::CopyPath)
             .expect("dir menu should have a CopyPath item");
         assert_eq!(copy_item.label, "Copy Relative Path");
     }
