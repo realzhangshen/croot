@@ -8,7 +8,8 @@ The context menu provides quick access to:
 
 - **Open in editor** — opens the file in your configured editor
 - **Open externally** — opens with the system default application
-- **Copy path** — copies the full file path to clipboard
+- **Copy relative path** — copies the relative path to clipboard
+- **Copy absolute path** — copies the full absolute path to clipboard
 - **Reveal in Finder** — opens the containing directory (macOS)
 - **Rename** — rename the file or directory
 - **Delete** — delete with confirmation

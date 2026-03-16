@@ -59,7 +59,7 @@ impl ContextMenuState {
                 action: MenuAction::CopyPath,
             }, // separator (inert)
             MenuItem {
-                label: "Copy Path".into(),
+                label: "Copy Relative Path".into(),
                 action: MenuAction::CopyPath,
             },
             MenuItem {
@@ -158,7 +158,7 @@ impl ContextMenuState {
                 action: MenuAction::CopyPath,
             },
             MenuItem {
-                label: "Copy Path".into(),
+                label: "Copy Relative Path".into(),
                 action: MenuAction::CopyPath,
             },
             MenuItem {
@@ -544,6 +544,25 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn copy_path_label_says_relative() {
+        let file_state = ContextMenuState::new_for_file(0, 0, 0);
+        let copy_item = file_state
+            .items
+            .iter()
+            .find(|i| i.action == MenuAction::CopyPath && !i.label.starts_with('─'))
+            .expect("file menu should have a CopyPath item");
+        assert_eq!(copy_item.label, "Copy Relative Path");
+
+        let dir_state = ContextMenuState::new_for_dir(0, 0, 0);
+        let copy_item = dir_state
+            .items
+            .iter()
+            .find(|i| i.action == MenuAction::CopyPath && !i.label.starts_with('─'))
+            .expect("dir menu should have a CopyPath item");
+        assert_eq!(copy_item.label, "Copy Relative Path");
     }
 
     #[test]
