@@ -15,7 +15,7 @@ const SearchDialog = dynamic(
 export function Navbar() {
   const pathname = usePathname();
   const isDocsActive = pathname.startsWith("/docs");
-  const isHomeActive = pathname === "/";
+
   const [searchOpen, setSearchOpen] = useState(false);
 
   const handleClose = useCallback(() => setSearchOpen(false), []);
@@ -47,19 +47,6 @@ export function Navbar() {
             </Link>
             <div className="hidden h-full items-center gap-1 sm:flex">
               <Link
-                href="/"
-                className={`relative flex h-full items-center px-3 text-[14px] font-medium transition-colors ${
-                  isHomeActive
-                    ? "text-text"
-                    : "text-text-secondary hover:text-text"
-                }`}
-              >
-                Home
-                {isHomeActive && (
-                  <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-sidebar-active" />
-                )}
-              </Link>
-              <Link
                 href="/docs"
                 className={`relative flex h-full items-center px-3 text-[14px] font-medium transition-colors ${
                   isDocsActive
@@ -69,14 +56,8 @@ export function Navbar() {
               >
                 Docs
                 {isDocsActive && (
-                  <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-sidebar-active" />
+                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-sidebar-active" />
                 )}
-              </Link>
-              <Link
-                href="/docs/guide/getting-started"
-                className="relative flex h-full items-center px-3 text-[14px] font-medium text-text-secondary transition-colors hover:text-text"
-              >
-                Quickstart
               </Link>
             </div>
           </div>
