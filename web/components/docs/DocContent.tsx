@@ -13,7 +13,7 @@ export function DocContent({ html }: { html: string }) {
 
     // Batch all DOM mutations in a single animation frame to avoid layout thrash
     const frameId = requestAnimationFrame(() => {
-      // Wrap <pre> blocks with copy button
+      // Wrap <pre> blocks with copy button and language label
       article.querySelectorAll("pre").forEach((pre) => {
         if (pre.parentElement?.classList.contains("code-block-wrapper")) return;
 
@@ -22,11 +22,23 @@ export function DocContent({ html }: { html: string }) {
         pre.parentNode!.insertBefore(wrapper, pre);
         wrapper.appendChild(pre);
 
+        // Extract language from <code class="language-*"> and add label
+        const code = pre.querySelector("code");
+        const langClass = code?.className
+          .split(/\s+/)
+          .find((c) => c.startsWith("language-"));
+        if (langClass) {
+          const lang = langClass.replace("language-", "");
+          const label = document.createElement("span");
+          label.className = "lang-label";
+          label.textContent = lang;
+          wrapper.appendChild(label);
+        }
+
         const btn = document.createElement("button");
         btn.className = "copy-btn";
         btn.textContent = "Copy";
         btn.addEventListener("click", () => {
-          const code = pre.querySelector("code");
           const text = (code ?? pre).textContent ?? "";
           navigator.clipboard.writeText(text).then(() => {
             btn.textContent = "Copied!";

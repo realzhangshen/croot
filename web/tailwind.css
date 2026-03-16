@@ -253,6 +253,12 @@ kbd {
   display: block;
 }
 
+.shiki,
+.shiki span {
+  color: var(--shiki-light) !important;
+  background-color: transparent !important;
+}
+
 [data-theme="dark"] .shiki,
 [data-theme="dark"] .shiki span {
   color: var(--shiki-dark) !important;
@@ -327,6 +333,19 @@ kbd {
 .code-block-wrapper .copy-btn:hover {
   color: var(--text);
   border-color: var(--border-strong);
+}
+
+.code-block-wrapper .lang-label {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.85rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 /* ── Animations ────────────────────────────────── */
