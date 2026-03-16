@@ -11,6 +11,7 @@
   --bg-elevated: #f1ede6;
   --bg-code: #f4f1eb;
   --bg-overlay: rgba(251, 250, 247, 0.88);
+  --bg-navbar: rgba(243, 240, 233, 0.92);
   --border: rgba(70, 62, 49, 0.09);
   --border-strong: rgba(70, 62, 49, 0.14);
   --text: #2d2a23;
@@ -31,6 +32,7 @@
   --bg-elevated: #1e1d1a;
   --bg-code: #1b1a17;
   --bg-overlay: rgba(23, 23, 21, 0.9);
+  --bg-navbar: rgba(21, 21, 19, 0.92);
   --border: rgba(240, 234, 223, 0.08);
   --border-strong: rgba(240, 234, 223, 0.14);
   --text: #f1ece2;
@@ -52,6 +54,7 @@
   --color-bg-elevated: var(--bg-elevated);
   --color-bg-code: var(--bg-code);
   --color-bg-overlay: var(--bg-overlay);
+  --color-bg-navbar: var(--bg-navbar);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-text: var(--text);
@@ -110,8 +113,8 @@ kbd {
   --tw-prose-hr: var(--border);
   --tw-prose-th-borders: var(--border-strong);
   --tw-prose-td-borders: var(--border);
-  font-size: 15.5px;
-  line-height: 1.78;
+  font-size: 14.5px;
+  line-height: 1.75;
   color: var(--text-secondary);
 }
 

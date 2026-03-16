@@ -12,7 +12,7 @@ export function Sidebar() {
       <nav className="space-y-8 px-4 py-6">
         {sidebarSections.map((section) => (
           <div key={section.label}>
-            <h4 className="mb-2 px-2.5 text-[12px] font-medium tracking-[0.02em] text-text-muted">
+            <h4 className="mb-2 px-2.5 text-[12px] font-semibold tracking-[0.02em] text-text-muted">
               {section.label}
             </h4>
             <ul className="space-y-0.5">
@@ -26,8 +26,8 @@ export function Sidebar() {
                       aria-current={isActive ? "page" : undefined}
                       className={`block rounded-lg px-2.5 py-1.5 text-[15px] leading-6 transition-colors ${
                         isActive
-                          ? "font-medium text-sidebar-active"
-                          : "text-text-secondary hover:bg-white/55 hover:text-text dark:hover:bg-white/[0.04]"
+                          ? "font-semibold text-sidebar-active"
+                          : "font-medium text-text-secondary hover:bg-white/55 hover:text-text dark:hover:bg-white/[0.04]"
                       }`}
                     >
                       {link.title}
