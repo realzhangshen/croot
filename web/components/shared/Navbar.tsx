@@ -47,7 +47,7 @@ export function Navbar() {
             </Link>
             <div className="hidden h-full items-center gap-1 sm:flex">
               <Link
-                href="/docs"
+                href="/docs/guide/getting-started"
                 className={`relative flex h-full items-center px-3 text-[14px] font-medium transition-colors ${
                   isDocsActive
                     ? "text-sidebar-active"

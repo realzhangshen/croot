@@ -12,8 +12,8 @@ export const sidebarSections: SidebarSection[] = [
   {
     label: "Guide",
     links: [
-      { title: "Installation", slug: "guide/installation" },
       { title: "Quickstart", slug: "guide/getting-started" },
+      { title: "Installation", slug: "guide/installation" },
       { title: "Configuration", slug: "guide/configuration" },
       { title: "Keybindings", slug: "guide/keybindings" },
     ],

@@ -136,38 +136,38 @@ kbd {
 .prose h2,
 .prose h3,
 .prose h4 {
-  letter-spacing: -0.04em;
+  letter-spacing: -0.02em;
 }
 
 .prose h1 {
-  margin-bottom: 2rem;
-  font-size: clamp(3rem, 5.4vw, 4.15rem);
-  line-height: 0.98;
+  margin-bottom: 1.25rem;
+  font-size: 2rem;
+  line-height: 1.15;
   font-weight: 600;
 }
 
 .prose h2 {
-  margin-top: 3.25rem;
+  margin-top: 2.5rem;
   margin-bottom: 1.15rem;
-  padding-bottom: 0.85rem;
-  font-size: clamp(1.95rem, 3vw, 2.35rem);
-  line-height: 1.08;
+  padding-bottom: 0.6rem;
+  font-size: 1.5rem;
+  line-height: 1.2;
   font-weight: 560;
   border-bottom: 1px solid var(--border);
 }
 
 .prose h3 {
-  margin-top: 2.6rem;
+  margin-top: 2rem;
   margin-bottom: 0.9rem;
-  font-size: 1.45rem;
+  font-size: 1.25rem;
   line-height: 1.18;
   font-weight: 560;
 }
 
 .prose h4 {
-  margin-top: 2rem;
+  margin-top: 1.5rem;
   margin-bottom: 0.65rem;
-  font-size: 1.05rem;
+  font-size: 1rem;
   line-height: 1.4;
   font-weight: 600;
 }

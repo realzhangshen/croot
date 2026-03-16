@@ -14,7 +14,7 @@ export function Footer() {
           >
             GitHub
           </a>
-          <Link href="/docs" className="hover:text-text transition-colors">
+          <Link href="/docs/guide/getting-started" className="hover:text-text transition-colors">
             Docs
           </Link>
           <a
