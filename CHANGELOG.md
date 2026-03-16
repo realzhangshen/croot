@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-03-16
+
+### Added
+- Image preview support using ratatui-image (behind `image-preview` feature flag)
+- Configurable trash/delete behavior (move to trash vs permanent delete)
+- Integration test suite
+- Terminal size caching for reduced syscall overhead
+
+### Changed
+- Branch switch is now non-blocking (uses spawn_blocking + channel)
+- Context menu: "Copy Path" renamed to "Copy Relative Path" with split entries
+
+### Fixed
+- Raw mode leak when `App::new` fails — terminal now always restored
+- Unicode panic on case-folding byte length changes (e.g., İ→i̇)
+- TOCTOU: bounded file reads via `file.take()` to prevent unbounded allocation
+- Search highlighting returning byte indices instead of char boundaries
+- Path traversal via symlink escape in ConfirmDelete
+- O(N²) per-frame `compact_chain_len` computation — now cached
+- Cursor snap past last visible node causing potential OOB panic
+- Binary preview silently swallowing read errors
+- Filter ancestor walk picking wrong parent in sibling trees
+- Separator hit detection off-by-one in mouse handler
+- Byte-width vs display-width in Markdown tables and centered messages
+- Blocking `thread::sleep` in editor suspend replaced with status bar error
+
 ## [0.5.1] - 2026-03-14
 
 ### Added
@@ -196,7 +222,8 @@ _Release-only commit (CI/packaging fix). No user-facing changes._
 - Git ignored file display: removed redundant status marker, fixed directory lookup
 - macOS x86_64 CI build using correct runner (macos-14)
 
-[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/realzhangshen/croot/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/realzhangshen/croot/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/realzhangshen/croot/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/realzhangshen/croot/compare/v0.4.0...v0.4.1
