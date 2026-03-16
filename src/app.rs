@@ -41,6 +41,13 @@ use crate::render::status_bar::{HyperlinkRegion, StatusBar};
 use crate::render::tree_view::TreeView;
 use crate::tree::forest::FileTree;
 
+/// Result of an async branch switch operation.
+struct BranchSwitchResult {
+    success: bool,
+    stderr: String,
+    repo_root: PathBuf,
+}
+
 /// Signal from action handling that requires terminal-level processing.
 pub enum PostAction {
     None,
@@ -94,6 +101,8 @@ pub struct App {
     status_bar_branch_region: Option<(u16, u16)>,
     // Transient error message with timestamp for auto-dismiss
     error_message: Option<(String, Instant)>,
+    // Channel for receiving branch switch results
+    branch_switch_rx: Option<mpsc::Receiver<BranchSwitchResult>>,
     // Image preview support
     #[cfg(feature = "image-preview")]
     image_picker: Option<ratatui_image::picker::Picker>,
@@ -168,6 +177,7 @@ impl App {
             search_bar_y: None,
             status_bar_branch_region: None,
             error_message: None,
+            branch_switch_rx: None,
             #[cfg(feature = "image-preview")]
             image_picker,
             #[cfg(feature = "image-preview")]
@@ -402,6 +412,29 @@ impl App {
                     }
                     #[cfg(not(feature = "image-preview"))]
                     let _ = result;
+                }
+                result = async {
+                    match self.branch_switch_rx.as_mut() {
+                        Some(rx) => rx.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    self.branch_switch_rx = None;
+                    if let Some(result) = result {
+                        if result.success {
+                            self.tree.refresh();
+                            if let Some(ref mut git) = self.git {
+                                git.refresh();
+                            }
+                            self.reapply_git();
+                        } else {
+                            let branches = crate::git::branches::list_branches(&result.repo_root);
+                            let mut restored_picker = PickerState::new_branch(&branches);
+                            restored_picker.error_message = Some(result.stderr);
+                            self.picker_state = Some(restored_picker);
+                            self.input_mode = InputMode::Picker;
+                        }
+                    }
                 }
             }
 
@@ -1675,15 +1708,13 @@ impl App {
         use crate::render::search_bar::SearchBar;
 
         // Check if click is on the [×] close button
-        if let Some(search_y) = self.search_bar_y {
-            let (_, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+        if self.search_bar_y.is_some() {
             let area_width = self.main_area_width;
             let close_x = SearchBar::close_button_x(0, area_width);
             if col >= close_x {
                 // Close button clicked → cancel search
                 self.input_mode = InputMode::Normal;
                 self.search_state.clear();
-                let _ = (search_y, rows);
                 return PostAction::None;
             }
         }
@@ -2211,54 +2242,46 @@ impl App {
             return;
         };
 
-        // For remote branches like "origin/feature", use --track to resolve
-        // multi-remote ambiguity (e.g. both origin/foo and upstream/foo exist).
-        let result = if item.is_remote {
-            // Try to create a local tracking branch from the specific remote ref.
-            // If the local branch already exists, git will error — that's fine,
-            // the user can select the local branch directly instead.
-            std::process::Command::new("git")
-                .arg("-C")
-                .arg(git.repo_root())
-                .arg("switch")
-                .arg("--track")
-                .arg(&item.data)
-                .output()
-        } else {
-            std::process::Command::new("git")
-                .arg("-C")
-                .arg(git.repo_root())
-                .arg("switch")
-                .arg(&item.data)
-                .output()
-        };
+        let repo_root = git.repo_root().to_path_buf();
+        let branch_data = item.data.clone();
+        let is_remote = item.is_remote;
 
-        match result {
-            Ok(output) if output.status.success() => {
-                self.input_mode = InputMode::Normal;
-                // Refresh tree and git state
-                self.tree.refresh();
-                if let Some(ref mut git) = self.git {
-                    git.refresh();
-                }
-                self.reapply_git();
-            }
-            Ok(output) => {
-                // Show error from stderr
-                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-                let branches = crate::git::branches::list_branches(git.repo_root());
-                let mut restored_picker = PickerState::new_branch(&branches);
-                restored_picker.error_message = Some(stderr);
-                self.picker_state = Some(restored_picker);
-                // Stay in picker mode so user can Esc
-            }
-            Err(e) => {
-                let branches = crate::git::branches::list_branches(git.repo_root());
-                let mut restored_picker = PickerState::new_branch(&branches);
-                restored_picker.error_message = Some(format!("git: {e}"));
-                self.picker_state = Some(restored_picker);
-            }
-        }
+        let (tx, rx) = mpsc::channel::<BranchSwitchResult>(1);
+        self.branch_switch_rx = Some(rx);
+        self.input_mode = InputMode::Normal;
+
+        tokio::task::spawn_blocking(move || {
+            let result = if is_remote {
+                std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(&repo_root)
+                    .arg("switch")
+                    .arg("--track")
+                    .arg(&branch_data)
+                    .output()
+            } else {
+                std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(&repo_root)
+                    .arg("switch")
+                    .arg(&branch_data)
+                    .output()
+            };
+
+            let (success, stderr) = match result {
+                Ok(output) if output.status.success() => (true, String::new()),
+                Ok(output) => (
+                    false,
+                    String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                ),
+                Err(e) => (false, format!("git: {e}")),
+            };
+            let _ = tx.blocking_send(BranchSwitchResult {
+                success,
+                stderr,
+                repo_root,
+            });
+        });
     }
 
     // ── Editor ─────────────────────────────────────────────────────────
