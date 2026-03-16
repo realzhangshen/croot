@@ -389,18 +389,40 @@ pub fn fuzzy_match_positions(query: &str, target: &str) -> Option<Vec<usize>> {
 }
 
 /// Exact substring match returning byte positions (char boundaries) of the matched range.
+///
+/// Performs the search on lowercased strings, then maps the matched character
+/// range back to byte offsets in the **original** `target` string. This avoids
+/// panics when `to_lowercase()` changes the byte length of characters (e.g.
+/// `İ` (2 bytes) → `i̇` (3 bytes)).
 pub fn exact_match_positions(query: &str, target: &str) -> Option<Vec<usize>> {
     let target_lower = target.to_lowercase();
     let query_lower = query.to_lowercase();
-    let start = target_lower.find(&query_lower)?;
-    let end = start + query_lower.len();
-    // Collect only char-boundary byte offsets so highlighting works with multibyte chars
-    Some(
-        target_lower[start..end]
-            .char_indices()
-            .map(|(i, _)| start + i)
-            .collect(),
-    )
+    let match_start = target_lower.find(&query_lower)?;
+
+    // Find which original chars correspond to the matched range in target_lower.
+    // Walk both strings char-by-char to build the byte-offset mapping.
+    let mut lower_byte = 0usize;
+    let mut orig_positions = Vec::new();
+    for (orig_byte, orig_char) in target.char_indices() {
+        let lower_char_len: usize = orig_char.to_lowercase().map(char::len_utf8).sum();
+        let lower_end = lower_byte + lower_char_len;
+        // This original char contributes to [lower_byte..lower_end) in target_lower.
+        // If any part overlaps with the match range, include the original byte offset.
+        let match_end = match_start + query_lower.len();
+        if lower_end > match_start && lower_byte < match_end {
+            orig_positions.push(orig_byte);
+        }
+        lower_byte = lower_end;
+        if lower_byte >= match_start + query_lower.len() && !orig_positions.is_empty() {
+            break;
+        }
+    }
+
+    if orig_positions.is_empty() {
+        None
+    } else {
+        Some(orig_positions)
+    }
 }
 
 /// Regex match returning byte positions (char boundaries) of the first match span.
@@ -658,5 +680,61 @@ mod tests {
         }
         assert_eq!(state.cursor_pos, 6); // 2 × 3 bytes
         assert_eq!(state.cursor_display_column(), 4); // 2 × 2 columns
+    }
+
+    #[test]
+    fn exact_match_positions_case_folding_byte_length_change() {
+        // İ (U+0130, 2 bytes) lowercases to i̇ (i + U+0307, 3 bytes).
+        // Positions must be in the ORIGINAL string, not the lowercased one.
+        // Use the lowercased query form that actually matches.
+        let target = "İstanbul.txt";
+        let query = "i\u{0307}stanbul"; // "i̇stanbul" — the actual lowercase of İstanbul
+        let pos = exact_match_positions(query, target);
+        assert!(pos.is_some(), "should match case-insensitively");
+        let positions = pos.unwrap();
+        // Verify all positions are valid char boundaries in the original string
+        for &p in &positions {
+            assert!(
+                target.is_char_boundary(p),
+                "position {p} is not a char boundary in {target:?}"
+            );
+        }
+        // İ is at byte 0 (2 bytes), s at byte 2, t at byte 3, etc.
+        assert_eq!(positions[0], 0); // İ
+        assert_eq!(positions[1], 2); // s
+    }
+
+    #[test]
+    fn exact_match_positions_mixed_byte_length_case_fold() {
+        // Test with a target where lowercasing changes byte lengths mid-string.
+        // "AİB" → lowercase "ai̇b". Query "i̇" should match İ in the original.
+        let target = "AİB";
+        let query = "i\u{0307}"; // lowercase of İ
+        let pos = exact_match_positions(query, target);
+        assert!(pos.is_some());
+        let positions = pos.unwrap();
+        for &p in &positions {
+            assert!(
+                target.is_char_boundary(p),
+                "position {p} is not a char boundary in {target:?}"
+            );
+        }
+        // A is 1 byte, İ starts at byte 1 (2 bytes)
+        assert_eq!(positions, vec![1]);
+    }
+
+    #[test]
+    fn exact_match_positions_eszett() {
+        // ß (U+00DF, 2 bytes) lowercases to ß (same), no byte change
+        let target = "straße.txt";
+        let pos = exact_match_positions("straße", target);
+        assert!(pos.is_some());
+        let positions = pos.unwrap();
+        for &p in &positions {
+            assert!(
+                target.is_char_boundary(p),
+                "position {p} is not a char boundary in {target:?}"
+            );
+        }
     }
 }

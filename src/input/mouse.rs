@@ -94,6 +94,7 @@ pub fn handle_mouse(
             }
         }
         MouseEventKind::Moved => Action::Hover(event.column, event.row),
+        MouseEventKind::Up(MouseButton::Left) => Action::DragEnd,
         _ => Action::None,
     }
 }
@@ -267,5 +268,18 @@ mod tests {
         let event = make_left_click(45, 5);
         let action = handle_mouse(event, 0, 10, Some(40), &mut tracker);
         assert_eq!(action, Action::SelectionStart(45, 5));
+    }
+
+    #[test]
+    fn mouse_up_returns_drag_end() {
+        let mut tracker = ClickTracker::new();
+        let event = MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            column: 20,
+            row: 5,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        let action = handle_mouse(event, 0, 10, None, &mut tracker);
+        assert_eq!(action, Action::DragEnd);
     }
 }

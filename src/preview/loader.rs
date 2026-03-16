@@ -53,7 +53,7 @@ pub fn load_preview(
     let file_info = format_file_info(path, size);
 
     // Size check
-    let max_bytes = max_file_size_kb * 1024;
+    let max_bytes = max_file_size_kb.saturating_mul(1024);
     if size > max_bytes {
         return LoadedPreview {
             kind: PreviewKind::TooLarge,
@@ -93,13 +93,14 @@ pub fn load_preview(
         return load_binary_preview(path, &file_info);
     }
 
-    // Text file — read full content
+    // Text file — bounded read to avoid unbounded memory usage
     load_text_preview(
         path,
         &file_info,
         syntax_highlight,
         render_markdown,
         preview_width,
+        max_bytes,
     )
 }
 
@@ -124,8 +125,10 @@ fn load_text_preview(
     syntax_highlight: bool,
     render_markdown: bool,
     preview_width: usize,
+    max_bytes: u64,
 ) -> LoadedPreview {
-    let content = match fs::read_to_string(path) {
+    // Bounded read to avoid unbounded memory usage (TOCTOU: file can grow after size check)
+    let content = match read_text_bounded(path, max_bytes) {
         Ok(c) => c,
         Err(e) => {
             return LoadedPreview {
@@ -136,17 +139,18 @@ fn load_text_preview(
         }
     };
 
+    let max_lines = 10_000; // Cap for rendering performance
+
     // Markdown rendering path
     if render_markdown && is_markdown_file(path) {
-        let lines = render_md::render_markdown(&content, preview_width);
+        let mut lines = render_md::render_markdown(&content, preview_width);
+        lines.truncate(max_lines);
         return LoadedPreview {
             kind: PreviewKind::Rendered,
             content: lines,
             file_info: file_info.to_string(),
         };
     }
-
-    let max_lines = 10_000; // Cap for rendering performance
     let lines = if syntax_highlight {
         highlight::highlight_file(path, &content, max_lines)
     } else {
@@ -273,8 +277,8 @@ pub fn generate_hex_dump(data: &[u8]) -> Vec<Vec<StyledSpan>> {
             }
         }
         // Pad short last line: ensure midpoint separator exists, then pad to full width
-        if chunk.len() <= 8 {
-            // Midpoint separator was never added; insert it at the right position
+        if chunk.len() < 8 {
+            // Midpoint separator was never added by the loop; insert it at the right position
             let midpoint_pos = 8 * 3; // "xx " * 8
             while hex.len() < midpoint_pos {
                 hex.push(' ');
@@ -306,6 +310,15 @@ pub fn generate_hex_dump(data: &[u8]) -> Vec<Vec<StyledSpan>> {
     }
 
     lines
+}
+
+/// Read a text file with a byte limit, avoiding unbounded memory allocation.
+fn read_text_bounded(path: &Path, max_bytes: u64) -> std::io::Result<String> {
+    use std::io::Read;
+    let file = fs::File::open(path)?;
+    let mut content = String::new();
+    file.take(max_bytes).read_to_string(&mut content)?;
+    Ok(content)
 }
 
 fn read_prefix(path: &Path, max_bytes: usize) -> std::io::Result<Vec<u8>> {
@@ -419,5 +432,49 @@ mod tests {
             hex_short.len(),
             "hex columns should be same width: full={hex_full:?}, short={hex_short:?}"
         );
+    }
+
+    #[test]
+    fn hex_dump_exactly_8_bytes_aligned() {
+        // Exactly 8 bytes: the midpoint separator IS added by the loop (i==7),
+        // so the padding branch should NOT add a second separator.
+        let data: Vec<u8> = (0..8).collect();
+        let lines = generate_hex_dump(&data);
+        assert_eq!(lines.len(), 1);
+        let hex = &lines[0][1].0;
+        // A full 16-byte line has length 16*3 + 1 = 49
+        assert_eq!(
+            hex.len(),
+            49,
+            "8-byte hex should be padded to full width: {hex:?}"
+        );
+        // The midpoint separator at position 24 should be exactly one space
+        // (bytes 0-7 produce "xx " * 8 = 24 chars, then one space separator)
+        assert_eq!(
+            &hex[24..25],
+            " ",
+            "midpoint separator should be single space"
+        );
+    }
+
+    #[test]
+    fn hex_dump_fewer_than_8_bytes_aligned() {
+        let data: Vec<u8> = (0..3).collect();
+        let lines = generate_hex_dump(&data);
+        assert_eq!(lines.len(), 1);
+        let hex = &lines[0][1].0;
+        assert_eq!(
+            hex.len(),
+            49,
+            "3-byte hex should be padded to full width: {hex:?}"
+        );
+    }
+
+    #[test]
+    fn saturating_mul_prevents_overflow() {
+        // Verify that a very large KB value doesn't overflow
+        let max_kb: u64 = u64::MAX / 512; // would overflow with * 1024
+        let result = max_kb.saturating_mul(1024);
+        assert_eq!(result, u64::MAX);
     }
 }

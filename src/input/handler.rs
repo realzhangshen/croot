@@ -41,6 +41,8 @@ pub enum Action {
     SeparatorDragStart,
     /// Mouse drag update at screen (col, row) — app routes based on drag state.
     DragUpdate(u16, u16),
+    /// Mouse button released — clears drag state.
+    DragEnd,
     /// Mouse hover at screen (col, row) for tree row highlighting.
     Hover(u16, u16),
     /// Right-click context menu at screen (col, row).

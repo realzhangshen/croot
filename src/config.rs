@@ -322,22 +322,36 @@ pub fn parse_key(s: &str) -> Option<(KeyCode, KeyModifiers)> {
         return None;
     }
 
+    // Split on '+' but handle trailing '+' as the literal key (e.g. "Ctrl++" → Ctrl + '+')
     let parts: Vec<&str> = s.split('+').collect();
     let mut modifiers = KeyModifiers::empty();
 
     let key_part = if parts.len() == 1 {
         parts[0]
     } else {
-        for &part in &parts[..parts.len() - 1] {
+        // If the last part is empty, the key is literally '+' (e.g. "Ctrl++" or just "+")
+        let last = if parts[parts.len() - 1].is_empty() {
+            "+"
+        } else {
+            parts[parts.len() - 1]
+        };
+        // Parse modifier parts (all but last, and skip trailing empty from the '+' key)
+        let modifier_end = if parts[parts.len() - 1].is_empty() {
+            parts.len().saturating_sub(2) // skip both the empty last and the empty before it
+        } else {
+            parts.len() - 1
+        };
+        for &part in &parts[..modifier_end] {
             match part.to_lowercase().as_str() {
                 "ctrl" | "control" => modifiers |= KeyModifiers::CONTROL,
                 "shift" => modifiers |= KeyModifiers::SHIFT,
                 "alt" => modifiers |= KeyModifiers::ALT,
                 "super" | "cmd" | "command" => modifiers |= KeyModifiers::SUPER,
+                "" => {} // skip empty parts from consecutive '+'
                 _ => return None,
             }
         }
-        parts[parts.len() - 1]
+        last
     };
 
     let code = match key_part.to_lowercase().as_str() {
@@ -1052,5 +1066,19 @@ show_hidden = "not a bool"
         // Both keys should exist
         assert_eq!(navigate(&root, "a.x").unwrap().as_integer(), Some(1));
         assert_eq!(navigate(&root, "a.y").unwrap().as_integer(), Some(2));
+    }
+
+    #[test]
+    fn parse_key_plus_literal() {
+        // "+" alone should parse as the '+' character
+        let result = parse_key("+");
+        assert_eq!(result, Some((KeyCode::Char('+'), KeyModifiers::empty())));
+    }
+
+    #[test]
+    fn parse_key_ctrl_plus() {
+        // "Ctrl++" should parse as Ctrl + '+'
+        let result = parse_key("Ctrl++");
+        assert_eq!(result, Some((KeyCode::Char('+'), KeyModifiers::CONTROL)));
     }
 }

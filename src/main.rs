@@ -126,10 +126,10 @@ async fn main() -> anyhow::Result<()> {
                     enhanced_kb: bool,
                     mouse: bool|
      -> anyhow::Result<()> {
-        if enhanced_kb {
-            execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags)?;
-        }
         disable_raw_mode()?;
+        if enhanced_kb {
+            let _ = execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags);
+        }
         if mouse {
             execute!(
                 terminal.backend_mut(),

@@ -378,6 +378,14 @@ impl MdRenderer {
         if total > self.width {
             let available = self.width.saturating_sub((num_cols + 1) * 3);
             let per_col = available / num_cols.max(1);
+            if per_col == 0 {
+                // Terminal too narrow to render table — show fallback message
+                self.lines.push(vec![(
+                    "(table too wide to display)".to_string(),
+                    Style::default().fg(Color::DarkGray),
+                )]);
+                return;
+            }
             for w in &mut col_widths {
                 if *w > per_col {
                     *w = per_col;

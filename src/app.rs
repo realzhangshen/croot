@@ -848,6 +848,10 @@ impl App {
                 self.handle_click_row(row, preview_tx);
             }
 
+            Action::DragEnd => {
+                self.dragging_separator = false;
+            }
+
             Action::Hover(col, row) => {
                 self.update_hover(col, row);
             }
@@ -1879,17 +1883,21 @@ impl App {
             &self.root,
             dialog.use_trash,
         );
-        if let file_ops::FileOpResult::Error(msg) = result {
-            self.show_error(msg);
+        match result {
+            file_ops::FileOpResult::Ok => {
+                // Only refresh tree after a successful file operation
+                self.tree.refresh();
+                if let Some(ref mut git) = self.git {
+                    git.refresh();
+                }
+                self.reapply_git();
+                self.refresh_search_state();
+            }
+            file_ops::FileOpResult::Error(msg) => {
+                self.show_error(msg);
+            }
+            file_ops::FileOpResult::Noop => {}
         }
-
-        // Refresh tree after any file operation
-        self.tree.refresh();
-        if let Some(ref mut git) = self.git {
-            git.refresh();
-        }
-        self.reapply_git();
-        self.refresh_search_state();
     }
 
     /// Get the directory context for the currently selected node.
@@ -2023,12 +2031,21 @@ impl App {
         let mut visible_set = std::collections::HashSet::new();
         for &match_idx in &matches {
             visible_set.insert(match_idx);
-            // Walk up the tree to find ancestors (nodes with decreasing depth)
+            // Walk up the tree to find ancestors: scan backward from match_idx,
+            // finding the closest node at each decreasing depth level.
             let match_depth = self.tree.nodes[match_idx].depth;
             if match_depth > 0 {
                 let mut target_depth = match_depth - 1;
                 for i in (0..match_idx).rev() {
                     if self.tree.nodes[i].depth == target_depth {
+                        visible_set.insert(i);
+                        if target_depth == 0 {
+                            break;
+                        }
+                        target_depth -= 1;
+                    } else if self.tree.nodes[i].depth < target_depth {
+                        // Skipped a depth level — adjust target and include this node
+                        target_depth = self.tree.nodes[i].depth;
                         visible_set.insert(i);
                         if target_depth == 0 {
                             break;
@@ -2341,9 +2358,12 @@ impl App {
             .arg(path)
             .status();
 
-        if let Err(e) = status {
-            self.show_error(format!("Failed to open editor '{editor_str}': {e}"));
-        }
+        // Capture error to show after terminal restore (when the TUI is visible again)
+        let editor_error = if let Err(e) = status {
+            Some(format!("Failed to open editor '{editor_str}': {e}"))
+        } else {
+            None
+        };
 
         // Restore terminal
         let _ = crossterm::terminal::enable_raw_mode();
@@ -2360,6 +2380,11 @@ impl App {
             );
         }
         terminal.clear()?;
+
+        // Show editor error after terminal is restored so the message is visible
+        if let Some(msg) = editor_error {
+            self.show_error(msg);
+        }
 
         Ok(())
     }
@@ -2588,15 +2613,14 @@ mod tests {
     // Path validation tests are now in crate::file_ops::tests
 
     #[test]
-    fn confirm_dialog_refreshes_search_state() {
+    fn confirm_dialog_error_skips_refresh() {
         let mut app = test_app();
-        // Enter filter mode with a query
+        // Enter filter mode with a stale visible index
         app.search_state = SearchState::new(SearchMode::Filter);
         app.search_state.query = "nonexistent_xyz".to_string();
-        // Manually add a stale visible index beyond tree size
         app.search_state.visible_indices = vec![0, 999];
 
-        // Set up a delete dialog for a nonexistent file (will fail but still refreshes)
+        // Set up a delete dialog for a nonexistent file (will fail → Error)
         let fake_path = std::env::temp_dir().join("croot_test_confirm_refresh");
         app.input_dialog = Some(InputDialogState::new(
             DialogKind::ConfirmDelete,
@@ -2606,14 +2630,40 @@ mod tests {
         app.input_mode = InputMode::Dialog;
         app.confirm_dialog();
 
-        // After confirm_dialog, refresh_search_state should have been called.
-        // The stale index 999 should be gone since the query won't match anything.
-        for &idx in &app.search_state.visible_indices {
-            assert!(
-                idx < app.tree.nodes.len(),
-                "visible_indices should have no out-of-bounds entries, found {idx}"
-            );
-        }
+        // On error, tree refresh is skipped — stale indices remain unchanged
+        assert!(
+            app.search_state.visible_indices.contains(&999),
+            "stale index should remain since refresh was skipped on error"
+        );
+        // But an error message should be shown
+        assert!(
+            app.error_message.is_some(),
+            "error message should be shown for failed delete"
+        );
+    }
+
+    #[test]
+    fn confirm_dialog_noop_skips_refresh() {
+        let mut app = test_app();
+        app.search_state = SearchState::new(SearchMode::Filter);
+        app.search_state.visible_indices = vec![0, 999];
+
+        // Set up a rename dialog with empty input (will be Noop)
+        let fake_path = std::env::temp_dir().join("croot_test_noop");
+        let mut dialog =
+            InputDialogState::new(DialogKind::Rename, fake_path, "original.txt".to_string());
+        dialog.input.clear();
+        dialog.cursor_pos = 0;
+        app.input_dialog = Some(dialog);
+        app.input_mode = InputMode::Dialog;
+        app.confirm_dialog();
+
+        // On noop, stale indices remain unchanged and no error
+        assert!(
+            app.search_state.visible_indices.contains(&999),
+            "stale index should remain since refresh was skipped on noop"
+        );
+        assert!(app.error_message.is_none(), "no error on noop");
     }
 
     #[test]

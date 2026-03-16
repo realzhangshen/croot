@@ -188,11 +188,16 @@ impl Widget for InputDialogWidget<'_> {
             buf.set_string(input_x, input_y, &display_text, input_style);
 
             // Draw cursor (block cursor: swap fg/bg)
+            let cursor_col =
+                super::search_bar::cursor_byte_to_column(&self.state.input, self.state.cursor_pos);
             let input_display_width = UnicodeWidthStr::width(self.state.input.as_str());
             let cursor_display_pos = if input_display_width > input_width {
-                input_width
+                // Text is scrolled: cursor is at the end of visible area offset by
+                // how far the cursor is from the end of the text
+                let dist_from_end = input_display_width - cursor_col;
+                input_width.saturating_sub(dist_from_end)
             } else {
-                super::search_bar::cursor_byte_to_column(&self.state.input, self.state.cursor_pos)
+                cursor_col
             };
             if let Some(cell) = buf.cell_mut((input_x + cursor_display_pos as u16, input_y)) {
                 cell.set_style(colors::popup_cursor());
