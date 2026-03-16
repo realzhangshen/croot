@@ -81,7 +81,7 @@ fn bench_natural_sort_mixed(c: &mut Criterion) {
         b.iter(|| {
             let mut nodes: Vec<TreeNode> = names
                 .iter()
-                .map(|(name, kind)| TreeNode::new(PathBuf::from(name), kind.clone(), 0))
+                .map(|(name, kind)| TreeNode::new(PathBuf::from(name), *kind, 0))
                 .collect();
             sort_nodes(black_box(&mut nodes), true);
         });

@@ -750,8 +750,10 @@ mod tests {
 
     #[test]
     fn user_override_replaces_default() {
-        let mut config = KeybindingsConfig::default();
-        config.search = Some("?".to_string()); // override "/" with "?"
+        let config = KeybindingsConfig {
+            search: Some("?".to_string()), // override "/" with "?"
+            ..Default::default()
+        };
         let map = build_keybinding_map(&config);
         // "/" should no longer be bound
         assert_eq!(
@@ -773,8 +775,10 @@ mod tests {
 
     #[test]
     fn empty_string_disables_binding() {
-        let mut config = KeybindingsConfig::default();
-        config.search = Some(String::new()); // disable search key
+        let config = KeybindingsConfig {
+            search: Some(String::new()), // disable search key
+            ..Default::default()
+        };
         let map = build_keybinding_map(&config);
         assert_eq!(
             map.get(&KeyBinding {
@@ -787,8 +791,10 @@ mod tests {
 
     #[test]
     fn opt_in_binding_added_when_configured() {
-        let mut config = KeybindingsConfig::default();
-        config.quit = Some("q".to_string());
+        let config = KeybindingsConfig {
+            quit: Some("q".to_string()),
+            ..Default::default()
+        };
         let map = build_keybinding_map(&config);
         assert_eq!(
             map.get(&KeyBinding {
@@ -803,8 +809,10 @@ mod tests {
 
     #[test]
     fn ctrl_modifier_keybinding() {
-        let mut config = KeybindingsConfig::default();
-        config.quit = Some("Ctrl+q".to_string());
+        let config = KeybindingsConfig {
+            quit: Some("Ctrl+q".to_string()),
+            ..Default::default()
+        };
         let map = build_keybinding_map(&config);
         assert_eq!(
             map.get(&KeyBinding {
@@ -817,8 +825,10 @@ mod tests {
 
     #[test]
     fn alt_modifier_keybinding() {
-        let mut config = KeybindingsConfig::default();
-        config.toggle_preview = Some("Alt+p".to_string());
+        let config = KeybindingsConfig {
+            toggle_preview: Some("Alt+p".to_string()),
+            ..Default::default()
+        };
         let map = build_keybinding_map(&config);
         assert_eq!(
             map.get(&KeyBinding {
@@ -831,8 +841,10 @@ mod tests {
 
     #[test]
     fn function_key_binding() {
-        let mut config = KeybindingsConfig::default();
-        config.refresh = Some("F5".to_string());
+        let config = KeybindingsConfig {
+            refresh: Some("F5".to_string()),
+            ..Default::default()
+        };
         let map = build_keybinding_map(&config);
         assert_eq!(
             map.get(&KeyBinding {
@@ -847,10 +859,11 @@ mod tests {
 
     #[test]
     fn last_binding_wins_on_conflict() {
-        let mut config = KeybindingsConfig::default();
-        // Both map to the same key "r"
-        config.refresh = Some("r".to_string());
-        config.rename = Some("r".to_string());
+        let config = KeybindingsConfig {
+            refresh: Some("r".to_string()),
+            rename: Some("r".to_string()), // same key — last in opt-in list wins
+            ..Default::default()
+        };
         let map = build_keybinding_map(&config);
         let binding = KeyBinding {
             code: KeyCode::Char('r'),
@@ -864,10 +877,12 @@ mod tests {
 
     #[test]
     fn multiple_opt_in_bindings_coexist() {
-        let mut config = KeybindingsConfig::default();
-        config.new_file = Some("a".to_string());
-        config.new_dir = Some("A".to_string());
-        config.delete = Some("D".to_string());
+        let config = KeybindingsConfig {
+            new_file: Some("a".to_string()),
+            new_dir: Some("A".to_string()),
+            delete: Some("D".to_string()),
+            ..Default::default()
+        };
         let map = build_keybinding_map(&config);
         assert_eq!(
             map.get(&KeyBinding {
@@ -897,8 +912,10 @@ mod tests {
 
     #[test]
     fn handle_key_enter_binding() {
-        let mut config = KeybindingsConfig::default();
-        config.enter = Some("Enter".to_string());
+        let config = KeybindingsConfig {
+            enter: Some("Enter".to_string()),
+            ..Default::default()
+        };
         let map = build_keybinding_map(&config);
         let action = handle_key(make_key(KeyCode::Enter), false, false, &map);
         assert_eq!(action, Action::EnterKey);
@@ -906,8 +923,10 @@ mod tests {
 
     #[test]
     fn handle_key_space_binding() {
-        let mut config = KeybindingsConfig::default();
-        config.toggle = Some("Space".to_string());
+        let config = KeybindingsConfig {
+            toggle: Some("Space".to_string()),
+            ..Default::default()
+        };
         let map = build_keybinding_map(&config);
         let action = handle_key(make_key(KeyCode::Char(' ')), false, false, &map);
         assert_eq!(action, Action::Toggle);

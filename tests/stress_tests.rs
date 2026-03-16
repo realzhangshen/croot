@@ -74,7 +74,7 @@ fn stress_deep_nested_dirs() {
     let elapsed = start.elapsed();
 
     // Should load the top level only (not recursively expanded)
-    assert!(tree.len() > 0, "Tree should have nodes");
+    assert!(!tree.is_empty(), "Tree should have nodes");
     assert!(
         elapsed.as_millis() < 2000,
         "Loading deep tree took {elapsed:?}, expected < 2s"

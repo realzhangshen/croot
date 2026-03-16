@@ -22,7 +22,8 @@ fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 
     loop {
         match (a_chars.peek(), b_chars.peek()) {
-            (None, None) => return std::cmp::Ordering::Equal,
+            // Both exhausted — tiebreak by raw bytes for deterministic ordering
+            (None, None) => return a.cmp(b),
             (None, Some(_)) => return std::cmp::Ordering::Less,
             (Some(_), None) => return std::cmp::Ordering::Greater,
             (Some(&ac), Some(&bc)) => {
@@ -89,7 +90,9 @@ mod tests {
 
     #[test]
     fn natural_sort_case_insensitive() {
-        assert_eq!(natural_cmp("ABC", "abc"), std::cmp::Ordering::Equal);
+        // Case-only differences: uppercase sorts before lowercase (byte-level tiebreak)
+        assert_eq!(natural_cmp("ABC", "abc"), std::cmp::Ordering::Less);
+        assert_eq!(natural_cmp("abc", "ABC"), std::cmp::Ordering::Greater);
         assert_eq!(natural_cmp("apple", "Banana"), std::cmp::Ordering::Less);
     }
 

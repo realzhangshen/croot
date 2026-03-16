@@ -933,12 +933,16 @@ impl App {
             }
             // Global search actions
             Action::StartGlobalSearch => {
+                let last_id = self.search_state.request_id;
                 self.search_state = SearchState::new(SearchMode::Global);
+                self.search_state.request_id = last_id;
                 self.search_state.global_search_type = GlobalSearchType::FileName;
                 self.input_mode = InputMode::GlobalSearch;
             }
             Action::StartGlobalSearchContent => {
+                let last_id = self.search_state.request_id;
                 self.search_state = SearchState::new(SearchMode::Global);
+                self.search_state.request_id = last_id;
                 self.search_state.global_search_type = GlobalSearchType::Content;
                 self.input_mode = InputMode::GlobalSearch;
             }
@@ -989,7 +993,9 @@ impl App {
                     .cloned()
                 {
                     self.input_mode = InputMode::Normal;
+                    let last_id = self.search_state.request_id;
                     self.search_state.clear();
+                    self.search_state.request_id = last_id;
                     let path = result.path;
                     self.tree.navigate_to_path(&path);
                     self.reapply_git();
@@ -997,7 +1003,9 @@ impl App {
                 }
             }
             Action::GlobalSearchCancel => {
+                let last_id = self.search_state.request_id;
                 self.search_state.clear();
+                self.search_state.request_id = last_id;
                 self.input_mode = InputMode::Normal;
                 if let Some(handle) = self.global_search_handle.take() {
                     handle.abort();
@@ -1531,10 +1539,23 @@ impl App {
             }
             MenuAction::RevealInFinder => {
                 if let Some(node) = self.tree.nodes.get(node_idx) {
-                    let _ = std::process::Command::new("open")
-                        .arg("-R")
-                        .arg(&node.path)
-                        .spawn();
+                    #[cfg(target_os = "macos")]
+                    {
+                        let _ = std::process::Command::new("open")
+                            .arg("-R")
+                            .arg(&node.path)
+                            .spawn();
+                    }
+                    #[cfg(target_os = "linux")]
+                    {
+                        // Open the parent directory in the default file manager
+                        let dir = if node.is_dir() {
+                            &node.path
+                        } else {
+                            node.path.parent().unwrap_or(&node.path)
+                        };
+                        let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
+                    }
                 }
             }
             MenuAction::NewFile => self.start_new_file_at(node_idx),
@@ -1703,7 +1724,10 @@ impl App {
             Ok(p) if !p.is_empty() => p,
             _ => return,
         };
-        let (cmd, args) = parts.split_first().unwrap();
+        let (cmd, args) = match parts.split_first() {
+            Some(pair) => pair,
+            None => return,
+        };
         let _ = std::process::Command::new(cmd)
             .args(args)
             .arg(path)
@@ -2338,7 +2362,9 @@ impl App {
 
         if !inside {
             // Click outside overlay → cancel
+            let last_id = self.search_state.request_id;
             self.search_state.clear();
+            self.search_state.request_id = last_id;
             self.input_mode = InputMode::Normal;
             if let Some(handle) = self.global_search_handle.take() {
                 handle.abort();
@@ -2362,7 +2388,9 @@ impl App {
                     .cloned()
                 {
                     self.input_mode = InputMode::Normal;
+                    let last_id = self.search_state.request_id;
                     self.search_state.clear();
+                    self.search_state.request_id = last_id;
                     let path = result.path;
                     self.tree.navigate_to_path(&path);
                     self.reapply_git();
@@ -2381,6 +2409,7 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use crate::render::search_bar::{GlobalSearchType, SearchMode, SearchState};
+    use crate::tree::node::TreeNode;
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
     /// Helper to create a minimal App rooted in a temp directory.
@@ -2415,6 +2444,7 @@ mod tests {
         (app, tmp)
     }
 
+    #[allow(clippy::type_complexity)]
     fn make_channels() -> (
         mpsc::Sender<(PathBuf, LoadedPreview)>,
         mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)>,
@@ -2887,7 +2917,7 @@ mod tests {
             .tree
             .nodes
             .iter()
-            .position(|n| n.is_dir())
+            .position(TreeNode::is_dir)
             .expect("should have a dir");
         app.tree.toggle(dir_idx);
         assert!(app.tree.nodes[dir_idx].is_expanded);
@@ -2916,7 +2946,7 @@ mod tests {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
         // Navigate to a file node
-        while app.tree.selected().is_some_and(|n| n.is_dir()) {
+        while app.tree.selected().is_some_and(TreeNode::is_dir) {
             app.handle_action(&Action::CursorDown, &ptx, &stx);
         }
         let post = app.handle_action(&Action::OpenInEditor, &ptx, &stx);
@@ -2931,7 +2961,7 @@ mod tests {
         while app.tree.selected().is_some_and(|n| !n.is_dir()) {
             app.handle_action(&Action::CursorDown, &ptx, &stx);
         }
-        if app.tree.selected().is_some_and(|n| n.is_dir()) {
+        if app.tree.selected().is_some_and(TreeNode::is_dir) {
             let post = app.handle_action(&Action::OpenInEditor, &ptx, &stx);
             assert!(matches!(post, PostAction::None));
         }

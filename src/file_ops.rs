@@ -15,17 +15,20 @@ pub enum FileOpResult {
 /// Check whether `target` (which may contain `..` or be absolute) resolves
 /// to a path within `root`. Works purely on path components — no filesystem access.
 pub fn is_path_within_root(root: &Path, target: &Path) -> bool {
-    let mut normalized = PathBuf::new();
-    for comp in target.components() {
-        match comp {
-            Component::ParentDir => {
-                normalized.pop();
+    let normalize = |p: &Path| -> PathBuf {
+        let mut out = PathBuf::new();
+        for comp in p.components() {
+            match comp {
+                Component::ParentDir => {
+                    out.pop();
+                }
+                Component::CurDir => {}
+                _ => out.push(comp),
             }
-            Component::CurDir => {}
-            _ => normalized.push(comp),
         }
-    }
-    normalized.starts_with(root)
+        out
+    };
+    normalize(target).starts_with(normalize(root))
 }
 
 /// Strict path-within-root check that canonicalizes the nearest existing

@@ -20,8 +20,8 @@ pub fn setup_watcher(root: &Path, tx: mpsc::Sender<()>) -> WatcherResult {
         move |events: Result<Vec<notify_debouncer_mini::DebouncedEvent>, notify::Error>| {
             if let Ok(events) = events {
                 let has_real_change = events.iter().any(|e| e.kind == DebouncedEventKind::Any);
-                if has_real_change && tx.try_send(()).is_err() {
-                    eprintln!("croot: watcher event dropped (channel full)");
+                if has_real_change {
+                    let _ = tx.try_send(());
                 }
             }
         },
