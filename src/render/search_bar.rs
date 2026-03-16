@@ -345,9 +345,7 @@ pub fn regex_match(re: &regex::Regex, target: &str) -> bool {
 
 /// Exact substring match (case-insensitive).
 pub fn exact_match(query: &str, target: &str) -> bool {
-    target
-        .to_ascii_lowercase()
-        .contains(&query.to_ascii_lowercase())
+    target.to_lowercase().contains(&query.to_lowercase())
 }
 
 /// Dispatch matching based on mode.
@@ -390,19 +388,31 @@ pub fn fuzzy_match_positions(query: &str, target: &str) -> Option<Vec<usize>> {
     }
 }
 
-/// Exact substring match returning byte positions of the matched range.
+/// Exact substring match returning byte positions (char boundaries) of the matched range.
 pub fn exact_match_positions(query: &str, target: &str) -> Option<Vec<usize>> {
-    let target_lower = target.to_ascii_lowercase();
-    let query_lower = query.to_ascii_lowercase();
+    let target_lower = target.to_lowercase();
+    let query_lower = query.to_lowercase();
     let start = target_lower.find(&query_lower)?;
     let end = start + query_lower.len();
-    Some((start..end).collect())
+    // Collect only char-boundary byte offsets so highlighting works with multibyte chars
+    Some(
+        target_lower[start..end]
+            .char_indices()
+            .map(|(i, _)| start + i)
+            .collect(),
+    )
 }
 
-/// Regex match returning byte positions of the first match span.
+/// Regex match returning byte positions (char boundaries) of the first match span.
 pub fn regex_match_positions(re: &regex::Regex, target: &str) -> Option<Vec<usize>> {
     let m = re.find(target)?;
-    Some((m.start()..m.end()).collect())
+    // Collect only char-boundary byte offsets so highlighting works with multibyte chars
+    Some(
+        target[m.start()..m.end()]
+            .char_indices()
+            .map(|(i, _)| m.start() + i)
+            .collect(),
+    )
 }
 
 /// Dispatch position-returning match based on mode.
@@ -604,6 +614,38 @@ mod tests {
         }
         assert_eq!(state.cursor_pos, 5);
         assert_eq!(state.cursor_display_column(), 4);
+    }
+
+    #[test]
+    fn exact_match_positions_multibyte_returns_char_boundaries() {
+        // "café.rs" — 'é' is 2 bytes; match "fé" should return char-boundary positions
+        let pos = exact_match_positions("fé", "café.rs");
+        assert!(pos.is_some());
+        let positions = pos.unwrap();
+        // 'f' starts at byte 2, 'é' starts at byte 3 (2 bytes), so positions = [2, 3]
+        assert_eq!(positions, vec![2, 3]);
+        // Verify all positions are valid char boundaries
+        for &p in &positions {
+            assert!(
+                "café.rs".is_char_boundary(p),
+                "position {p} is not a char boundary"
+            );
+        }
+    }
+
+    #[test]
+    fn exact_match_unicode_case_folding() {
+        // to_lowercase handles non-ASCII: 'É' should match 'é'
+        assert!(exact_match("É", "café.rs"));
+    }
+
+    #[test]
+    fn regex_match_positions_multibyte_returns_char_boundaries() {
+        let re = regex::Regex::new("fé").unwrap();
+        let pos = regex_match_positions(&re, "café.rs");
+        assert!(pos.is_some());
+        let positions = pos.unwrap();
+        assert_eq!(positions, vec![2, 3]);
     }
 
     #[test]

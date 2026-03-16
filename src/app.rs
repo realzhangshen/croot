@@ -1756,7 +1756,7 @@ impl App {
         self.config.open.default.clone()
     }
 
-    fn open_externally(&self, path: &std::path::Path) {
+    fn open_externally(&mut self, path: &std::path::Path) {
         let command_str = self.resolve_open_command(path);
         let parts = match shell_words::split(&command_str) {
             Ok(p) if !p.is_empty() => p,
@@ -1766,13 +1766,16 @@ impl App {
             Some(pair) => pair,
             None => return,
         };
-        let _ = std::process::Command::new(cmd)
+        if let Err(e) = std::process::Command::new(cmd)
             .args(args)
             .arg(path)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .spawn();
+            .spawn()
+        {
+            self.show_error(format!("Failed to open '{cmd}': {e}"));
+        }
     }
 
     // ── File operations ─────────────────────────────────────────────────

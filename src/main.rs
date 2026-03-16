@@ -121,31 +121,46 @@ async fn main() -> anyhow::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
+    // Helper closure for terminal teardown (used on both success and error paths)
+    let teardown = |terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+                    enhanced_kb: bool,
+                    mouse: bool|
+     -> anyhow::Result<()> {
+        if enhanced_kb {
+            execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags)?;
+        }
+        disable_raw_mode()?;
+        if mouse {
+            execute!(
+                terminal.backend_mut(),
+                LeaveAlternateScreen,
+                DisableMouseCapture
+            )?;
+        } else {
+            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+        }
+        terminal.show_cursor()?;
+        Ok(())
+    };
+
     // Run app
-    let mut app = App::new(
+    let mut app = match App::new(
         path,
         enhanced_keyboard,
         cfg,
         #[cfg(feature = "image-preview")]
         image_picker,
-    )?;
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            let _ = teardown(&mut terminal, enhanced_keyboard, mouse_enabled);
+            return Err(e);
+        }
+    };
     let result = app.run(&mut terminal).await;
 
     // Terminal teardown
-    if enhanced_keyboard {
-        execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags)?;
-    }
-    disable_raw_mode()?;
-    if mouse_enabled {
-        execute!(
-            terminal.backend_mut(),
-            LeaveAlternateScreen,
-            DisableMouseCapture
-        )?;
-    } else {
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    }
-    terminal.show_cursor()?;
+    teardown(&mut terminal, enhanced_keyboard, mouse_enabled)?;
 
     result
 }

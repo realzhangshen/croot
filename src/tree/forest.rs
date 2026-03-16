@@ -325,6 +325,9 @@ impl FileTree {
 
     /// Check if a node at `index` is the last child of its parent.
     pub fn is_last_sibling(&self, index: usize) -> bool {
+        if index >= self.nodes.len() {
+            return true;
+        }
         let depth = self.nodes[index].depth;
         // Look at subsequent nodes: if the next node at the same depth or less doesn't exist
         // before a shallower node, this is the last sibling.
@@ -638,6 +641,12 @@ mod tests {
         let mut tree = tree_from(&[("a.txt", NodeKind::File, 0)]);
         tree.toggle(0);
         assert!(!tree.nodes[0].is_expanded);
+    }
+
+    #[test]
+    fn is_last_sibling_out_of_bounds_returns_true() {
+        let tree = tree_from(&[("a.txt", NodeKind::File, 0)]);
+        assert!(tree.is_last_sibling(99)); // should not panic
     }
 
     #[test]

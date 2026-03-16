@@ -111,7 +111,7 @@ impl ContextMenuState {
                 },
                 MenuItem {
                     label: "─".into(),
-                    action: MenuAction::CopyPath,
+                    action: MenuAction::Separator,
                 },
                 MenuItem {
                     label: "Refresh".into(),
@@ -194,23 +194,19 @@ impl ContextMenuState {
     }
 
     pub fn move_up(&mut self) {
-        if self.selected > 0 {
+        while self.selected > 0 {
             self.selected -= 1;
-            // Skip separator
-            if self.items[self.selected].action == MenuAction::Separator && self.selected > 0 {
-                self.selected -= 1;
+            if self.items[self.selected].action != MenuAction::Separator {
+                break;
             }
         }
     }
 
     pub fn move_down(&mut self) {
-        if self.selected + 1 < self.items.len() {
+        while self.selected + 1 < self.items.len() {
             self.selected += 1;
-            // Skip separator
-            if self.items[self.selected].action == MenuAction::Separator
-                && self.selected + 1 < self.items.len()
-            {
-                self.selected += 1;
+            if self.items[self.selected].action != MenuAction::Separator {
+                break;
             }
         }
     }
@@ -442,7 +438,7 @@ mod tests {
         assert_eq!(state.items.len(), 7);
         assert_eq!(state.items[0].action, MenuAction::NewFile);
         assert_eq!(state.items[1].action, MenuAction::NewDir);
-        // items[2] is separator
+        assert_eq!(state.items[2].action, MenuAction::Separator);
         assert_eq!(state.items[3].action, MenuAction::Refresh);
         assert_eq!(state.items[4].action, MenuAction::CollapseAll);
         assert_eq!(state.items[5].action, MenuAction::TogglePreview);
@@ -604,5 +600,23 @@ mod tests {
             !cell.modifier.contains(Modifier::REVERSED),
             "selected Delete should NOT have REVERSED"
         );
+    }
+
+    #[test]
+    fn move_down_skips_separator_in_workspace_menu() {
+        let mut state = ContextMenuState::new_for_workspace(0, 0, 0);
+        assert_eq!(state.selected, 0); // NewFile
+        state.move_down(); // → NewDir (1)
+        assert_eq!(state.items[state.selected].action, MenuAction::NewDir);
+        state.move_down(); // → skip Separator (2) → Refresh (3)
+        assert_eq!(state.items[state.selected].action, MenuAction::Refresh);
+    }
+
+    #[test]
+    fn move_up_skips_separator_in_workspace_menu() {
+        let mut state = ContextMenuState::new_for_workspace(0, 0, 0);
+        state.selected = 3; // Refresh
+        state.move_up(); // → skip Separator (2) → NewDir (1)
+        assert_eq!(state.items[state.selected].action, MenuAction::NewDir);
     }
 }

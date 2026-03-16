@@ -63,12 +63,10 @@ mod tests {
 
     #[test]
     fn setup_watcher_succeeds_for_valid_path() {
-        let tmp = std::env::temp_dir().join("croot_watcher_test");
-        let _ = std::fs::create_dir_all(&tmp);
+        let tmp = tempfile::tempdir().unwrap();
         let (tx, _rx) = mpsc::channel(1);
-        let result = setup_watcher(&tmp, tx);
+        let result = setup_watcher(tmp.path(), tx);
         assert!(result.error.is_none());
         assert!(result.debouncer.is_some());
-        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

@@ -308,6 +308,9 @@ fn build_visible_indices(state: &mut FileTree, viewport_height: usize) -> Vec<us
         if all_visible[pos] != state.cursor {
             state.cursor = all_visible[pos]; // snap forward to nearest visible
         }
+    } else if let Some(&last) = all_visible.last() {
+        // Cursor is past all visible nodes — clamp to the last one
+        state.cursor = last;
     }
 
     // Apply scrolling within the visible-indices list

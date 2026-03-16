@@ -114,7 +114,8 @@ fn is_image_file(path: &Path) -> bool {
 fn is_markdown_file(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .is_some_and(|ext| matches!(ext, "md" | "mdx" | "markdown"))
+        .map(str::to_ascii_lowercase)
+        .is_some_and(|ext| matches!(ext.as_str(), "md" | "mdx" | "markdown"))
 }
 
 fn load_text_preview(
@@ -160,14 +161,17 @@ fn load_text_preview(
 }
 
 fn load_binary_preview(path: &Path, file_info: &str) -> LoadedPreview {
-    let data = read_prefix(path, 512).unwrap_or_default();
-
-    let lines = generate_hex_dump(&data);
-
-    LoadedPreview {
-        kind: PreviewKind::Binary,
-        content: lines,
-        file_info: file_info.to_string(),
+    match read_prefix(path, 512) {
+        Ok(data) => LoadedPreview {
+            kind: PreviewKind::Binary,
+            content: generate_hex_dump(&data),
+            file_info: file_info.to_string(),
+        },
+        Err(e) => LoadedPreview {
+            kind: PreviewKind::Error(format!("Read error: {e}")),
+            content: Vec::new(),
+            file_info: file_info.to_string(),
+        },
     }
 }
 
@@ -260,7 +264,7 @@ pub fn generate_hex_dump(data: &[u8]) -> Vec<Vec<StyledSpan>> {
         // Offset
         spans.push((format!("{offset:08x}  "), offset_style));
 
-        // Hex bytes
+        // Hex bytes — two groups of 8 separated by an extra space
         let mut hex = String::new();
         for (i, byte) in chunk.iter().enumerate() {
             let _ = write!(hex, "{byte:02x} ");
@@ -268,8 +272,16 @@ pub fn generate_hex_dump(data: &[u8]) -> Vec<Vec<StyledSpan>> {
                 hex.push(' ');
             }
         }
-        // Pad if short line
-        let expected_len = bytes_per_line * 3 + 1; // "xx " * 16 + one extra space at midpoint
+        // Pad short last line: ensure midpoint separator exists, then pad to full width
+        if chunk.len() <= 8 {
+            // Midpoint separator was never added; insert it at the right position
+            let midpoint_pos = 8 * 3; // "xx " * 8
+            while hex.len() < midpoint_pos {
+                hex.push(' ');
+            }
+            hex.push(' '); // midpoint separator
+        }
+        let expected_len = bytes_per_line * 3 + 1; // "xx " * 16 + one midpoint space
         while hex.len() < expected_len {
             hex.push(' ');
         }
@@ -298,10 +310,9 @@ pub fn generate_hex_dump(data: &[u8]) -> Vec<Vec<StyledSpan>> {
 
 fn read_prefix(path: &Path, max_bytes: usize) -> std::io::Result<Vec<u8>> {
     use std::io::Read;
-    let mut file = fs::File::open(path)?;
-    let mut buf = vec![0u8; max_bytes];
-    let n = file.read(&mut buf)?;
-    buf.truncate(n);
+    let file = fs::File::open(path)?;
+    let mut buf = Vec::with_capacity(max_bytes);
+    file.take(max_bytes as u64).read_to_end(&mut buf)?;
     Ok(buf)
 }
 
@@ -383,5 +394,30 @@ mod tests {
 
         let result = load_preview(&png_path, 1024, true, true, 80, false);
         assert_eq!(result.kind, PreviewKind::Binary);
+    }
+
+    #[test]
+    fn is_markdown_file_case_insensitive() {
+        assert!(is_markdown_file(Path::new("README.MD")));
+        assert!(is_markdown_file(Path::new("notes.Md")));
+        assert!(is_markdown_file(Path::new("doc.markdown")));
+        assert!(is_markdown_file(Path::new("doc.MDX")));
+        assert!(!is_markdown_file(Path::new("code.rs")));
+    }
+
+    #[test]
+    fn hex_dump_short_last_line_has_aligned_ascii() {
+        // 20 bytes = 1 full line (16) + 1 partial line (4)
+        let data: Vec<u8> = (0..20).collect();
+        let lines = generate_hex_dump(&data);
+        assert_eq!(lines.len(), 2);
+        // Both lines' hex spans (index 1) should have the same length for alignment
+        let hex_full = &lines[0][1].0;
+        let hex_short = &lines[1][1].0;
+        assert_eq!(
+            hex_full.len(),
+            hex_short.len(),
+            "hex columns should be same width: full={hex_full:?}, short={hex_short:?}"
+        );
     }
 }

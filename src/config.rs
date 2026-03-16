@@ -831,7 +831,7 @@ fn insert_at_key(root: &mut toml::Value, key: &str, value: toml::Value) -> Resul
         }
         current = current
             .get_mut(part)
-            .expect("key just inserted or verified to exist");
+            .ok_or_else(|| format!("Internal error: key '{part}' missing after insert"))?;
     }
 
     let leaf = parts.last().expect("non-empty after early return");

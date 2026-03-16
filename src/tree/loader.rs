@@ -45,12 +45,10 @@ pub fn load_children_with_meta(dir: &Path, depth: usize, config: &TreeConfig) ->
             }
         }
 
-        let kind = if path.is_symlink() {
-            NodeKind::Symlink
-        } else if path.is_dir() {
-            NodeKind::Directory
-        } else {
-            NodeKind::File
+        let kind = match entry.file_type() {
+            Some(ft) if ft.is_symlink() => NodeKind::Symlink,
+            Some(ft) if ft.is_dir() => NodeKind::Directory,
+            _ => NodeKind::File,
         };
 
         let mut node = TreeNode::new(path.clone(), kind, depth);

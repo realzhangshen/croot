@@ -34,6 +34,7 @@ struct MdRenderer {
     code_buf: String,
     in_heading: bool,
     in_blockquote: bool,
+    in_image: bool,
     in_table: bool,
     table_alignments: Vec<pulldown_cmark::Alignment>,
     table_head: Vec<String>,      // single header row: cell texts
@@ -56,6 +57,7 @@ impl MdRenderer {
             code_buf: String::new(),
             in_heading: false,
             in_blockquote: false,
+            in_image: false,
             in_table: false,
             table_alignments: Vec::new(),
             table_head: Vec::new(),
@@ -206,6 +208,7 @@ impl MdRenderer {
                 self.link_url = Some(dest_url.to_string());
             }
             Tag::Image { dest_url, .. } => {
+                self.in_image = true;
                 self.current_line.push((
                     format!("[image: {dest_url}]"),
                     Style::default()
@@ -264,6 +267,9 @@ impl MdRenderer {
             TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough => {
                 self.pop_style();
             }
+            TagEnd::Image => {
+                self.in_image = false;
+            }
             TagEnd::Link => {
                 self.pop_style();
                 if let Some(url) = self.link_url.take() {
@@ -291,6 +297,10 @@ impl MdRenderer {
     }
 
     fn text(&mut self, text: &str) {
+        // Suppress alt-text inside image tags (already rendered as [image: url])
+        if self.in_image {
+            return;
+        }
         if self.in_table {
             self.current_cell_text.push_str(text);
             return;
@@ -639,5 +649,23 @@ mod tests {
         assert!(text.iter().any(|l| l.contains('│')));
         assert!(text.iter().any(|l| l.contains('A')));
         assert!(text.iter().any(|l| l.contains('1')));
+    }
+
+    #[test]
+    fn image_alt_text_not_duplicated() {
+        let md = "![photo of sunset](sunset.png)";
+        let result = render_markdown(md, 80);
+        let text = lines_to_text(&result);
+        let full_text: String = text.join(" ");
+        // Should contain the [image: url] placeholder
+        assert!(
+            full_text.contains("[image: sunset.png]"),
+            "should show image placeholder: {full_text}"
+        );
+        // Alt-text "photo of sunset" should NOT appear as separate text
+        assert!(
+            !full_text.contains("photo of sunset"),
+            "alt-text should be suppressed: {full_text}"
+        );
     }
 }
