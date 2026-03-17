@@ -264,8 +264,9 @@ impl Widget for SearchBar<'_> {
 
         // Close button on the far right
         let close_btn = "[×]";
+        let close_btn_width = UnicodeWidthStr::width(close_btn) as u16;
         let close_reserve = if self.show_close_button {
-            close_btn.len() as u16 + 1 // +1 for space
+            close_btn_width + 1 // +1 for space
         } else {
             0
         };
@@ -292,7 +293,8 @@ impl Widget for SearchBar<'_> {
                 SearchMode::Global => String::new(),
             }
         };
-        let right_reserved = match_info.len() as u16 + close_reserve;
+        let match_info_width = UnicodeWidthStr::width(match_info.as_str()) as u16;
+        let right_reserved = match_info_width + close_reserve;
         if !match_info.is_empty() && area.width > right_reserved {
             let info_x = area.x + area.width - right_reserved;
             let info_style = if self.state.match_count() > 0 {
@@ -304,8 +306,8 @@ impl Widget for SearchBar<'_> {
         }
 
         // Draw close button (only if it fits)
-        if self.show_close_button && area.width > close_btn.len() as u16 + 1 {
-            let close_x = area.x + area.width - close_btn.len() as u16 - 1;
+        if self.show_close_button && area.width > close_btn_width + 1 {
+            let close_x = area.x + area.width - close_btn_width - 1;
             buf.set_string(
                 close_x,
                 area.y,

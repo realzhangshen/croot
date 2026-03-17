@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 
 /// Result of watcher setup: the debouncer (if successful) and an optional error message
 /// for display in the status bar.
+#[must_use]
 pub struct WatcherResult {
     pub debouncer: Option<notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>>,
     pub error: Option<String>,

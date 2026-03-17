@@ -47,7 +47,11 @@ impl Widget for GlobalSearchOverlay<'_> {
             GlobalSearchType::FileName => " Search Files ",
             GlobalSearchType::Content => " Search Contents ",
         };
-        let title_x = dialog.x + (dialog.width.saturating_sub(title.len() as u16)) / 2;
+        let title_x = dialog.x
+            + (dialog
+                .width
+                .saturating_sub(UnicodeWidthStr::width(title) as u16))
+                / 2;
         buf.set_string(
             title_x,
             dialog.y,
@@ -70,7 +74,8 @@ impl Widget for GlobalSearchOverlay<'_> {
         buf.set_string(dialog.x + 1, input_y, prompt, colors::popup_prompt());
 
         let input_x = dialog.x + 1 + prompt.len() as u16;
-        let input_width = (dialog.width.saturating_sub(3)) as usize;
+        // Available width: dialog.width - left_border(1) - prompt(3) - right_border(1)
+        let input_width = dialog.width.saturating_sub(1 + prompt.len() as u16 + 1) as usize;
         let query_display =
             super::status_bar::truncate_start_to_display_width(&self.state.query, input_width);
         buf.set_string(input_x, input_y, &query_display, input_style);

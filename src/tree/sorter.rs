@@ -35,8 +35,8 @@ fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
                         return ord;
                     }
                 } else {
-                    let a_lower = ac.to_ascii_lowercase();
-                    let b_lower = bc.to_ascii_lowercase();
+                    let a_lower = ac.to_lowercase().next().unwrap_or(ac);
+                    let b_lower = bc.to_lowercase().next().unwrap_or(bc);
                     let ord = a_lower.cmp(&b_lower);
                     if ord != std::cmp::Ordering::Equal {
                         return ord;
@@ -94,6 +94,15 @@ mod tests {
         assert_eq!(natural_cmp("ABC", "abc"), std::cmp::Ordering::Less);
         assert_eq!(natural_cmp("abc", "ABC"), std::cmp::Ordering::Greater);
         assert_eq!(natural_cmp("apple", "Banana"), std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn natural_sort_unicode_case_insensitive() {
+        // Accented characters should sort case-insensitively
+        assert_eq!(natural_cmp("ñ_file", "Ñ_file"), std::cmp::Ordering::Greater);
+        assert_eq!(natural_cmp("über", "Über"), std::cmp::Ordering::Greater);
+        // ü and Ü should compare equal after lowercasing (unlike to_ascii_lowercase)
+        assert_eq!(natural_cmp("ü", "ü"), std::cmp::Ordering::Equal);
     }
 
     #[test]

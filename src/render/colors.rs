@@ -175,6 +175,8 @@ color_getters!(
     popup_fg,
     popup_bg,
     popup_accent,
+    popup_border_fg,
+    popup_dim_fg,
     popup_input_bg,
     popup_input_fg,
     popup_selected_danger_bg,
@@ -214,12 +216,16 @@ pub fn popup_selected_danger() -> Style {
 
 /// Popup dim text (hints, separators, [Cancel]).
 pub fn popup_dim() -> Style {
-    Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
+    Style::default()
+        .fg(popup_dim_fg())
+        .add_modifier(Modifier::REVERSED | Modifier::DIM)
 }
 
 /// Popup border: REVERSED to match `popup_base` for consistent appearance.
 pub fn popup_border() -> Style {
-    Style::default().add_modifier(Modifier::REVERSED)
+    Style::default()
+        .fg(popup_border_fg())
+        .add_modifier(Modifier::REVERSED)
 }
 
 /// Popup input field.
@@ -323,7 +329,8 @@ mod tests {
         assert_eq!(colors.popup_fg, Color::Indexed(254));
         assert_eq!(colors.popup_input_fg, Color::Black);
         assert_eq!(colors.dir_color, Color::LightBlue);
-        assert_eq!(colors.popup_dim_fg, Color::Gray);
+        // "nope" is invalid → falls back to default ("reset")
+        assert_eq!(colors.popup_dim_fg, Color::Reset);
     }
 
     #[test]

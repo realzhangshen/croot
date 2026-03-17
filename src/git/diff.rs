@@ -92,10 +92,15 @@ fn diff_lines(old: &str, new: &str) -> Vec<LineDiffStatus> {
     }
 
     // EOF edge case: if there are pending deletes at the end with no following line,
-    // attach the marker to the last content line.
+    // attach the marker to the last content line — but only if it is not already
+    // Modified (a replace hunk where N old lines became M < N new lines).
     if pending_deletes > 0 {
         if let Some(last) = result.last_mut() {
-            *last = LineDiffStatus::DeletedAbove;
+            if *last != LineDiffStatus::Modified {
+                *last = LineDiffStatus::DeletedAbove;
+            }
+            // Modified lines already indicate a change; the extra deletions
+            // are part of the same hunk and don't need a separate marker.
         } else {
             // File is now empty but had deletions — single marker line
             result.push(LineDiffStatus::DeletedAbove);
@@ -167,6 +172,17 @@ mod tests {
                 LineDiffStatus::Modified,
                 LineDiffStatus::Added,
             ]
+        );
+    }
+
+    #[test]
+    fn replace_more_with_fewer_at_eof_preserves_modified() {
+        // Old: a\nb\nc\n → New: a\nX\n (replace 2 lines with 1 at EOF)
+        // X should be Modified, not overwritten to DeletedAbove
+        let result = diff_lines("a\nb\nc\n", "a\nX\n");
+        assert_eq!(
+            result,
+            vec![LineDiffStatus::Unchanged, LineDiffStatus::Modified]
         );
     }
 

@@ -230,6 +230,13 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
     dirs.sort_unstable();
     files.sort_unstable();
 
+    // Cap entries to avoid unbounded allocation for huge directories
+    let max_entries = 500;
+    let dirs_truncated = dirs.len() > max_entries;
+    let files_truncated = files.len() > max_entries;
+    dirs.truncate(max_entries);
+    files.truncate(max_entries);
+
     let dim = Style::default().fg(Color::DarkGray);
     let dir_style = Style::default()
         .fg(colors::preview_dir_name())
@@ -252,6 +259,9 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
             (format!("{name}/"), dir_style),
         ]);
     }
+    if dirs_truncated {
+        lines.push(vec![("  … and more".to_string(), dim)]);
+    }
 
     // Then files
     for name in &files {
@@ -259,6 +269,9 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
             ("  ".to_string(), Style::default()),
             (name.clone(), file_style),
         ]);
+    }
+    if files_truncated {
+        lines.push(vec![("  … and more".to_string(), dim)]);
     }
 
     let dir_name = path.file_name().map_or_else(

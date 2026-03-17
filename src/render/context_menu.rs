@@ -371,22 +371,14 @@ impl Widget for ContextMenuWidget<'_> {
 
             // Render item text
             if is_separator {
-                let content_width = (menu_rect.width - 2) as usize;
+                let content_width = menu_rect.width.saturating_sub(2) as usize;
                 let separator_line: String = "─".repeat(content_width);
                 buf.set_string(menu_rect.x + 1, y, &separator_line, style);
             } else {
                 let text = format!(" {} ", item.label);
-                let content_width = (menu_rect.width - 2) as usize;
-                let display = if text.width() > content_width {
-                    let byte_end = text
-                        .char_indices()
-                        .nth(content_width)
-                        .map_or(text.len(), |(i, _)| i);
-                    &text[..byte_end]
-                } else {
-                    &text
-                };
-                buf.set_string(menu_rect.x + 1, y, display, style);
+                let content_width = menu_rect.width.saturating_sub(2) as usize;
+                let display = super::status_bar::truncate_to_display_width(&text, content_width);
+                buf.set_string(menu_rect.x + 1, y, &display, style);
             }
         }
     }

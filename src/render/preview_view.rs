@@ -280,6 +280,7 @@ impl PreviewView<'_> {
                     if col >= content_width as usize {
                         break;
                     }
+                    let mut last_cell_x = x;
                     for ch in text.chars() {
                         if col >= content_width as usize {
                             break;
@@ -293,8 +294,7 @@ impl PreviewView<'_> {
                         if w == 0 {
                             // Zero-width combining char: append to previous cell
                             if col > 0 {
-                                let prev_x = x + (col as u16).saturating_sub(1);
-                                if let Some(cell) = buf.cell_mut((prev_x, y)) {
+                                if let Some(cell) = buf.cell_mut((last_cell_x, y)) {
                                     let mut sym = cell.symbol().to_string();
                                     sym.push(ch);
                                     cell.set_symbol(&sym);
@@ -302,9 +302,10 @@ impl PreviewView<'_> {
                             }
                             continue;
                         }
+                        last_cell_x = x + col as u16;
                         let mut char_buf = [0u8; 4];
                         let char_str = ch.encode_utf8(&mut char_buf);
-                        buf.set_string(x + col as u16, y, char_str, s);
+                        buf.set_string(last_cell_x, y, char_str, s);
                         col += w;
                     }
                 }

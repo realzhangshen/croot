@@ -413,8 +413,9 @@ impl FileTree {
     }
 
     /// Get the display name for a node, using the compact chain name if applicable.
-    pub fn compact_display_name_for(&self, idx: usize) -> String {
-        let chain_len = self.compact_chain_len(idx);
+    /// Uses the cache when available for O(1) lookups.
+    pub fn compact_display_name_for(&mut self, idx: usize) -> String {
+        let chain_len = self.cached_chain_len(idx);
         if chain_len > 0 {
             self.compact_display_name(idx, chain_len)
         } else {

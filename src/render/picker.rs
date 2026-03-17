@@ -242,8 +242,11 @@ impl PickerWidget {
         let title = match state.kind {
             PickerKind::Branch => "Switch Branch",
         };
-        let title_x =
-            dialog_rect.x + (dialog_rect.width.saturating_sub(title.len() as u16 + 2)) / 2;
+        let title_x = dialog_rect.x
+            + (dialog_rect
+                .width
+                .saturating_sub(UnicodeWidthStr::width(title) as u16 + 2))
+                / 2;
         buf.set_string(title_x, dialog_rect.y, format!(" {title} "), title_style);
 
         // Input field

@@ -478,7 +478,12 @@ impl App {
 
     fn emit_osc8_hyperlinks(&self) -> anyhow::Result<()> {
         use std::io::Write;
+        if self.hyperlink_regions.is_empty() {
+            return Ok(());
+        }
         let mut stdout = std::io::stdout();
+        // Save cursor position to avoid disturbing ratatui's cursor state
+        crossterm::queue!(stdout, crossterm::cursor::SavePosition)?;
         for region in &self.hyperlink_regions {
             crossterm::queue!(stdout, crossterm::cursor::MoveTo(region.x, region.y))?;
             crossterm::queue!(
@@ -490,11 +495,14 @@ impl App {
                 "\x1b]8;;{}\x07{}\x1b]8;;\x07",
                 region.url, region.text
             )?;
+            // Undo only the Reverse attribute, not all attributes
             crossterm::queue!(
                 stdout,
-                crossterm::style::SetAttribute(crossterm::style::Attribute::Reset)
+                crossterm::style::SetAttribute(crossterm::style::Attribute::NoReverse)
             )?;
         }
+        // Restore cursor position
+        crossterm::queue!(stdout, crossterm::cursor::RestorePosition)?;
         stdout.flush()?;
         Ok(())
     }
@@ -1304,6 +1312,9 @@ impl App {
             if self.tree.nodes[idx].is_dir() {
                 self.tree.toggle(idx);
                 self.reapply_git();
+                if self.preview_visible {
+                    self.trigger_preview_load(preview_tx);
+                }
             } else if already_selected && self.preview_visible {
                 self.preview_visible = false;
                 self.focus = FocusPane::Tree;
@@ -2277,6 +2288,13 @@ impl App {
             return;
         };
 
+        // Prevent triggering a new switch while one is in-flight
+        if self.branch_switch_rx.is_some() {
+            self.input_mode = InputMode::Normal;
+            self.show_error("Branch switch already in progress".to_string());
+            return;
+        }
+
         let repo_root = git.repo_root().to_path_buf();
         let branch_data = item.data.clone();
         let is_remote = item.is_remote;
@@ -2463,17 +2481,18 @@ mod tests {
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
     /// Helper to create a minimal App rooted in a temp directory.
-    fn test_app() -> App {
-        let dir = std::env::temp_dir().join("croot_test_app");
-        let _ = std::fs::create_dir_all(&dir);
-        App::new(
-            dir,
+    /// Returns (App, TempDir) — the TempDir must be kept alive for the test duration.
+    fn test_app() -> (App, tempfile::TempDir) {
+        let tmp = tempfile::TempDir::new().expect("create temp dir");
+        let app = App::new(
+            tmp.path().to_path_buf(),
             false,
             Config::default(),
             #[cfg(feature = "image-preview")]
             None,
         )
-        .expect("test app creation")
+        .expect("test app creation");
+        (app, tmp)
     }
 
     /// Helper to create App with files for navigation tests.
@@ -2504,7 +2523,7 @@ mod tests {
 
     #[test]
     fn test_global_search_mouse_move_does_not_cancel() {
-        let mut app = test_app();
+        let (mut app, _tmp) = test_app();
         // Enter GlobalSearch mode
         app.input_mode = InputMode::GlobalSearch;
         app.search_state = SearchState::new(SearchMode::Global);
@@ -2526,7 +2545,7 @@ mod tests {
 
     #[test]
     fn test_global_search_scroll_does_not_cancel() {
-        let mut app = test_app();
+        let (mut app, _tmp) = test_app();
         app.input_mode = InputMode::GlobalSearch;
         app.search_state = SearchState::new(SearchMode::Global);
 
@@ -2544,7 +2563,7 @@ mod tests {
 
     #[test]
     fn test_show_error_sets_message() {
-        let mut app = test_app();
+        let (mut app, _tmp) = test_app();
         assert!(app.error_message.is_none());
         app.show_error("test error".to_string());
         assert!(app.error_message.is_some());
@@ -2554,7 +2573,7 @@ mod tests {
 
     #[test]
     fn test_error_message_auto_dismiss() {
-        let mut app = test_app();
+        let (mut app, _tmp) = test_app();
         // Set an error with a past timestamp (4 seconds ago)
         app.error_message = Some((
             "old error".to_string(),
@@ -2567,7 +2586,7 @@ mod tests {
 
     #[test]
     fn test_confirm_dialog_rename_nonexistent_shows_error() {
-        let mut app = test_app();
+        let (mut app, _tmp) = test_app();
         let fake_path = std::env::temp_dir().join("croot_nonexistent_for_rename");
         app.input_dialog = Some(InputDialogState::new(
             DialogKind::Rename,
@@ -2586,7 +2605,7 @@ mod tests {
 
     #[test]
     fn test_confirm_dialog_delete_nonexistent_shows_error() {
-        let mut app = test_app();
+        let (mut app, _tmp) = test_app();
         let fake_path = std::env::temp_dir().join("croot_nonexistent_for_delete");
         app.input_dialog = Some(InputDialogState::new(
             DialogKind::ConfirmDelete,
@@ -2612,7 +2631,7 @@ mod tests {
 
     #[test]
     fn confirm_dialog_error_skips_refresh() {
-        let mut app = test_app();
+        let (mut app, _tmp) = test_app();
         // Enter filter mode with a stale visible index
         app.search_state = SearchState::new(SearchMode::Filter);
         app.search_state.query = "nonexistent_xyz".to_string();
@@ -2642,7 +2661,7 @@ mod tests {
 
     #[test]
     fn confirm_dialog_noop_skips_refresh() {
-        let mut app = test_app();
+        let (mut app, _tmp) = test_app();
         app.search_state = SearchState::new(SearchMode::Filter);
         app.search_state.visible_indices = vec![0, 999];
 
@@ -2666,7 +2685,7 @@ mod tests {
 
     #[test]
     fn test_global_search_click_outside_cancels() {
-        let mut app = test_app();
+        let (mut app, _tmp) = test_app();
         app.input_mode = InputMode::GlobalSearch;
         app.search_state = SearchState::new(SearchMode::Global);
         app.search_state.global_search_type = GlobalSearchType::FileName;
@@ -2686,7 +2705,7 @@ mod tests {
 
     #[tokio::test]
     async fn global_search_confirm_triggers_preview() {
-        let mut app = test_app();
+        let (mut app, _tmp) = test_app();
         // Create a real file in the test app's root
         let test_file = app.root.join("preview_test.txt");
         std::fs::write(&test_file, "content").unwrap();
@@ -3046,7 +3065,7 @@ mod tests {
 
     #[test]
     fn error_message_expires_after_3_seconds() {
-        let mut app = test_app();
+        let (mut app, _tmp) = test_app();
         app.error_message = Some((
             "old error".to_string(),
             Instant::now().checked_sub(Duration::from_secs(4)).unwrap(),
