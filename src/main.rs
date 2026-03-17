@@ -7,8 +7,8 @@ use croot::app::App;
 use croot::{config, render};
 use crossterm::{
     event::{
-        DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags,
-        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+        DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -114,6 +114,9 @@ async fn main() -> anyhow::Result<()> {
         )?;
     }
 
+    // Enable bracketed paste so we can distinguish typed input from pasted text
+    execute!(stdout, EnableBracketedPaste)?;
+
     // Query terminal for graphics protocol support (must happen before EventStream consumes stdin)
     #[cfg(feature = "image-preview")]
     let image_picker = ratatui_image::picker::Picker::from_query_stdio().ok();
@@ -127,6 +130,7 @@ async fn main() -> anyhow::Result<()> {
                     mouse: bool|
      -> anyhow::Result<()> {
         disable_raw_mode()?;
+        let _ = execute!(terminal.backend_mut(), DisableBracketedPaste);
         if enhanced_kb {
             let _ = execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags);
         }

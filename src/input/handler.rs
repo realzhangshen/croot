@@ -135,6 +135,8 @@ pub enum Action {
     GlobalSearchUp,
     /// Global search: move selection down.
     GlobalSearchDown,
+    /// Bracketed paste: complete pasted text (control chars already stripped).
+    Paste(String),
     None,
 }
 

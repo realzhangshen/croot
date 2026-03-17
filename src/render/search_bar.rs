@@ -106,6 +106,11 @@ impl SearchState {
         self.cursor_pos += ch.len_utf8();
     }
 
+    pub fn insert_str(&mut self, s: &str) {
+        self.query.insert_str(self.cursor_pos, s);
+        self.cursor_pos += s.len();
+    }
+
     pub fn delete_char(&mut self) {
         if self.cursor_pos > 0 {
             let prev = self.query[..self.cursor_pos]
@@ -682,6 +687,44 @@ mod tests {
         }
         assert_eq!(state.cursor_pos, 6); // 2 × 3 bytes
         assert_eq!(state.cursor_display_column(), 4); // 2 × 2 columns
+    }
+
+    // ── insert_str tests ──────────────────────────────────────────────
+
+    #[test]
+    fn insert_str_empty_is_noop() {
+        let mut state = SearchState::new(SearchMode::Find);
+        state.query = "abc".to_string();
+        state.cursor_pos = 3;
+        state.insert_str("");
+        assert_eq!(state.query, "abc");
+        assert_eq!(state.cursor_pos, 3);
+    }
+
+    #[test]
+    fn insert_str_ascii_at_end() {
+        let mut state = SearchState::new(SearchMode::Find);
+        state.insert_str("hello");
+        assert_eq!(state.query, "hello");
+        assert_eq!(state.cursor_pos, 5);
+    }
+
+    #[test]
+    fn insert_str_mid_cursor() {
+        let mut state = SearchState::new(SearchMode::Find);
+        state.query = "abef".to_string();
+        state.cursor_pos = 2; // between 'b' and 'e'
+        state.insert_str("cd");
+        assert_eq!(state.query, "abcdef");
+        assert_eq!(state.cursor_pos, 4);
+    }
+
+    #[test]
+    fn insert_str_multibyte_utf8() {
+        let mut state = SearchState::new(SearchMode::Find);
+        state.insert_str("café");
+        assert_eq!(state.query, "café");
+        assert_eq!(state.cursor_pos, 5); // 3 ASCII + 2-byte é
     }
 
     #[test]

@@ -302,6 +302,12 @@ impl App {
                             };
                             post_action = self.handle_action(&action, &preview_tx, &search_tx);
                         }
+                        Some(Ok(Event::Paste(text))) => {
+                            let clean: String = text.chars().filter(|c| !c.is_control()).collect();
+                            if !clean.is_empty() {
+                                post_action = self.handle_action(&Action::Paste(clean), &preview_tx, &search_tx);
+                            }
+                        }
                         Some(Ok(Event::Mouse(mouse))) if self.mouse_enabled => {
                             use crossterm::event::{MouseButton, MouseEventKind};
 
@@ -1156,6 +1162,36 @@ impl App {
                     self.refresh_search_state();
                 } else if let Some(path) = self.tree.selected().map(|n| n.path.clone()) {
                     post = PostAction::OpenEditor(path);
+                }
+            }
+
+            Action::Paste(ref text) => {
+                match self.input_mode {
+                    InputMode::Normal | InputMode::ContextMenu => {
+                        // Ignore paste in non-input modes — safety guard
+                    }
+                    InputMode::Search => {
+                        self.search_state.insert_str(text);
+                        match self.search_state.mode {
+                            SearchMode::Find => self.update_find_matches(),
+                            SearchMode::Filter => self.update_filter_view(),
+                            SearchMode::Global => {}
+                        }
+                    }
+                    InputMode::Dialog => {
+                        if let Some(ref mut dialog) = self.input_dialog {
+                            dialog.insert_str(text);
+                        }
+                    }
+                    InputMode::Picker => {
+                        if let Some(ref mut picker) = self.picker_state {
+                            picker.insert_str(text);
+                        }
+                    }
+                    InputMode::GlobalSearch => {
+                        self.search_state.insert_str(text);
+                        self.spawn_global_search(search_tx);
+                    }
                 }
             }
 
@@ -3113,5 +3149,60 @@ mod tests {
         }
         assert_eq!(state.global_selected, 6);
         assert_eq!(state.global_scroll_offset, 2);
+    }
+
+    // ── Bracketed paste tests ─────────────────────────────────────────
+
+    #[test]
+    fn paste_in_normal_mode_is_ignored() {
+        let (mut app, _tmp) = test_app();
+        let (ptx, stx) = make_channels();
+        app.input_mode = InputMode::Normal;
+        let cursor_before = app.tree.cursor;
+
+        app.handle_action(&Action::Paste("qdr".to_string()), &ptx, &stx);
+
+        assert_eq!(app.input_mode, InputMode::Normal);
+        assert_eq!(app.tree.cursor, cursor_before);
+        assert!(!app.should_quit);
+    }
+
+    #[test]
+    fn paste_in_search_mode_inserts_text() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.search_state = SearchState::new(SearchMode::Find);
+        app.input_mode = InputMode::Search;
+
+        app.handle_action(&Action::Paste("hello".to_string()), &ptx, &stx);
+
+        assert_eq!(app.search_state.query, "hello");
+        assert_eq!(app.search_state.cursor_pos, 5);
+    }
+
+    #[test]
+    fn paste_in_dialog_mode_inserts_text() {
+        let (mut app, _tmp) = test_app();
+        let (ptx, stx) = make_channels();
+        app.input_dialog = Some(InputDialogState::new(
+            DialogKind::NewFile,
+            std::path::PathBuf::from("/tmp"),
+            String::new(),
+        ));
+        app.input_mode = InputMode::Dialog;
+
+        app.handle_action(&Action::Paste("newfile.txt".to_string()), &ptx, &stx);
+
+        assert_eq!(app.input_dialog.as_ref().unwrap().input, "newfile.txt");
+        assert_eq!(app.input_dialog.as_ref().unwrap().cursor_pos, 11);
+    }
+
+    #[test]
+    fn paste_strips_control_chars() {
+        // Control char stripping happens in the event loop, not handle_action.
+        // Verify the stripping logic directly.
+        let raw = "hello\nworld\tfoo\x00bar";
+        let clean: String = raw.chars().filter(|c| !c.is_control()).collect();
+        assert_eq!(clean, "helloworldfoobar");
     }
 }

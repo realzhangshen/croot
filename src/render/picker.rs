@@ -94,6 +94,12 @@ impl PickerState {
         self.update_filter();
     }
 
+    pub fn insert_str(&mut self, s: &str) {
+        self.query.insert_str(self.cursor_pos, s);
+        self.cursor_pos += s.len();
+        self.update_filter();
+    }
+
     pub fn delete_char(&mut self) {
         if self.cursor_pos > 0 {
             let prev = self.query[..self.cursor_pos]
@@ -436,6 +442,45 @@ mod tests {
                 is_current: false,
             },
         ]
+    }
+
+    // ── insert_str tests ──────────────────────────────────────────────
+
+    #[test]
+    fn insert_str_empty_is_noop() {
+        let mut state = PickerState::new_branch(&make_branches());
+        state.insert_str("");
+        assert_eq!(state.query, "");
+        assert_eq!(state.cursor_pos, 0);
+        assert_eq!(state.filtered_indices.len(), 3); // unchanged
+    }
+
+    #[test]
+    fn insert_str_filters_results() {
+        let mut state = PickerState::new_branch(&make_branches());
+        state.insert_str("feat");
+        assert_eq!(state.query, "feat");
+        assert_eq!(state.cursor_pos, 4);
+        // Only "feature/auth" should match
+        assert_eq!(state.filtered_indices.len(), 1);
+    }
+
+    #[test]
+    fn insert_str_mid_cursor() {
+        let mut state = PickerState::new_branch(&make_branches());
+        state.query = "mn".to_string();
+        state.cursor_pos = 1; // between 'm' and 'n'
+        state.insert_str("ai");
+        assert_eq!(state.query, "main");
+        assert_eq!(state.cursor_pos, 3);
+    }
+
+    #[test]
+    fn insert_str_multibyte_utf8() {
+        let mut state = PickerState::new_branch(&make_branches());
+        state.insert_str("café");
+        assert_eq!(state.query, "café");
+        assert_eq!(state.cursor_pos, 5);
     }
 
     #[test]

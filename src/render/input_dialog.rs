@@ -80,6 +80,11 @@ impl InputDialogState {
         self.cursor_pos += ch.len_utf8();
     }
 
+    pub fn insert_str(&mut self, s: &str) {
+        self.input.insert_str(self.cursor_pos, s);
+        self.cursor_pos += s.len();
+    }
+
     pub fn delete_char(&mut self) {
         if self.cursor_pos > 0 {
             let prev = self.input[..self.cursor_pos]
@@ -282,6 +287,57 @@ mod tests {
         (x_start..x_end)
             .filter_map(|x| buf.cell((x, y)).map(|c| c.symbol().to_string()))
             .collect::<String>()
+    }
+
+    // ── insert_str tests ──────────────────────────────────────────────
+
+    #[test]
+    fn insert_str_empty_is_noop() {
+        let mut state = InputDialogState::new(
+            DialogKind::NewFile,
+            std::path::PathBuf::from("/tmp"),
+            String::new(),
+        );
+        state.insert_str("");
+        assert_eq!(state.input, "");
+        assert_eq!(state.cursor_pos, 0);
+    }
+
+    #[test]
+    fn insert_str_ascii_at_end() {
+        let mut state = InputDialogState::new(
+            DialogKind::NewFile,
+            std::path::PathBuf::from("/tmp"),
+            String::new(),
+        );
+        state.insert_str("hello.txt");
+        assert_eq!(state.input, "hello.txt");
+        assert_eq!(state.cursor_pos, 9);
+    }
+
+    #[test]
+    fn insert_str_mid_cursor() {
+        let mut state = InputDialogState::new(
+            DialogKind::Rename,
+            std::path::PathBuf::from("/tmp"),
+            "ac".to_string(),
+        );
+        state.cursor_pos = 1; // between 'a' and 'c'
+        state.insert_str("b");
+        assert_eq!(state.input, "abc");
+        assert_eq!(state.cursor_pos, 2);
+    }
+
+    #[test]
+    fn insert_str_multibyte_utf8() {
+        let mut state = InputDialogState::new(
+            DialogKind::NewFile,
+            std::path::PathBuf::from("/tmp"),
+            String::new(),
+        );
+        state.insert_str("日本語");
+        assert_eq!(state.input, "日本語");
+        assert_eq!(state.cursor_pos, 9); // 3 × 3 bytes
     }
 
     #[test]
