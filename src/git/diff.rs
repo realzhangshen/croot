@@ -63,14 +63,26 @@ fn diff_lines(old: &str, new: &str) -> Vec<LineDiffStatus> {
     let changes: Vec<_> = diff.iter_all_changes().collect();
 
     let mut result: Vec<LineDiffStatus> = Vec::new();
-    // Track pending deletes that haven't been paired with inserts
+    // Track pending deletes that haven't been paired with inserts.
+    // When a hunk has more deletes than inserts, the leftover count
+    // must be consumed by the first non-Insert that follows.
     let mut pending_deletes: usize = 0;
+    // Whether the current run of Inserts has consumed at least one delete
+    // (i.e., we are in a "replace" hunk).
+    let mut in_replace_run = false;
 
     for change in &changes {
         match change.tag() {
             ChangeTag::Equal => {
+                // End of any replace run — clear leftover deletes that
+                // had more old lines than new lines in the hunk.
+                if in_replace_run {
+                    in_replace_run = false;
+                    pending_deletes = 0;
+                }
                 if pending_deletes > 0 {
-                    // Deletes followed by equal → mark this line as DeletedAbove
+                    // Pure deletes (no inserts) followed by equal →
+                    // mark this line as DeletedAbove
                     result.push(LineDiffStatus::DeletedAbove);
                     pending_deletes = 0;
                 } else {
@@ -83,7 +95,8 @@ fn diff_lines(old: &str, new: &str) -> Vec<LineDiffStatus> {
             ChangeTag::Insert => {
                 if pending_deletes > 0 {
                     result.push(LineDiffStatus::Modified);
-                    pending_deletes = pending_deletes.saturating_sub(1);
+                    pending_deletes -= 1;
+                    in_replace_run = true;
                 } else {
                     result.push(LineDiffStatus::Added);
                 }
@@ -94,18 +107,19 @@ fn diff_lines(old: &str, new: &str) -> Vec<LineDiffStatus> {
     // EOF edge case: if there are pending deletes at the end with no following line,
     // attach the marker to the last content line — but only if it is not already
     // Modified (a replace hunk where N old lines became M < N new lines).
-    if pending_deletes > 0 {
+    if pending_deletes > 0 && !in_replace_run {
         if let Some(last) = result.last_mut() {
             if *last != LineDiffStatus::Modified {
                 *last = LineDiffStatus::DeletedAbove;
             }
-            // Modified lines already indicate a change; the extra deletions
-            // are part of the same hunk and don't need a separate marker.
         } else {
             // File is now empty but had deletions — single marker line
             result.push(LineDiffStatus::DeletedAbove);
         }
     }
+    // If in_replace_run with leftover deletes, the extra deletions are
+    // part of the same replace hunk and don't need a separate marker
+    // (the Modified lines already indicate a change at EOF).
 
     // Ensure at least one entry for non-empty content
     if result.is_empty() && !new.is_empty() {
@@ -230,6 +244,35 @@ mod tests {
         assert_eq!(
             result,
             vec![LineDiffStatus::Unchanged, LineDiffStatus::DeletedAbove]
+        );
+    }
+
+    #[test]
+    fn replace_more_with_fewer_in_middle_does_not_bleed() {
+        // Old: a\nb\nc\nd\n → New: a\nX\nd\n (replace b+c with X)
+        // X should be Modified, d should be Unchanged (NOT DeletedAbove)
+        let result = diff_lines("a\nb\nc\nd\n", "a\nX\nd\n");
+        assert_eq!(
+            result,
+            vec![
+                LineDiffStatus::Unchanged,
+                LineDiffStatus::Modified,
+                LineDiffStatus::Unchanged,
+            ]
+        );
+    }
+
+    #[test]
+    fn replace_three_with_one_in_middle() {
+        // Old: a\nb\nc\nd\ne\n → New: a\nX\ne\n (replace b+c+d with X)
+        let result = diff_lines("a\nb\nc\nd\ne\n", "a\nX\ne\n");
+        assert_eq!(
+            result,
+            vec![
+                LineDiffStatus::Unchanged,
+                LineDiffStatus::Modified,
+                LineDiffStatus::Unchanged,
+            ]
         );
     }
 

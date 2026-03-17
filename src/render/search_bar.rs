@@ -239,14 +239,13 @@ impl Widget for SearchBar<'_> {
                 .add_modifier(Modifier::BOLD),
         );
 
-        let input_x = area.x + prompt.len() as u16;
+        let prompt_width = UnicodeWidthStr::width(prompt) as u16;
+        let input_x = area.x + prompt_width;
         // Reserve space for match info + optional close button on the right
         let close_width: u16 = if self.show_close_button { 4 } else { 0 }; // "[×] "
         let match_info_max: u16 = 8; // " 0/0 " or similar
         let right_reserve = close_width + match_info_max;
-        let input_width = area
-            .width
-            .saturating_sub(prompt.len() as u16 + right_reserve) as usize;
+        let input_width = area.width.saturating_sub(prompt_width + right_reserve) as usize;
 
         // Draw query text
         let display_text =

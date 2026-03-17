@@ -705,11 +705,14 @@ impl App {
         };
         // Track branch click region for mouse routing
         self.status_bar_branch_region = branch.as_ref().map(|b| {
-            // Branch is rendered as "  \u{e0a0} {branch} │ " starting at col 0
-            // +1 because Nerd Font glyphs like \u{e0a0} render as 2 columns
-            // but UnicodeWidthStr reports them as 1
+            // Branch is rendered as "  \u{e0a0} {branch} │ " starting at col 0.
+            // Nerd Font glyphs like \u{e0a0} typically render as 2 terminal columns
+            // but UnicodeWidthStr reports them as 1. Add a compensation column.
+            // On terminals without Nerd Fonts the hit-box may be 1 column too wide,
+            // which is the safer direction (false-positive click > missed click).
+            let nerd_font_compensation: u16 = 1;
             let span_text = format!("  \u{e0a0} {b} ");
-            let end = UnicodeWidthStr::width(span_text.as_str()) as u16 + 1;
+            let end = UnicodeWidthStr::width(span_text.as_str()) as u16 + nerd_font_compensation;
             (0, end)
         });
 
@@ -1264,7 +1267,18 @@ impl App {
                     self.preview_state.scroll_offset =
                         self.preview_state.total_lines.saturating_sub(1);
                 } else if !self.tree.is_empty() {
-                    self.tree.cursor = self.tree.len() - 1;
+                    // Use rendered_indices (visible nodes) when available;
+                    // fall back to the full displayable indices list.
+                    let last = self
+                        .tree
+                        .rendered_indices
+                        .last()
+                        .copied()
+                        .unwrap_or_else(|| {
+                            let indices = self.tree.build_displayable_indices();
+                            indices.last().copied().unwrap_or(self.tree.len() - 1)
+                        });
+                    self.tree.cursor = last;
                 }
             }
             _ => {}
@@ -1348,14 +1362,14 @@ impl App {
             if self.tree.nodes[idx].is_dir() {
                 self.tree.toggle(idx);
                 self.reapply_git();
+                self.refresh_search_state();
                 if self.preview_visible {
                     self.trigger_preview_load(preview_tx);
                 }
             } else if already_selected && self.preview_visible {
                 self.preview_visible = false;
                 self.focus = FocusPane::Tree;
-            } else {
-                self.preview_visible = true;
+            } else if self.preview_visible {
                 self.trigger_preview_load(preview_tx);
             }
         }
@@ -2224,12 +2238,11 @@ impl App {
                                 });
                             }
                             GlobalSearchType::Content => {
-                                // Format: path:line:content
-                                let mut parts = line.splitn(3, ':');
-                                let file = parts.next().unwrap_or("");
-                                let line_num: Option<usize> =
-                                    parts.next().and_then(|s| s.parse().ok());
-                                let context = parts.next().map(std::string::ToString::to_string);
+                                // Format: path:line_num:content
+                                // Parse from the right to handle paths containing colons:
+                                // find the last segment that looks like ":<digits>:" and
+                                // treat everything before it as the file path.
+                                let (file, line_num, context) = parse_rg_line(line);
                                 let path = root.join(file);
                                 results.push(GlobalSearchResult {
                                     path,
@@ -2411,10 +2424,13 @@ impl App {
             .status();
 
         // Capture error to show after terminal restore (when the TUI is visible again)
-        let editor_error = if let Err(e) = status {
-            Some(format!("Failed to open editor '{editor_str}': {e}"))
-        } else {
-            None
+        let editor_error = match status {
+            Err(e) => Some(format!("Failed to open editor '{editor_str}': {e}")),
+            Ok(s) if !s.success() => Some(format!(
+                "Editor '{editor_str}' exited with {}",
+                s.code().map_or("signal".to_string(), |c| c.to_string())
+            )),
+            _ => None,
         };
 
         // Restore terminal
@@ -2508,6 +2524,39 @@ impl App {
     }
 }
 
+/// Parse a line of `rg --line-number --no-heading` output into `(file, line_num, context)`.
+///
+/// The format is `path:line_num:content`, but file paths can contain colons.
+/// We scan for the first `:digits:` pattern to split reliably.
+fn parse_rg_line(line: &str) -> (&str, Option<usize>, Option<String>) {
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b':' {
+            // Try to read digits after this colon
+            let num_start = i + 1;
+            let mut j = num_start;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                j += 1;
+            }
+            // Must have at least one digit followed by ':' or end-of-string
+            if j > num_start && (j == bytes.len() || bytes[j] == b':') {
+                let file = &line[..i];
+                let num: Option<usize> = line[num_start..j].parse().ok();
+                let context = if j < bytes.len() && bytes[j] == b':' {
+                    Some(line[j + 1..].to_string())
+                } else {
+                    None
+                };
+                return (file, num, context);
+            }
+        }
+        i += 1;
+    }
+    // Fallback: treat the whole line as a file path
+    (line, None, None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2517,7 +2566,7 @@ mod tests {
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
     /// Helper to create a minimal App rooted in a temp directory.
-    /// Returns (App, TempDir) — the TempDir must be kept alive for the test duration.
+    /// Returns (App, `TempDir`) — the `TempDir` must be kept alive for the test duration.
     fn test_app() -> (App, tempfile::TempDir) {
         let tmp = tempfile::TempDir::new().expect("create temp dir");
         let app = App::new(
@@ -2801,6 +2850,33 @@ mod tests {
         // A simple command without args should produce a single element
         let parts = shell_words::split("fd").unwrap();
         assert_eq!(parts, vec!["fd"]);
+    }
+
+    // ── parse_rg_line ─────────────────────────────────────────────────
+
+    #[test]
+    fn parse_rg_line_standard_format() {
+        let (file, line, ctx) = parse_rg_line("src/main.rs:42:fn main() {");
+        assert_eq!(file, "src/main.rs");
+        assert_eq!(line, Some(42));
+        assert_eq!(ctx.as_deref(), Some("fn main() {"));
+    }
+
+    #[test]
+    fn parse_rg_line_colon_in_path() {
+        // Colon in file path — should find the first :digits: pattern
+        let (file, line, ctx) = parse_rg_line("some:file.rs:10:content here");
+        assert_eq!(file, "some:file.rs");
+        assert_eq!(line, Some(10));
+        assert_eq!(ctx.as_deref(), Some("content here"));
+    }
+
+    #[test]
+    fn parse_rg_line_no_match() {
+        let (file, line, ctx) = parse_rg_line("just a plain line");
+        assert_eq!(file, "just a plain line");
+        assert_eq!(line, None);
+        assert_eq!(ctx, None);
     }
 
     // ── Action handling: navigation ───────────────────────────────────

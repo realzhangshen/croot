@@ -35,9 +35,9 @@ fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
                         return ord;
                     }
                 } else {
-                    let a_lower = ac.to_lowercase().next().unwrap_or(ac);
-                    let b_lower = bc.to_lowercase().next().unwrap_or(bc);
-                    let ord = a_lower.cmp(&b_lower);
+                    // Compare full lowercase expansions (handles multi-codepoint
+                    // lowercasing like ß → ss or İ → i\u{307}).
+                    let ord = ac.to_lowercase().cmp(bc.to_lowercase());
                     if ord != std::cmp::Ordering::Equal {
                         return ord;
                     }
@@ -103,6 +103,17 @@ mod tests {
         assert_eq!(natural_cmp("über", "Über"), std::cmp::Ordering::Greater);
         // ü and Ü should compare equal after lowercasing (unlike to_ascii_lowercase)
         assert_eq!(natural_cmp("ü", "ü"), std::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn natural_sort_eszett_multi_codepoint_lowercase() {
+        // ß lowercases to "ss" (2 codepoints) — with the fix the full
+        // expansion is compared, not just the first codepoint.
+        // Previously ß.to_lowercase().next() gave 's', making ß == s.
+        // Now ß.to_lowercase() gives ['s','s'] which is > ['s'], so ß > s.
+        assert_eq!(natural_cmp("ß", "s"), std::cmp::Ordering::Greater);
+        // And ß should not equal a single 's' (it did before the fix)
+        assert_ne!(natural_cmp("ß_file", "s_file"), std::cmp::Ordering::Equal);
     }
 
     #[test]

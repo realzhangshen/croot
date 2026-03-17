@@ -371,7 +371,11 @@ impl PickerWidget {
         // Hint
         let hint_y = dialog_rect.y + dialog_rect.height - 1;
         let hint = "[Enter] switch  [Esc] cancel";
-        let hint_x = dialog_rect.x + (dialog_rect.width.saturating_sub(hint.len() as u16)) / 2;
+        let hint_x = dialog_rect.x
+            + (dialog_rect
+                .width
+                .saturating_sub(UnicodeWidthStr::width(hint) as u16))
+                / 2;
         buf.set_string(hint_x, hint_y, hint, colors::popup_dim());
     }
 }

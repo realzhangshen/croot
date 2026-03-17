@@ -380,7 +380,7 @@ pub fn parse_key(s: &str) -> Option<(KeyCode, KeyModifiers)> {
             KeyCode::Char(original_ch.to_lowercase().next().unwrap_or(ch))
         }
         s if s.starts_with('f') => {
-            let num: u8 = s[1..].parse().ok()?;
+            let num: u8 = s.get(1..)?.parse().ok()?;
             KeyCode::F(num)
         }
         _ => return None,
@@ -1110,5 +1110,12 @@ auto_preview = true
         // "Ctrl++" should parse as Ctrl + '+'
         let result = parse_key("Ctrl++");
         assert_eq!(result, Some((KeyCode::Char('+'), KeyModifiers::CONTROL)));
+    }
+
+    #[test]
+    fn parse_key_multibyte_f_prefix_no_panic() {
+        // "fé" should not panic (previously sliced at byte boundary mid-char)
+        let result = parse_key("fé");
+        assert!(result.is_none());
     }
 }

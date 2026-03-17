@@ -110,6 +110,13 @@ impl MdRenderer {
                 Event::End(TagEnd::CodeBlock) => {
                     self.end_code_block();
                 }
+                // Allow blockquote end to pass through even inside a code block
+                // so that malformed markdown (unclosed code fence) doesn't corrupt
+                // the in_blockquote flag and style stack permanently.
+                Event::End(TagEnd::BlockQuote(_)) => {
+                    self.in_blockquote = false;
+                    self.pop_style();
+                }
                 _ => {}
             }
             return;

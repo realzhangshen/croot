@@ -66,6 +66,10 @@ impl FileTree {
 
     /// Get the compact chain length for a node, using the cache if available.
     /// If the cache is stale, recomputes all chain lengths in a single O(N) pass.
+    ///
+    /// **Important:** Only valid for displayable-head indices (i.e., indices that
+    /// appear in `rendered_indices`). Mid-chain indices are not cached and will
+    /// return 0 with a debug assertion failure.
     pub fn cached_chain_len(&mut self, index: usize) -> usize {
         if !self.chain_cache_valid {
             self.chain_len_cache.clear();
@@ -77,7 +81,12 @@ impl FileTree {
             }
             self.chain_cache_valid = true;
         }
-        self.chain_len_cache.get(&index).copied().unwrap_or(0)
+        let result = self.chain_len_cache.get(&index).copied().unwrap_or(0);
+        debug_assert!(
+            result > 0 || self.chain_len_cache.contains_key(&index),
+            "cached_chain_len called with mid-chain index {index}; use displayable-head indices only"
+        );
+        result
     }
 
     /// Expand a directory node: load its children and insert them after it.

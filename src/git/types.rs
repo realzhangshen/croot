@@ -1,13 +1,14 @@
 /// Git status for a file or directory. Ordered by severity for propagation.
-/// Unstaged changes take priority over staged (shown more prominently).
+/// The derived `Ord` uses declaration order: later variants have higher priority.
+/// Staged changes sort above Untracked; unstaged changes sort above staged.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum GitStatus {
     Clean,
     Ignored,
+    Untracked,
     StagedAdded,
     StagedModified,
     StagedDeleted,
-    Untracked,
     Modified,
     Deleted,
     Conflicted,

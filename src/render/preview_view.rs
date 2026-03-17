@@ -165,7 +165,7 @@ impl PreviewView<'_> {
         // Scroll indicator on the right
         if state.total_lines > 0 {
             let indicator = format!(" {}/{} ", state.scroll_offset + 1, state.total_lines);
-            let indicator_width = indicator.len() as u16;
+            let indicator_width = unicode_width::UnicodeWidthStr::width(indicator.as_str()) as u16;
             let left_content = Line::from(spans);
             let left_width = left_content.width() as u16;
 
@@ -336,6 +336,16 @@ impl PreviewView<'_> {
     }
 }
 
+fn render_centered_message(area: Rect, buf: &mut Buffer, msg: &str, fg: Color) {
+    if area.height == 0 {
+        return;
+    }
+    let y = area.y + area.height / 2;
+    let msg_width = unicode_width::UnicodeWidthStr::width(msg) as u16;
+    let x = area.x + area.width.saturating_sub(msg_width) / 2;
+    buf.set_string(x, y, msg, Style::default().fg(fg));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -409,14 +419,4 @@ mod tests {
             5
         );
     }
-}
-
-fn render_centered_message(area: Rect, buf: &mut Buffer, msg: &str, fg: Color) {
-    if area.height == 0 {
-        return;
-    }
-    let y = area.y + area.height / 2;
-    let msg_width = unicode_width::UnicodeWidthStr::width(msg) as u16;
-    let x = area.x + area.width.saturating_sub(msg_width) / 2;
-    buf.set_string(x, y, msg, Style::default().fg(fg));
 }

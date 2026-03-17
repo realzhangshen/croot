@@ -58,7 +58,8 @@ pub fn handle_mouse(
             // Check for separator hit (2-column zone around the separator)
             if let Some(px) = preview_x {
                 let sep_x = px.saturating_sub(1);
-                if event.column >= sep_x && event.column <= sep_x + 1 {
+                // Single-column separator zone — don't overlap the preview content area
+                if event.column == sep_x || (sep_x > 0 && event.column == sep_x.saturating_sub(1)) {
                     return Action::SeparatorDragStart;
                 }
             }
