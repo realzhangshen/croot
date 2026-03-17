@@ -34,6 +34,7 @@ arboard = "3"
 pulldown-cmark = { version = "0.12", default-features = false }
 globset = "0.4"
 regex = "1"
+similar = "2"
 shell-words = "1"
 trash = "5"
 clap_complete = "4"

@@ -4,6 +4,7 @@ use std::path::Path;
 
 use ratatui::style::{Color, Modifier, Style};
 
+use crate::git::diff::LineDiffStatus;
 use crate::render::colors;
 
 use super::highlight;
@@ -17,6 +18,7 @@ pub struct LoadedPreview {
     pub kind: PreviewKind,
     pub content: Vec<Vec<StyledSpan>>,
     pub file_info: String,
+    pub line_diffs: Option<Vec<LineDiffStatus>>,
 }
 
 /// Load a file for preview display.
@@ -24,6 +26,7 @@ pub struct LoadedPreview {
 /// Classifies the file type, reads content, and produces pre-styled lines.
 /// `max_file_size_kb`: skip text preview for files larger than this (in KB).
 /// `syntax_highlight`: whether to apply syntax highlighting.
+#[allow(clippy::fn_params_excessive_bools)]
 pub fn load_preview(
     path: &Path,
     max_file_size_kb: u64,
@@ -31,6 +34,7 @@ pub fn load_preview(
     render_markdown: bool,
     preview_width: usize,
     image_preview: bool,
+    show_git_diff: bool,
 ) -> LoadedPreview {
     // Directories
     if path.is_dir() {
@@ -45,6 +49,7 @@ pub fn load_preview(
                 kind: PreviewKind::Error(format!("Cannot read: {e}")),
                 content: Vec::new(),
                 file_info: String::new(),
+                line_diffs: None,
             };
         }
     };
@@ -62,6 +67,7 @@ pub fn load_preview(
                 Style::default().fg(Color::DarkGray),
             )]],
             file_info,
+            line_diffs: None,
         };
     }
 
@@ -72,6 +78,7 @@ pub fn load_preview(
             kind: PreviewKind::Image,
             content: Vec::new(),
             file_info,
+            line_diffs: None,
         };
     }
     #[cfg(not(feature = "image-preview"))]
@@ -85,6 +92,7 @@ pub fn load_preview(
                 kind: PreviewKind::Error(format!("Read error: {e}")),
                 content: Vec::new(),
                 file_info,
+                line_diffs: None,
             };
         }
     };
@@ -101,6 +109,7 @@ pub fn load_preview(
         render_markdown,
         preview_width,
         max_bytes,
+        show_git_diff,
     )
 }
 
@@ -126,6 +135,7 @@ fn load_text_preview(
     render_markdown: bool,
     preview_width: usize,
     max_bytes: u64,
+    show_git_diff: bool,
 ) -> LoadedPreview {
     // Bounded read to avoid unbounded memory usage (TOCTOU: file can grow after size check)
     let content = match read_text_bounded(path, max_bytes) {
@@ -135,6 +145,7 @@ fn load_text_preview(
                 kind: PreviewKind::Error(format!("Read error: {e}")),
                 content: Vec::new(),
                 file_info: file_info.to_string(),
+                line_diffs: None,
             };
         }
     };
@@ -149,8 +160,17 @@ fn load_text_preview(
             kind: PreviewKind::Rendered,
             content: lines,
             file_info: file_info.to_string(),
+            line_diffs: None,
         };
     }
+
+    // Compute git diff before truncation (needs full content for accurate line mapping)
+    let line_diffs = if show_git_diff {
+        crate::git::diff::compute_line_diff(path, path, &content)
+    } else {
+        None
+    };
+
     let lines = if syntax_highlight {
         highlight::highlight_file(path, &content, max_lines)
     } else {
@@ -161,6 +181,7 @@ fn load_text_preview(
         kind: PreviewKind::Text,
         content: lines,
         file_info: file_info.to_string(),
+        line_diffs,
     }
 }
 
@@ -170,11 +191,13 @@ fn load_binary_preview(path: &Path, file_info: &str) -> LoadedPreview {
             kind: PreviewKind::Binary,
             content: generate_hex_dump(&data),
             file_info: file_info.to_string(),
+            line_diffs: None,
         },
         Err(e) => LoadedPreview {
             kind: PreviewKind::Error(format!("Read error: {e}")),
             content: Vec::new(),
             file_info: file_info.to_string(),
+            line_diffs: None,
         },
     }
 }
@@ -187,6 +210,7 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
                 kind: PreviewKind::Error(format!("Cannot read directory: {e}")),
                 content: Vec::new(),
                 file_info: String::new(),
+                line_diffs: None,
             };
         }
     };
@@ -246,6 +270,7 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
         kind: PreviewKind::Directory,
         content: lines,
         file_info: format!("{dir_name}/"),
+        line_diffs: None,
     }
 }
 
@@ -393,7 +418,7 @@ mod tests {
         // Write minimal valid PNG header
         std::fs::write(&png_path, b"\x89PNG\r\n\x1a\n").unwrap();
 
-        let result = load_preview(&png_path, 1024, true, true, 80, true);
+        let result = load_preview(&png_path, 1024, true, true, 80, true, false);
         assert_eq!(result.kind, PreviewKind::Image);
         assert!(result.content.is_empty());
     }
@@ -405,7 +430,7 @@ mod tests {
         let png_path = dir.path().join("test.png");
         std::fs::write(&png_path, b"\x89PNG\r\n\x1a\n").unwrap();
 
-        let result = load_preview(&png_path, 1024, true, true, 80, false);
+        let result = load_preview(&png_path, 1024, true, true, 80, false, false);
         assert_eq!(result.kind, PreviewKind::Binary);
     }
 

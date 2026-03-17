@@ -518,6 +518,8 @@ pub struct PreviewConfig {
     pub render_markdown: bool,
     #[serde(default = "default_true")]
     pub image_preview: bool,
+    #[serde(default = "default_true")]
+    pub show_git_diff: bool,
 }
 
 fn default_true() -> bool {
@@ -566,6 +568,7 @@ impl Default for PreviewConfig {
             split_ratio: 0.5,
             render_markdown: true,
             image_preview: true,
+            show_git_diff: true,
         }
     }
 }
@@ -646,6 +649,7 @@ auto_preview = false
 # split_ratio = 0.5
 # render_markdown = true
 # image_preview = true
+# show_git_diff = true
 
 [editor]
 # command = "vim"    # Falls back to $VISUAL, $EDITOR, vi
@@ -1066,6 +1070,32 @@ show_hidden = "not a bool"
         // Both keys should exist
         assert_eq!(navigate(&root, "a.x").unwrap().as_integer(), Some(1));
         assert_eq!(navigate(&root, "a.y").unwrap().as_integer(), Some(2));
+    }
+
+    #[test]
+    fn show_git_diff_defaults_to_true() {
+        let config = Config::default();
+        assert!(config.preview.show_git_diff);
+    }
+
+    #[test]
+    fn show_git_diff_deserializes_false() {
+        let content = r"
+[preview]
+show_git_diff = false
+";
+        let cfg: Config = toml::from_str(content).unwrap();
+        assert!(!cfg.preview.show_git_diff);
+    }
+
+    #[test]
+    fn show_git_diff_defaults_when_missing() {
+        let content = r"
+[preview]
+auto_preview = true
+";
+        let cfg: Config = toml::from_str(content).unwrap();
+        assert!(cfg.preview.show_git_diff);
     }
 
     #[test]

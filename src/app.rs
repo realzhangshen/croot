@@ -399,6 +399,7 @@ impl App {
                                                     kind: PreviewKind::Error(e),
                                                     content: Vec::new(),
                                                     file_info,
+                                                    line_diffs: None,
                                                 },
                                             ));
                                         }
@@ -407,7 +408,7 @@ impl App {
                             }
                         }
                         if !handled {
-                            self.preview_state.apply(path, loaded.kind, loaded.content, loaded.file_info);
+                            self.preview_state.apply(path, loaded.kind, loaded.content, loaded.file_info, loaded.line_diffs);
                         }
                     }
                 }
@@ -596,18 +597,13 @@ impl App {
 
             let content_area_y = preview_area.y + 1;
             let content_area_height = preview_area.height.saturating_sub(1);
-            let gutter_width = if self.config.preview.show_line_numbers
-                && self.preview_state.kind == PreviewKind::Text
-            {
-                let digits = if self.preview_state.total_lines == 0 {
-                    1
-                } else {
-                    (self.preview_state.total_lines as f64).log10().floor() as u16 + 1
-                };
-                digits + 1
-            } else {
-                0
-            };
+            let gutter_width = crate::render::preview_view::compute_gutter_width(
+                self.config.preview.show_line_numbers,
+                self.config.preview.show_git_diff,
+                &self.preview_state.kind,
+                self.preview_state.total_lines,
+                self.preview_state.line_diffs.is_some(),
+            );
             self.preview_layout = Some(PreviewLayout {
                 x: preview_area.x + gutter_width,
                 y: content_area_y,
@@ -1355,6 +1351,7 @@ impl App {
         let render_markdown = self.preview_state.render_markdown;
         let preview_width = self.preview_content_width as usize;
         let image_preview = self.config.preview.image_preview;
+        let show_git_diff = self.config.preview.show_git_diff;
 
         self.preview_debounce_handle = Some(tokio::spawn(async move {
             tokio::time::sleep(delay).await;
@@ -1368,6 +1365,7 @@ impl App {
                     render_markdown,
                     preview_width,
                     image_preview,
+                    show_git_diff,
                 )
             })
             .await;

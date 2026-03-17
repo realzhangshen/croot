@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use ratatui::style::Style;
 use unicode_width::UnicodeWidthChar;
 
+use crate::git::diff::LineDiffStatus;
+
 /// A position in content space (line index + display column).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ContentPos {
@@ -94,6 +96,8 @@ pub struct PreviewState {
     pub selection: Selection,
     /// Cached mtime of the currently displayed file (to skip redundant reloads).
     pub cached_mtime: Option<std::time::SystemTime>,
+    /// Per-line git diff status for gutter indicators (only for Text previews).
+    pub line_diffs: Option<Vec<LineDiffStatus>>,
     /// Whether to render Markdown files (user preference, not reset on clear).
     pub render_markdown: bool,
     /// Image rendering state (non-blocking via background thread).
@@ -118,6 +122,7 @@ impl PreviewState {
             file_info: String::new(),
             selection: Selection::new(),
             cached_mtime: None,
+            line_diffs: None,
             render_markdown: true,
             #[cfg(feature = "image-preview")]
             image_state: None,
@@ -143,6 +148,7 @@ impl PreviewState {
         self.file_info.clear();
         self.selection.clear();
         self.cached_mtime = None;
+        self.line_diffs = None;
         #[cfg(feature = "image-preview")]
         {
             self.image_state = None;
@@ -156,6 +162,7 @@ impl PreviewState {
         kind: PreviewKind,
         content: Vec<Vec<StyledSpan>>,
         file_info: String,
+        line_diffs: Option<Vec<LineDiffStatus>>,
     ) {
         self.cached_mtime = std::fs::metadata(&path)
             .ok()
@@ -165,6 +172,7 @@ impl PreviewState {
         self.kind = kind;
         self.current_path = Some(path);
         self.file_info = file_info;
+        self.line_diffs = line_diffs;
         self.scroll_offset = 0;
         self.selection.clear();
     }
@@ -185,6 +193,7 @@ impl PreviewState {
         self.kind = PreviewKind::Image;
         self.current_path = Some(path);
         self.file_info = file_info;
+        self.line_diffs = None;
         self.scroll_offset = 0;
         self.selection.clear();
         self.image_state = Some(thread_proto);
@@ -301,6 +310,7 @@ mod tests {
         assert!(state.file_info.is_empty());
         assert!(state.current_path.is_none());
         assert!(state.cached_mtime.is_none());
+        assert!(state.line_diffs.is_none());
     }
 
     #[cfg(feature = "image-preview")]

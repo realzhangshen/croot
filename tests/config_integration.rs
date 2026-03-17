@@ -103,6 +103,7 @@ image_preview = false
         config.preview.render_markdown,
         80,
         config.preview.image_preview,
+        config.preview.show_git_diff,
     );
     let large_preview = load_preview(
         &large,
@@ -111,6 +112,7 @@ image_preview = false
         config.preview.render_markdown,
         80,
         config.preview.image_preview,
+        config.preview.show_git_diff,
     );
 
     assert_eq!(markdown_preview.kind, PreviewKind::Text);

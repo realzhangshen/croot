@@ -8,12 +8,44 @@ use ratatui::{
 use unicode_width::UnicodeWidthChar;
 
 use crate::config::PreviewConfig;
+use crate::git::diff::LineDiffStatus;
 use crate::preview::state::{PreviewKind, PreviewState};
 use crate::render::colors;
 
 pub struct PreviewView<'a> {
     pub config: &'a PreviewConfig,
     pub focused: bool,
+}
+
+/// Compute the total gutter width (diff column + line numbers) for the preview panel.
+///
+/// This function is shared between the renderer and `PreviewLayout` (mouse hit-testing)
+/// so the two always agree on content start position.
+pub fn compute_gutter_width(
+    show_line_numbers: bool,
+    show_git_diff: bool,
+    kind: &PreviewKind,
+    total_lines: usize,
+    has_diff: bool,
+) -> u16 {
+    if *kind != PreviewKind::Text {
+        return 0;
+    }
+
+    let diff_col: u16 = u16::from(show_git_diff && has_diff);
+
+    let line_num_cols: u16 = if show_line_numbers {
+        let digits = if total_lines == 0 {
+            1
+        } else {
+            (total_lines as f64).log10().floor() as u16 + 1
+        };
+        digits + 1 // digits + 1 space separator
+    } else {
+        0
+    };
+
+    diff_col + line_num_cols
 }
 
 impl StatefulWidget for PreviewView<'_> {
@@ -169,16 +201,17 @@ impl PreviewView<'_> {
 
     fn render_content(&self, area: Rect, buf: &mut Buffer, state: &PreviewState) {
         let height = area.height as usize;
-        let gutter_width = if self.config.show_line_numbers && state.kind == PreviewKind::Text {
-            let digits = if state.total_lines == 0 {
-                1
-            } else {
-                (state.total_lines as f64).log10().floor() as u16 + 1
-            };
-            digits + 1
-        } else {
-            0
-        };
+        let has_diff = state.line_diffs.is_some();
+        let gutter_width = compute_gutter_width(
+            self.config.show_line_numbers,
+            self.config.show_git_diff,
+            &state.kind,
+            state.total_lines,
+            has_diff,
+        );
+        let diff_col_width: u16 =
+            u16::from(self.config.show_git_diff && has_diff && state.kind == PreviewKind::Text);
+        let line_num_width = gutter_width.saturating_sub(diff_col_width);
 
         // Pre-compute normalized selection range
         let sel_range = state.selection.normalized();
@@ -194,16 +227,34 @@ impl PreviewView<'_> {
 
             let mut x = area.x;
 
+            // Git diff indicator column
+            if diff_col_width > 0 {
+                let diff_status = state
+                    .line_diffs
+                    .as_ref()
+                    .and_then(|diffs| diffs.get(line_idx))
+                    .copied()
+                    .unwrap_or(LineDiffStatus::Unchanged);
+                let (symbol, color) = match diff_status {
+                    LineDiffStatus::Added => ("\u{258e}", colors::git_added()), // ▎
+                    LineDiffStatus::Modified => ("\u{258e}", colors::git_modified()), // ▎ (blue via palette)
+                    LineDiffStatus::DeletedAbove => ("\u{2594}", colors::git_deleted()), // ▔
+                    LineDiffStatus::Unchanged => (" ", Color::Reset),
+                };
+                buf.set_string(x, y, symbol, Style::default().fg(color));
+                x += diff_col_width;
+            }
+
             // Line number gutter
-            if gutter_width > 0 {
+            if line_num_width > 0 {
                 let line_num = format!(
                     "{:>width$} ",
                     line_idx + 1,
-                    width = (gutter_width - 1) as usize
+                    width = (line_num_width - 1) as usize
                 );
                 let gutter_style = Style::default().fg(Color::DarkGray);
                 buf.set_string(x, y, &line_num, gutter_style);
-                x += gutter_width;
+                x += line_num_width;
             }
 
             let content_width = area.width.saturating_sub(gutter_width);
@@ -281,6 +332,81 @@ impl PreviewView<'_> {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gutter_width_text_with_line_numbers_and_diff() {
+        let w = compute_gutter_width(true, true, &PreviewKind::Text, 100, true);
+        // 1 diff col + 3 digits + 1 space = 5
+        assert_eq!(w, 5);
+    }
+
+    #[test]
+    fn gutter_width_text_with_line_numbers_no_diff() {
+        let w = compute_gutter_width(true, false, &PreviewKind::Text, 100, false);
+        // 0 diff + 3 digits + 1 space = 4
+        assert_eq!(w, 4);
+    }
+
+    #[test]
+    fn gutter_width_text_no_line_numbers_with_diff() {
+        let w = compute_gutter_width(false, true, &PreviewKind::Text, 100, true);
+        // 1 diff col + 0 = 1
+        assert_eq!(w, 1);
+    }
+
+    #[test]
+    fn gutter_width_text_nothing() {
+        let w = compute_gutter_width(false, false, &PreviewKind::Text, 100, false);
+        assert_eq!(w, 0);
+    }
+
+    #[test]
+    fn gutter_width_non_text_always_zero() {
+        assert_eq!(
+            compute_gutter_width(true, true, &PreviewKind::Binary, 100, true),
+            0
+        );
+        assert_eq!(
+            compute_gutter_width(true, true, &PreviewKind::Directory, 100, true),
+            0
+        );
+        assert_eq!(
+            compute_gutter_width(true, true, &PreviewKind::Rendered, 100, true),
+            0
+        );
+    }
+
+    #[test]
+    fn gutter_width_diff_enabled_but_no_diff_data() {
+        // show_git_diff is true but has_diff is false (no diff data available)
+        let w = compute_gutter_width(true, true, &PreviewKind::Text, 100, false);
+        // No diff col, just line numbers: 3+1 = 4
+        assert_eq!(w, 4);
+    }
+
+    #[test]
+    fn gutter_width_scales_with_line_count() {
+        // 9 lines → 1 digit + 1 space = 2
+        assert_eq!(
+            compute_gutter_width(true, false, &PreviewKind::Text, 9, false),
+            2
+        );
+        // 10 lines → 2 digits + 1 space = 3
+        assert_eq!(
+            compute_gutter_width(true, false, &PreviewKind::Text, 10, false),
+            3
+        );
+        // 1000 lines → 4 digits + 1 space = 5
+        assert_eq!(
+            compute_gutter_width(true, false, &PreviewKind::Text, 1000, false),
+            5
+        );
     }
 }
 
