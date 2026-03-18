@@ -60,6 +60,27 @@ pub enum PostAction {
     OpenEditorCmux(PathBuf),
 }
 
+/// Modal overlay state: input mode, context menu, dialogs, picker, and error messages.
+pub struct UiOverlayState {
+    pub input_mode: InputMode,
+    pub context_menu: Option<ContextMenuState>,
+    pub input_dialog: Option<InputDialogState>,
+    pub picker_state: Option<PickerState>,
+    pub error_message: Option<(String, Instant)>,
+}
+
+impl Default for UiOverlayState {
+    fn default() -> Self {
+        Self {
+            input_mode: InputMode::Normal,
+            context_menu: None,
+            input_dialog: None,
+            picker_state: None,
+            error_message: None,
+        }
+    }
+}
+
 #[allow(clippy::struct_excessive_bools)]
 pub struct App {
     pub tree: FileTree,
@@ -81,11 +102,8 @@ pub struct App {
     dragging_separator: bool,
     main_area_width: u16,
     hover_row: Option<usize>,
-    // UI overlay state
-    input_mode: InputMode,
-    context_menu: Option<ContextMenuState>,
-    input_dialog: Option<InputDialogState>,
-    picker_state: Option<PickerState>,
+    // UI overlay state (modal overlays, dialogs, errors)
+    pub ui: UiOverlayState,
     // Search state
     search_state: SearchState,
     /// Handle for the current async global search task.
@@ -105,8 +123,6 @@ pub struct App {
     search_bar_y: Option<u16>,
     // Status bar branch click region: (x_start, x_end)
     status_bar_branch_region: Option<(u16, u16)>,
-    // Transient error message with timestamp for auto-dismiss
-    error_message: Option<(String, Instant)>,
     // Channel for receiving branch switch results
     branch_switch_rx: Option<mpsc::Receiver<BranchSwitchResult>>,
     // Cached terminal area from last draw, used by mouse handlers
@@ -170,10 +186,7 @@ impl App {
             dragging_separator: false,
             main_area_width: 0,
             hover_row: None,
-            input_mode: InputMode::Normal,
-            context_menu: None,
-            input_dialog: None,
-            picker_state: None,
+            ui: UiOverlayState::default(),
             search_state: SearchState::new(SearchMode::Find),
             global_search_handle: None,
             hyperlink_regions: Vec::new(),
@@ -184,7 +197,6 @@ impl App {
             status_bar_y: 0,
             search_bar_y: None,
             status_bar_branch_region: None,
-            error_message: None,
             branch_switch_rx: None,
             last_terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24),
             #[cfg(feature = "image-preview")]
@@ -268,13 +280,13 @@ impl App {
             }
 
             terminal.draw(|frame| self.draw(frame))?;
-            if self.input_mode == InputMode::Normal {
+            if self.ui.input_mode == InputMode::Normal {
                 self.emit_osc8_hyperlinks()?;
             }
 
             // When an error message is displayed, set a tick to auto-dismiss it
             // even if no user events occur.
-            let has_error = self.error_message.is_some();
+            let has_error = self.ui.error_message.is_some();
 
             tokio::select! {
                 () = tokio::time::sleep(Duration::from_secs(1)), if has_error => {
@@ -284,7 +296,7 @@ impl App {
                 event = reader.next() => {
                     match event {
                         Some(Ok(Event::Key(key))) => {
-                            let action = match self.input_mode {
+                            let action = match self.ui.input_mode {
                                 InputMode::Normal => {
                                     let has_selection = self.preview_state.selection.is_active();
                                     let action = handle_key(key, self.preview_visible, has_selection, &self.keybinding_map);
@@ -317,15 +329,15 @@ impl App {
                         Some(Ok(Event::Mouse(mouse))) if self.mouse_enabled => {
                             use crossterm::event::{MouseButton, MouseEventKind};
 
-                            if self.input_mode == InputMode::ContextMenu {
+                            if self.ui.input_mode == InputMode::ContextMenu {
                                 post_action =
                                     self.handle_context_menu_mouse(mouse, &preview_tx);
-                            } else if self.input_mode == InputMode::Picker {
+                            } else if self.ui.input_mode == InputMode::Picker {
                                 post_action = self.handle_picker_mouse(mouse);
-                            } else if self.input_mode == InputMode::Dialog {
+                            } else if self.ui.input_mode == InputMode::Dialog {
                                 // R5: Click outside dialog cancels it
                                 post_action = self.handle_dialog_mouse(mouse);
-                            } else if self.input_mode == InputMode::GlobalSearch {
+                            } else if self.ui.input_mode == InputMode::GlobalSearch {
                                 post_action = self.handle_global_search_mouse(mouse, &preview_tx);
                             } else {
                                 // Route by area priority: status > search > tree/preview
@@ -342,9 +354,9 @@ impl App {
                             }
                         }
                         Some(Ok(Event::Resize(_, _))) => {
-                            self.context_menu = None;
-                            self.picker_state = None;
-                            self.input_mode = InputMode::Normal;
+                            self.ui.context_menu = None;
+                            self.ui.picker_state = None;
+                            self.ui.input_mode = InputMode::Normal;
                             if self.preview_visible {
                                 self.trigger_preview_load(&preview_tx);
                             }
@@ -448,8 +460,8 @@ impl App {
                             let branches = crate::git::branches::list_branches(&result.repo_root);
                             let mut restored_picker = PickerState::new_branch(&branches);
                             restored_picker.error_message = Some(result.stderr);
-                            self.picker_state = Some(restored_picker);
-                            self.input_mode = InputMode::Picker;
+                            self.ui.picker_state = Some(restored_picker);
+                            self.ui.input_mode = InputMode::Picker;
                         }
                     }
                 }
@@ -538,7 +550,7 @@ impl App {
         let size = frame.area();
         self.last_terminal_area = size;
 
-        let show_search_bar = self.input_mode == InputMode::Search
+        let show_search_bar = self.ui.input_mode == InputMode::Search
             || (!self.search_state.is_empty() && self.search_state.mode != SearchMode::Global);
 
         let chunks = Layout::default()
@@ -741,7 +753,7 @@ impl App {
         status_bar.render(status_area, frame.buffer_mut());
 
         // Overlay error message on status bar (auto-dismiss after 3 seconds)
-        if let Some((ref msg, ts)) = self.error_message {
+        if let Some((ref msg, ts)) = self.ui.error_message {
             if ts.elapsed() < Duration::from_secs(3) {
                 let error_style = ratatui::style::Style::default()
                     .fg(ratatui::style::Color::White)
@@ -755,7 +767,7 @@ impl App {
                     .buffer_mut()
                     .set_string(status_area.x, status_area.y, display, error_style);
             } else {
-                self.error_message = None;
+                self.ui.error_message = None;
             }
         }
 
@@ -770,22 +782,22 @@ impl App {
         }
 
         // Render overlays (context menu / input dialog)
-        if let Some(ref menu) = self.context_menu {
+        if let Some(ref menu) = self.ui.context_menu {
             let widget = ContextMenuWidget { state: menu };
             widget.render(size, frame.buffer_mut());
         }
 
-        if let Some(ref dialog) = self.input_dialog {
+        if let Some(ref dialog) = self.ui.input_dialog {
             let widget = InputDialogWidget { state: dialog };
             widget.render(size, frame.buffer_mut());
         }
 
-        if let Some(ref mut picker) = self.picker_state {
+        if let Some(ref mut picker) = self.ui.picker_state {
             PickerWidget::render_mut(picker, size, frame.buffer_mut());
         }
 
         // Global search overlay
-        if self.input_mode == InputMode::GlobalSearch {
+        if self.ui.input_mode == InputMode::GlobalSearch {
             // Compute visible results height (same formula as GlobalSearchOverlay::render)
             let dialog_height = (size.height * 3 / 5)
                 .max(10)
@@ -808,13 +820,13 @@ impl App {
         let mut post = PostAction::None;
         match *action {
             Action::Quit => {
-                if self.input_mode == InputMode::Normal {
+                if self.ui.input_mode == InputMode::Normal {
                     self.should_quit = true;
                 } else {
-                    self.input_mode = InputMode::Normal;
-                    self.context_menu = None;
-                    self.input_dialog = None;
-                    self.picker_state = None;
+                    self.ui.input_mode = InputMode::Normal;
+                    self.ui.context_menu = None;
+                    self.ui.input_dialog = None;
+                    self.ui.picker_state = None;
                 }
             }
 
@@ -899,24 +911,24 @@ impl App {
 
             // Context menu actions
             Action::MenuClose => {
-                self.context_menu = None;
-                self.input_mode = InputMode::Normal;
+                self.ui.context_menu = None;
+                self.ui.input_mode = InputMode::Normal;
             }
             Action::MenuUp => {
-                if let Some(ref mut menu) = self.context_menu {
+                if let Some(ref mut menu) = self.ui.context_menu {
                     menu.move_up();
                 }
             }
             Action::MenuDown => {
-                if let Some(ref mut menu) = self.context_menu {
+                if let Some(ref mut menu) = self.ui.context_menu {
                     menu.move_down();
                 }
             }
             Action::MenuSelect => {
                 // Resolve actual action from selected menu item
-                if let Some(menu) = self.context_menu.take() {
+                if let Some(menu) = self.ui.context_menu.take() {
                     if let Some(menu_action) = menu.selected_action().cloned() {
-                        self.input_mode = InputMode::Normal;
+                        self.ui.input_mode = InputMode::Normal;
                         post = self.execute_menu_action(&menu_action, menu.node_idx, preview_tx);
                     }
                 }
@@ -929,22 +941,22 @@ impl App {
 
             // Dialog actions
             Action::DialogChar(ch) => {
-                if let Some(ref mut dialog) = self.input_dialog {
+                if let Some(ref mut dialog) = self.ui.input_dialog {
                     dialog.insert_char(ch);
                 }
             }
             Action::DialogBackspace => {
-                if let Some(ref mut dialog) = self.input_dialog {
+                if let Some(ref mut dialog) = self.ui.input_dialog {
                     dialog.delete_char();
                 }
             }
             Action::DialogLeft => {
-                if let Some(ref mut dialog) = self.input_dialog {
+                if let Some(ref mut dialog) = self.ui.input_dialog {
                     dialog.move_left();
                 }
             }
             Action::DialogRight => {
-                if let Some(ref mut dialog) = self.input_dialog {
+                if let Some(ref mut dialog) = self.ui.input_dialog {
                     dialog.move_right();
                 }
             }
@@ -952,8 +964,8 @@ impl App {
                 self.confirm_dialog();
             }
             Action::DialogCancel => {
-                self.input_dialog = None;
-                self.input_mode = InputMode::Normal;
+                self.ui.input_dialog = None;
+                self.ui.input_mode = InputMode::Normal;
             }
 
             // Search actions — Find mode
@@ -961,14 +973,14 @@ impl App {
                 self.search_state = SearchState::new(SearchMode::Find);
                 self.search_state.origin_cursor = self.tree.cursor;
                 self.search_state.origin_scroll_offset = self.tree.scroll_offset;
-                self.input_mode = InputMode::Search;
+                self.ui.input_mode = InputMode::Search;
             }
             // Search actions — Filter mode
             Action::StartFilter => {
                 self.search_state = SearchState::new(SearchMode::Filter);
                 self.search_state.origin_cursor = self.tree.cursor;
                 self.search_state.origin_scroll_offset = self.tree.scroll_offset;
-                self.input_mode = InputMode::Search;
+                self.ui.input_mode = InputMode::Search;
             }
             Action::SearchChar(ch) => {
                 self.search_state.insert_char(ch);
@@ -996,12 +1008,12 @@ impl App {
                 match self.search_state.mode {
                     SearchMode::Find => {
                         // Exit search, clear highlights, cursor stays
-                        self.input_mode = InputMode::Normal;
+                        self.ui.input_mode = InputMode::Normal;
                         self.search_state.clear();
                     }
                     SearchMode::Filter => {
                         // Exit input but keep filter active
-                        self.input_mode = InputMode::Normal;
+                        self.ui.input_mode = InputMode::Normal;
                     }
                     SearchMode::Global => {}
                 }
@@ -1010,7 +1022,7 @@ impl App {
                 // Restore cursor and clear all search state
                 self.tree.cursor = self.search_state.origin_cursor;
                 self.tree.scroll_offset = self.search_state.origin_scroll_offset;
-                self.input_mode = InputMode::Normal;
+                self.ui.input_mode = InputMode::Normal;
                 self.search_state.clear();
             }
             Action::SearchNext => {
@@ -1025,14 +1037,14 @@ impl App {
                 self.search_state = SearchState::new(SearchMode::Global);
                 self.search_state.request_id = last_id;
                 self.search_state.global_search_type = GlobalSearchType::FileName;
-                self.input_mode = InputMode::GlobalSearch;
+                self.ui.input_mode = InputMode::GlobalSearch;
             }
             Action::StartGlobalSearchContent => {
                 let last_id = self.search_state.request_id;
                 self.search_state = SearchState::new(SearchMode::Global);
                 self.search_state.request_id = last_id;
                 self.search_state.global_search_type = GlobalSearchType::Content;
-                self.input_mode = InputMode::GlobalSearch;
+                self.ui.input_mode = InputMode::GlobalSearch;
             }
             Action::GlobalSearchChar(ch) => {
                 self.search_state.insert_char(ch);
@@ -1080,7 +1092,7 @@ impl App {
                     .get(self.search_state.global_selected)
                     .cloned()
                 {
-                    self.input_mode = InputMode::Normal;
+                    self.ui.input_mode = InputMode::Normal;
                     let last_id = self.search_state.request_id;
                     self.search_state.clear();
                     self.search_state.request_id = last_id;
@@ -1094,7 +1106,7 @@ impl App {
                 let last_id = self.search_state.request_id;
                 self.search_state.clear();
                 self.search_state.request_id = last_id;
-                self.input_mode = InputMode::Normal;
+                self.ui.input_mode = InputMode::Normal;
                 if let Some(handle) = self.global_search_handle.take() {
                     handle.abort();
                 }
@@ -1127,7 +1139,7 @@ impl App {
             }
             // Focus search bar without clearing query
             Action::FocusSearch => {
-                self.input_mode = InputMode::Search;
+                self.ui.input_mode = InputMode::Search;
             }
 
             Action::DoubleClick(row) => {
@@ -1149,22 +1161,22 @@ impl App {
                 }
             }
             Action::PickerChar(ch) => {
-                if let Some(ref mut picker) = self.picker_state {
+                if let Some(ref mut picker) = self.ui.picker_state {
                     picker.insert_char(ch);
                 }
             }
             Action::PickerBackspace => {
-                if let Some(ref mut picker) = self.picker_state {
+                if let Some(ref mut picker) = self.ui.picker_state {
                     picker.delete_char();
                 }
             }
             Action::PickerUp => {
-                if let Some(ref mut picker) = self.picker_state {
+                if let Some(ref mut picker) = self.ui.picker_state {
                     picker.move_up();
                 }
             }
             Action::PickerDown => {
-                if let Some(ref mut picker) = self.picker_state {
+                if let Some(ref mut picker) = self.ui.picker_state {
                     picker.move_down();
                 }
             }
@@ -1172,8 +1184,8 @@ impl App {
                 self.confirm_picker();
             }
             Action::PickerCancel => {
-                self.picker_state = None;
-                self.input_mode = InputMode::Normal;
+                self.ui.picker_state = None;
+                self.ui.input_mode = InputMode::Normal;
             }
 
             Action::EnterKey => {
@@ -1192,7 +1204,7 @@ impl App {
             }
 
             Action::Paste(ref text) => {
-                match self.input_mode {
+                match self.ui.input_mode {
                     InputMode::Normal | InputMode::ContextMenu => {
                         // Ignore paste in non-input modes — safety guard
                     }
@@ -1205,12 +1217,12 @@ impl App {
                         }
                     }
                     InputMode::Dialog => {
-                        if let Some(ref mut dialog) = self.input_dialog {
+                        if let Some(ref mut dialog) = self.ui.input_dialog {
                             dialog.insert_str(text);
                         }
                     }
                     InputMode::Picker => {
-                        if let Some(ref mut picker) = self.picker_state {
+                        if let Some(ref mut picker) = self.ui.picker_state {
                             picker.insert_str(text);
                         }
                     }
@@ -1500,8 +1512,8 @@ impl App {
             }
         };
 
-        self.context_menu = Some(menu);
-        self.input_mode = InputMode::ContextMenu;
+        self.ui.context_menu = Some(menu);
+        self.ui.input_mode = InputMode::ContextMenu;
     }
 
     fn handle_context_menu_mouse(
@@ -1513,25 +1525,25 @@ impl App {
 
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
-                if let Some(ref menu) = self.context_menu {
+                if let Some(ref menu) = self.ui.context_menu {
                     let tw = self.main_area_width;
                     let th = self.tree_area_y + self.tree_area_height + 1;
                     if menu.contains(mouse.column, mouse.row, tw, th) {
                         if let Some(idx) = menu.row_to_item(mouse.row, tw, th) {
                             let menu_action = menu.items[idx].action.clone();
                             let node_idx = menu.node_idx;
-                            self.context_menu = None;
-                            self.input_mode = InputMode::Normal;
+                            self.ui.context_menu = None;
+                            self.ui.input_mode = InputMode::Normal;
                             return self.execute_menu_action(&menu_action, node_idx, preview_tx);
                         }
                     } else {
-                        self.context_menu = None;
-                        self.input_mode = InputMode::Normal;
+                        self.ui.context_menu = None;
+                        self.ui.input_mode = InputMode::Normal;
                     }
                 }
             }
             MouseEventKind::Moved => {
-                if let Some(ref mut menu) = self.context_menu {
+                if let Some(ref mut menu) = self.ui.context_menu {
                     let tw = self.main_area_width;
                     let th = self.tree_area_y + self.tree_area_height + 1;
                     if let Some(idx) = menu.row_to_item(mouse.row, tw, th) {
@@ -1542,8 +1554,8 @@ impl App {
             _ => {
                 // Any other click closes the menu
                 if matches!(mouse.kind, MouseEventKind::Down(_)) {
-                    self.context_menu = None;
-                    self.input_mode = InputMode::Normal;
+                    self.ui.context_menu = None;
+                    self.ui.input_mode = InputMode::Normal;
                 }
             }
         }
@@ -1555,7 +1567,7 @@ impl App {
 
         let area = self.last_terminal_area;
 
-        let layout = match self.picker_state.as_ref().and_then(|p| p.layout(area)) {
+        let layout = match self.ui.picker_state.as_ref().and_then(|p| p.layout(area)) {
             Some(l) => l,
             None => return PostAction::None,
         };
@@ -1569,7 +1581,7 @@ impl App {
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 if inside {
-                    if let Some(picker) = self.picker_state.as_mut() {
+                    if let Some(picker) = self.ui.picker_state.as_mut() {
                         if let Some(idx) = picker.row_to_filtered_idx(&layout, mouse.row) {
                             picker.selected = idx;
                             self.confirm_picker();
@@ -1577,13 +1589,13 @@ impl App {
                     }
                 } else {
                     // Click outside closes picker
-                    self.picker_state = None;
-                    self.input_mode = InputMode::Normal;
+                    self.ui.picker_state = None;
+                    self.ui.input_mode = InputMode::Normal;
                 }
             }
             MouseEventKind::Moved => {
                 if inside {
-                    if let Some(picker) = self.picker_state.as_mut() {
+                    if let Some(picker) = self.ui.picker_state.as_mut() {
                         if let Some(idx) = picker.row_to_filtered_idx(&layout, mouse.row) {
                             picker.selected = idx;
                         }
@@ -1592,22 +1604,22 @@ impl App {
             }
             MouseEventKind::ScrollUp => {
                 if inside {
-                    if let Some(picker) = self.picker_state.as_mut() {
+                    if let Some(picker) = self.ui.picker_state.as_mut() {
                         picker.move_up();
                     }
                 }
             }
             MouseEventKind::ScrollDown => {
                 if inside {
-                    if let Some(picker) = self.picker_state.as_mut() {
+                    if let Some(picker) = self.ui.picker_state.as_mut() {
                         picker.move_down();
                     }
                 }
             }
             _ => {
                 if matches!(mouse.kind, MouseEventKind::Down(_)) {
-                    self.picker_state = None;
-                    self.input_mode = InputMode::Normal;
+                    self.ui.picker_state = None;
+                    self.ui.input_mode = InputMode::Normal;
                 }
             }
         }
@@ -1715,7 +1727,7 @@ impl App {
                 self.search_state = SearchState::new(SearchMode::Find);
                 self.search_state.origin_cursor = self.tree.cursor;
                 self.search_state.origin_scroll_offset = self.tree.scroll_offset;
-                self.input_mode = InputMode::Search;
+                self.ui.input_mode = InputMode::Search;
             }
             MenuAction::Separator => {} // inert — should not reach here
         }
@@ -1744,7 +1756,7 @@ impl App {
         // Check if click is outside the dialog area
         let area = self.last_terminal_area;
 
-        if let Some(ref dialog) = self.input_dialog {
+        if let Some(ref dialog) = self.ui.input_dialog {
             let dialog_rect = crate::render::input_dialog::input_dialog_rect(area, &dialog.kind);
 
             let inside = mouse.column >= dialog_rect.x
@@ -1765,13 +1777,13 @@ impl App {
                     && mouse.column < cancel_rect.x + cancel_rect.width
                     && mouse.row == cancel_rect.y
                 {
-                    self.input_dialog = None;
-                    self.input_mode = InputMode::Normal;
+                    self.ui.input_dialog = None;
+                    self.ui.input_mode = InputMode::Normal;
                     return PostAction::None;
                 }
             } else {
-                self.input_dialog = None;
-                self.input_mode = InputMode::Normal;
+                self.ui.input_dialog = None;
+                self.ui.input_mode = InputMode::Normal;
             }
         }
         PostAction::None
@@ -1808,14 +1820,14 @@ impl App {
             let close_x = SearchBar::close_button_x(0, area_width);
             if col >= close_x {
                 // Close button clicked → cancel search
-                self.input_mode = InputMode::Normal;
+                self.ui.input_mode = InputMode::Normal;
                 self.search_state.clear();
                 return PostAction::None;
             }
         }
 
         // Click elsewhere on search bar → focus search (preserve query)
-        self.input_mode = InputMode::Search;
+        self.ui.input_mode = InputMode::Search;
         PostAction::None
     }
 
@@ -1863,30 +1875,30 @@ impl App {
 
     fn start_new_file(&mut self) {
         let dir = self.current_dir();
-        self.input_dialog = Some(InputDialogState::new(
+        self.ui.input_dialog = Some(InputDialogState::new(
             DialogKind::NewFile,
             dir,
             String::new(),
         ));
-        self.input_mode = InputMode::Dialog;
+        self.ui.input_mode = InputMode::Dialog;
     }
 
     fn start_new_dir(&mut self) {
         let dir = self.current_dir();
-        self.input_dialog = Some(InputDialogState::new(
+        self.ui.input_dialog = Some(InputDialogState::new(
             DialogKind::NewDir,
             dir,
             String::new(),
         ));
-        self.input_mode = InputMode::Dialog;
+        self.ui.input_mode = InputMode::Dialog;
     }
 
     fn start_rename(&mut self) {
         if let Some(node) = self.tree.selected() {
             let name = node.name.clone();
             let path = node.path.clone();
-            self.input_dialog = Some(InputDialogState::new(DialogKind::Rename, path, name));
-            self.input_mode = InputMode::Dialog;
+            self.ui.input_dialog = Some(InputDialogState::new(DialogKind::Rename, path, name));
+            self.ui.input_mode = InputMode::Dialog;
         }
     }
 
@@ -1896,37 +1908,37 @@ impl App {
             let path = node.path.clone();
             let mut dialog = InputDialogState::new(DialogKind::ConfirmDelete, path, name);
             dialog.use_trash = self.config.general.use_trash;
-            self.input_dialog = Some(dialog);
-            self.input_mode = InputMode::Dialog;
+            self.ui.input_dialog = Some(dialog);
+            self.ui.input_mode = InputMode::Dialog;
         }
     }
 
     fn start_new_file_at(&mut self, node_idx: usize) {
         let dir = self.dir_for_node(node_idx);
-        self.input_dialog = Some(InputDialogState::new(
+        self.ui.input_dialog = Some(InputDialogState::new(
             DialogKind::NewFile,
             dir,
             String::new(),
         ));
-        self.input_mode = InputMode::Dialog;
+        self.ui.input_mode = InputMode::Dialog;
     }
 
     fn start_new_dir_at(&mut self, node_idx: usize) {
         let dir = self.dir_for_node(node_idx);
-        self.input_dialog = Some(InputDialogState::new(
+        self.ui.input_dialog = Some(InputDialogState::new(
             DialogKind::NewDir,
             dir,
             String::new(),
         ));
-        self.input_mode = InputMode::Dialog;
+        self.ui.input_mode = InputMode::Dialog;
     }
 
     fn start_rename_at(&mut self, node_idx: usize) {
         if let Some(node) = self.tree.nodes.get(node_idx) {
             let name = node.name.clone();
             let path = node.path.clone();
-            self.input_dialog = Some(InputDialogState::new(DialogKind::Rename, path, name));
-            self.input_mode = InputMode::Dialog;
+            self.ui.input_dialog = Some(InputDialogState::new(DialogKind::Rename, path, name));
+            self.ui.input_mode = InputMode::Dialog;
         }
     }
 
@@ -1936,21 +1948,21 @@ impl App {
             let path = node.path.clone();
             let mut dialog = InputDialogState::new(DialogKind::ConfirmDelete, path, name);
             dialog.use_trash = self.config.general.use_trash;
-            self.input_dialog = Some(dialog);
-            self.input_mode = InputMode::Dialog;
+            self.ui.input_dialog = Some(dialog);
+            self.ui.input_mode = InputMode::Dialog;
         }
     }
 
     /// Display a transient error message in the status bar area.
     fn show_error(&mut self, msg: String) {
-        self.error_message = Some((msg, Instant::now()));
+        self.ui.error_message = Some((msg, Instant::now()));
     }
 
     fn confirm_dialog(&mut self) {
-        let Some(dialog) = self.input_dialog.take() else {
+        let Some(dialog) = self.ui.input_dialog.take() else {
             return;
         };
-        self.input_mode = InputMode::Normal;
+        self.ui.input_mode = InputMode::Normal;
 
         let result = file_ops::execute_dialog(
             &dialog.kind,
@@ -2326,34 +2338,34 @@ impl App {
     fn open_branch_picker(&mut self) {
         let Some(ref git) = self.git else { return };
         let branches = crate::git::branches::list_branches(git.repo_root());
-        self.picker_state = Some(PickerState::new_branch(&branches));
-        self.input_mode = InputMode::Picker;
+        self.ui.picker_state = Some(PickerState::new_branch(&branches));
+        self.ui.input_mode = InputMode::Picker;
     }
 
     fn confirm_picker(&mut self) {
-        let Some(picker) = self.picker_state.take() else {
+        let Some(picker) = self.ui.picker_state.take() else {
             return;
         };
 
         let Some(item) = picker.selected_item().cloned() else {
-            self.input_mode = InputMode::Normal;
+            self.ui.input_mode = InputMode::Normal;
             return;
         };
 
         // Don't switch to the already-current branch
         if item.is_current {
-            self.input_mode = InputMode::Normal;
+            self.ui.input_mode = InputMode::Normal;
             return;
         }
 
         let Some(ref git) = self.git else {
-            self.input_mode = InputMode::Normal;
+            self.ui.input_mode = InputMode::Normal;
             return;
         };
 
         // Prevent triggering a new switch while one is in-flight
         if self.branch_switch_rx.is_some() {
-            self.input_mode = InputMode::Normal;
+            self.ui.input_mode = InputMode::Normal;
             self.show_error("Branch switch already in progress".to_string());
             return;
         }
@@ -2364,7 +2376,7 @@ impl App {
 
         let (tx, rx) = mpsc::channel::<BranchSwitchResult>(1);
         self.branch_switch_rx = Some(rx);
-        self.input_mode = InputMode::Normal;
+        self.ui.input_mode = InputMode::Normal;
 
         tokio::task::spawn_blocking(move || {
             let result = if is_remote {
@@ -2529,7 +2541,7 @@ impl App {
             let last_id = self.search_state.request_id;
             self.search_state.clear();
             self.search_state.request_id = last_id;
-            self.input_mode = InputMode::Normal;
+            self.ui.input_mode = InputMode::Normal;
             if let Some(handle) = self.global_search_handle.take() {
                 handle.abort();
             }
@@ -2551,7 +2563,7 @@ impl App {
                     .get(self.search_state.global_selected)
                     .cloned()
                 {
-                    self.input_mode = InputMode::Normal;
+                    self.ui.input_mode = InputMode::Normal;
                     let last_id = self.search_state.request_id;
                     self.search_state.clear();
                     self.search_state.request_id = last_id;
@@ -2654,7 +2666,7 @@ mod tests {
     fn test_global_search_mouse_move_does_not_cancel() {
         let (mut app, _tmp) = test_app();
         // Enter GlobalSearch mode
-        app.input_mode = InputMode::GlobalSearch;
+        app.ui.input_mode = InputMode::GlobalSearch;
         app.search_state = SearchState::new(SearchMode::Global);
         app.search_state.global_search_type = GlobalSearchType::FileName;
 
@@ -2669,13 +2681,13 @@ mod tests {
         app.handle_global_search_mouse(mouse, &ptx);
 
         // Mode should still be GlobalSearch
-        assert_eq!(app.input_mode, InputMode::GlobalSearch);
+        assert_eq!(app.ui.input_mode, InputMode::GlobalSearch);
     }
 
     #[test]
     fn test_global_search_scroll_does_not_cancel() {
         let (mut app, _tmp) = test_app();
-        app.input_mode = InputMode::GlobalSearch;
+        app.ui.input_mode = InputMode::GlobalSearch;
         app.search_state = SearchState::new(SearchMode::Global);
 
         let mouse = MouseEvent {
@@ -2687,16 +2699,16 @@ mod tests {
         let (ptx, _prx) = mpsc::channel(1);
         app.handle_global_search_mouse(mouse, &ptx);
 
-        assert_eq!(app.input_mode, InputMode::GlobalSearch);
+        assert_eq!(app.ui.input_mode, InputMode::GlobalSearch);
     }
 
     #[test]
     fn test_show_error_sets_message() {
         let (mut app, _tmp) = test_app();
-        assert!(app.error_message.is_none());
+        assert!(app.ui.error_message.is_none());
         app.show_error("test error".to_string());
-        assert!(app.error_message.is_some());
-        let (msg, _ts) = app.error_message.as_ref().unwrap();
+        assert!(app.ui.error_message.is_some());
+        let (msg, _ts) = app.ui.error_message.as_ref().unwrap();
         assert_eq!(msg, "test error");
     }
 
@@ -2704,12 +2716,12 @@ mod tests {
     fn test_error_message_auto_dismiss() {
         let (mut app, _tmp) = test_app();
         // Set an error with a past timestamp (4 seconds ago)
-        app.error_message = Some((
+        app.ui.error_message = Some((
             "old error".to_string(),
             Instant::now().checked_sub(Duration::from_secs(4)).unwrap(),
         ));
         // After 3 seconds the message should be considered expired
-        let (_, ts) = app.error_message.as_ref().unwrap();
+        let (_, ts) = app.ui.error_message.as_ref().unwrap();
         assert!(ts.elapsed() >= Duration::from_secs(3));
     }
 
@@ -2717,17 +2729,17 @@ mod tests {
     fn test_confirm_dialog_rename_nonexistent_shows_error() {
         let (mut app, _tmp) = test_app();
         let fake_path = std::env::temp_dir().join("croot_nonexistent_for_rename");
-        app.input_dialog = Some(InputDialogState::new(
+        app.ui.input_dialog = Some(InputDialogState::new(
             DialogKind::Rename,
             fake_path,
             "old_name".to_string(),
         ));
-        app.input_mode = InputMode::Dialog;
+        app.ui.input_mode = InputMode::Dialog;
         // Set the input to something different to trigger rename
-        app.input_dialog.as_mut().unwrap().input = "new_name".to_string();
+        app.ui.input_dialog.as_mut().unwrap().input = "new_name".to_string();
         app.confirm_dialog();
         assert!(
-            app.error_message.is_some(),
+            app.ui.error_message.is_some(),
             "Rename of nonexistent file should show error"
         );
     }
@@ -2736,15 +2748,15 @@ mod tests {
     fn test_confirm_dialog_delete_nonexistent_shows_error() {
         let (mut app, _tmp) = test_app();
         let fake_path = std::env::temp_dir().join("croot_nonexistent_for_delete");
-        app.input_dialog = Some(InputDialogState::new(
+        app.ui.input_dialog = Some(InputDialogState::new(
             DialogKind::ConfirmDelete,
             fake_path,
             "ghost".to_string(),
         ));
-        app.input_mode = InputMode::Dialog;
+        app.ui.input_mode = InputMode::Dialog;
         app.confirm_dialog();
         assert!(
-            app.error_message.is_some(),
+            app.ui.error_message.is_some(),
             "Delete of nonexistent file should show error"
         );
     }
@@ -2768,12 +2780,12 @@ mod tests {
 
         // Set up a delete dialog for a nonexistent file (will fail → Error)
         let fake_path = std::env::temp_dir().join("croot_test_confirm_refresh");
-        app.input_dialog = Some(InputDialogState::new(
+        app.ui.input_dialog = Some(InputDialogState::new(
             DialogKind::ConfirmDelete,
             fake_path,
             "ghost".to_string(),
         ));
-        app.input_mode = InputMode::Dialog;
+        app.ui.input_mode = InputMode::Dialog;
         app.confirm_dialog();
 
         // On error, tree refresh is skipped — stale indices remain unchanged
@@ -2783,7 +2795,7 @@ mod tests {
         );
         // But an error message should be shown
         assert!(
-            app.error_message.is_some(),
+            app.ui.error_message.is_some(),
             "error message should be shown for failed delete"
         );
     }
@@ -2800,8 +2812,8 @@ mod tests {
             InputDialogState::new(DialogKind::Rename, fake_path, "original.txt".to_string());
         dialog.input.clear();
         dialog.cursor_pos = 0;
-        app.input_dialog = Some(dialog);
-        app.input_mode = InputMode::Dialog;
+        app.ui.input_dialog = Some(dialog);
+        app.ui.input_mode = InputMode::Dialog;
         app.confirm_dialog();
 
         // On noop, stale indices remain unchanged and no error
@@ -2809,13 +2821,13 @@ mod tests {
             app.search_state.visible_indices.contains(&999),
             "stale index should remain since refresh was skipped on noop"
         );
-        assert!(app.error_message.is_none(), "no error on noop");
+        assert!(app.ui.error_message.is_none(), "no error on noop");
     }
 
     #[test]
     fn test_global_search_click_outside_cancels() {
         let (mut app, _tmp) = test_app();
-        app.input_mode = InputMode::GlobalSearch;
+        app.ui.input_mode = InputMode::GlobalSearch;
         app.search_state = SearchState::new(SearchMode::Global);
         app.search_state.global_search_type = GlobalSearchType::FileName;
 
@@ -2829,7 +2841,7 @@ mod tests {
         let (ptx, _prx) = mpsc::channel(1);
         app.handle_global_search_mouse(mouse, &ptx);
 
-        assert_eq!(app.input_mode, InputMode::Normal);
+        assert_eq!(app.ui.input_mode, InputMode::Normal);
     }
 
     #[tokio::test]
@@ -2842,7 +2854,7 @@ mod tests {
         app.preview_visible = true;
 
         // Set up global search state with a result pointing to the test file
-        app.input_mode = InputMode::GlobalSearch;
+        app.ui.input_mode = InputMode::GlobalSearch;
         app.search_state = SearchState::new(SearchMode::Global);
         app.search_state.global_results.push(GlobalSearchResult {
             path: test_file.clone(),
@@ -2861,7 +2873,7 @@ mod tests {
 
         // trigger_preview_load should have been called, setting the preview to Loading
         // and spawning a debounce task
-        assert_eq!(app.input_mode, InputMode::Normal);
+        assert_eq!(app.ui.input_mode, InputMode::Normal);
         assert!(
             app.preview_debounce_handle.is_some(),
             "Preview debounce handle should be set after confirm"
@@ -2983,7 +2995,7 @@ mod tests {
     fn action_quit_in_normal_mode_sets_should_quit() {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
-        app.input_mode = InputMode::Normal;
+        app.ui.input_mode = InputMode::Normal;
         app.handle_action(&Action::Quit, &ptx, &stx);
         assert!(app.should_quit);
     }
@@ -2992,10 +3004,10 @@ mod tests {
     fn action_quit_in_search_mode_returns_to_normal() {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
-        app.input_mode = InputMode::Search;
+        app.ui.input_mode = InputMode::Search;
         app.handle_action(&Action::Quit, &ptx, &stx);
         assert!(!app.should_quit);
-        assert_eq!(app.input_mode, InputMode::Normal);
+        assert_eq!(app.ui.input_mode, InputMode::Normal);
     }
 
     // ── Action handling: search lifecycle ────────────────────────────────
@@ -3005,7 +3017,7 @@ mod tests {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
         app.handle_action(&Action::StartFind, &ptx, &stx);
-        assert_eq!(app.input_mode, InputMode::Search);
+        assert_eq!(app.ui.input_mode, InputMode::Search);
         assert_eq!(app.search_state.mode, SearchMode::Find);
     }
 
@@ -3014,7 +3026,7 @@ mod tests {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
         app.handle_action(&Action::StartFilter, &ptx, &stx);
-        assert_eq!(app.input_mode, InputMode::Search);
+        assert_eq!(app.ui.input_mode, InputMode::Search);
         assert_eq!(app.search_state.mode, SearchMode::Filter);
     }
 
@@ -3028,7 +3040,7 @@ mod tests {
         app.handle_action(&Action::CursorDown, &ptx, &stx);
         app.handle_action(&Action::SearchCancel, &ptx, &stx);
         assert_eq!(app.tree.cursor, orig_cursor);
-        assert_eq!(app.input_mode, InputMode::Normal);
+        assert_eq!(app.ui.input_mode, InputMode::Normal);
     }
 
     // ── Action handling: global search ──────────────────────────────────
@@ -3038,7 +3050,7 @@ mod tests {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
         app.handle_action(&Action::StartGlobalSearch, &ptx, &stx);
-        assert_eq!(app.input_mode, InputMode::GlobalSearch);
+        assert_eq!(app.ui.input_mode, InputMode::GlobalSearch);
         assert_eq!(
             app.search_state.global_search_type,
             GlobalSearchType::FileName
@@ -3050,7 +3062,7 @@ mod tests {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
         app.handle_action(&Action::StartGlobalSearchContent, &ptx, &stx);
-        assert_eq!(app.input_mode, InputMode::GlobalSearch);
+        assert_eq!(app.ui.input_mode, InputMode::GlobalSearch);
         assert_eq!(
             app.search_state.global_search_type,
             GlobalSearchType::Content
@@ -3064,7 +3076,7 @@ mod tests {
         app.handle_action(&Action::StartGlobalSearch, &ptx, &stx);
         app.search_state.query = "test".to_string();
         app.handle_action(&Action::GlobalSearchCancel, &ptx, &stx);
-        assert_eq!(app.input_mode, InputMode::Normal);
+        assert_eq!(app.ui.input_mode, InputMode::Normal);
         assert!(app.search_state.query.is_empty());
     }
 
@@ -3072,7 +3084,7 @@ mod tests {
     fn action_global_search_up_down_navigates() {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
-        app.input_mode = InputMode::GlobalSearch;
+        app.ui.input_mode = InputMode::GlobalSearch;
         app.search_state = SearchState::new(SearchMode::Global);
         // Add some mock results
         for i in 0..5 {
@@ -3096,7 +3108,7 @@ mod tests {
     fn action_global_search_up_at_zero_stays() {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
-        app.input_mode = InputMode::GlobalSearch;
+        app.ui.input_mode = InputMode::GlobalSearch;
         app.search_state = SearchState::new(SearchMode::Global);
         app.search_state.global_results.push(GlobalSearchResult {
             path: PathBuf::from("file.rs"),
@@ -3115,10 +3127,10 @@ mod tests {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
         app.handle_action(&Action::NewFile, &ptx, &stx);
-        assert_eq!(app.input_mode, InputMode::Dialog);
-        assert!(app.input_dialog.is_some());
+        assert_eq!(app.ui.input_mode, InputMode::Dialog);
+        assert!(app.ui.input_dialog.is_some());
         assert!(matches!(
-            app.input_dialog.as_ref().unwrap().kind,
+            app.ui.input_dialog.as_ref().unwrap().kind,
             DialogKind::NewFile
         ));
     }
@@ -3128,9 +3140,9 @@ mod tests {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
         app.handle_action(&Action::NewDir, &ptx, &stx);
-        assert_eq!(app.input_mode, InputMode::Dialog);
+        assert_eq!(app.ui.input_mode, InputMode::Dialog);
         assert!(matches!(
-            app.input_dialog.as_ref().unwrap().kind,
+            app.ui.input_dialog.as_ref().unwrap().kind,
             DialogKind::NewDir
         ));
     }
@@ -3140,10 +3152,10 @@ mod tests {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
         app.handle_action(&Action::NewFile, &ptx, &stx);
-        assert_eq!(app.input_mode, InputMode::Dialog);
+        assert_eq!(app.ui.input_mode, InputMode::Dialog);
         app.handle_action(&Action::DialogCancel, &ptx, &stx);
-        assert_eq!(app.input_mode, InputMode::Normal);
-        assert!(app.input_dialog.is_none());
+        assert_eq!(app.ui.input_mode, InputMode::Normal);
+        assert!(app.ui.input_dialog.is_none());
     }
 
     #[test]
@@ -3153,7 +3165,7 @@ mod tests {
         app.handle_action(&Action::NewFile, &ptx, &stx);
         app.handle_action(&Action::DialogChar('h'), &ptx, &stx);
         app.handle_action(&Action::DialogChar('i'), &ptx, &stx);
-        assert_eq!(app.input_dialog.as_ref().unwrap().input, "hi");
+        assert_eq!(app.ui.input_dialog.as_ref().unwrap().input, "hi");
     }
 
     // ── Action handling: collapse all ───────────────────────────────────
@@ -3222,11 +3234,11 @@ mod tests {
     #[test]
     fn error_message_expires_after_3_seconds() {
         let (mut app, _tmp) = test_app();
-        app.error_message = Some((
+        app.ui.error_message = Some((
             "old error".to_string(),
             Instant::now().checked_sub(Duration::from_secs(4)).unwrap(),
         ));
-        let (_, ts) = app.error_message.as_ref().unwrap();
+        let (_, ts) = app.ui.error_message.as_ref().unwrap();
         assert!(ts.elapsed() >= Duration::from_secs(3));
     }
 
@@ -3277,12 +3289,12 @@ mod tests {
     fn paste_in_normal_mode_is_ignored() {
         let (mut app, _tmp) = test_app();
         let (ptx, stx) = make_channels();
-        app.input_mode = InputMode::Normal;
+        app.ui.input_mode = InputMode::Normal;
         let cursor_before = app.tree.cursor;
 
         app.handle_action(&Action::Paste("qdr".to_string()), &ptx, &stx);
 
-        assert_eq!(app.input_mode, InputMode::Normal);
+        assert_eq!(app.ui.input_mode, InputMode::Normal);
         assert_eq!(app.tree.cursor, cursor_before);
         assert!(!app.should_quit);
     }
@@ -3292,7 +3304,7 @@ mod tests {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
         app.search_state = SearchState::new(SearchMode::Find);
-        app.input_mode = InputMode::Search;
+        app.ui.input_mode = InputMode::Search;
 
         app.handle_action(&Action::Paste("hello".to_string()), &ptx, &stx);
 
@@ -3304,17 +3316,17 @@ mod tests {
     fn paste_in_dialog_mode_inserts_text() {
         let (mut app, _tmp) = test_app();
         let (ptx, stx) = make_channels();
-        app.input_dialog = Some(InputDialogState::new(
+        app.ui.input_dialog = Some(InputDialogState::new(
             DialogKind::NewFile,
             std::path::PathBuf::from("/tmp"),
             String::new(),
         ));
-        app.input_mode = InputMode::Dialog;
+        app.ui.input_mode = InputMode::Dialog;
 
         app.handle_action(&Action::Paste("newfile.txt".to_string()), &ptx, &stx);
 
-        assert_eq!(app.input_dialog.as_ref().unwrap().input, "newfile.txt");
-        assert_eq!(app.input_dialog.as_ref().unwrap().cursor_pos, 11);
+        assert_eq!(app.ui.input_dialog.as_ref().unwrap().input, "newfile.txt");
+        assert_eq!(app.ui.input_dialog.as_ref().unwrap().cursor_pos, 11);
     }
 
     #[test]
