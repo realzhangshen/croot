@@ -8,26 +8,7 @@ use ratatui::{
 use unicode_width::UnicodeWidthStr;
 
 use super::colors;
-
-/// The kind of dialog being shown.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DialogKind {
-    NewFile,
-    NewDir,
-    Rename,
-    ConfirmDelete,
-}
-
-impl DialogKind {
-    fn title(&self) -> &'static str {
-        match self {
-            Self::NewFile => "New File",
-            Self::NewDir => "New Directory",
-            Self::Rename => "Rename",
-            Self::ConfirmDelete => "Confirm Delete",
-        }
-    }
-}
+pub use crate::file_ops::DialogKind;
 
 /// State for the input dialog overlay.
 #[derive(Debug, Clone)]

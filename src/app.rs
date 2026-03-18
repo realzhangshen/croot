@@ -18,6 +18,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::cmux::bridge::CmuxBridge;
 use crate::config::Config;
+use crate::file_ops::DialogKind;
 use crate::git::status::GitState;
 use crate::input::handler::{
     build_keybinding_map, handle_key, handle_key_dialog, handle_key_global_search, handle_key_menu,
@@ -30,7 +31,7 @@ use crate::preview::state::{PreviewKind, PreviewState};
 use crate::render::colors;
 use crate::render::context_menu::{ContextMenuState, ContextMenuWidget, MenuAction};
 use crate::render::global_search::GlobalSearchOverlay;
-use crate::render::input_dialog::{DialogKind, InputDialogState, InputDialogWidget};
+use crate::render::input_dialog::{InputDialogState, InputDialogWidget};
 use crate::render::picker::{PickerState, PickerWidget};
 use crate::render::preview_view::PreviewView;
 use crate::render::search_bar::{

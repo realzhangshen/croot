@@ -1,6 +1,25 @@
 use std::path::{Component, Path, PathBuf};
 
-use crate::render::input_dialog::DialogKind;
+/// The kind of file operation dialog being shown.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DialogKind {
+    NewFile,
+    NewDir,
+    Rename,
+    ConfirmDelete,
+}
+
+impl DialogKind {
+    /// Human-readable title for the dialog.
+    pub fn title(&self) -> &'static str {
+        match self {
+            Self::NewFile => "New File",
+            Self::NewDir => "New Directory",
+            Self::Rename => "Rename",
+            Self::ConfirmDelete => "Confirm Delete",
+        }
+    }
+}
 
 /// Result of executing a file dialog operation.
 pub enum FileOpResult {
