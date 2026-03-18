@@ -1380,7 +1380,8 @@ impl App {
             } else if already_selected && self.preview_visible {
                 self.preview_visible = false;
                 self.focus = FocusPane::Tree;
-            } else if self.preview_visible {
+            } else {
+                self.preview_visible = true;
                 self.trigger_preview_load(preview_tx);
             }
         }
@@ -3291,5 +3292,33 @@ mod tests {
         let raw = "hello\nworld\tfoo\x00bar";
         let clean: String = raw.chars().filter(|c| !c.is_control()).collect();
         assert_eq!(clean, "helloworldfoobar");
+    }
+
+    #[tokio::test]
+    async fn test_click_file_opens_preview_when_hidden() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (preview_tx, _) = make_channels();
+
+        // Populate rendered_indices so handle_click_row can resolve row → index.
+        // Index 0 is the root dir; files start at index 1+.
+        app.tree.rendered_indices = (0..app.tree.len()).collect();
+
+        // Find a file node (not the root directory).
+        let file_idx = (0..app.tree.len())
+            .find(|&i| !app.tree.nodes[i].is_dir())
+            .expect("should have a file node");
+
+        // Ensure cursor is NOT on that file and preview is hidden.
+        app.tree.cursor = if file_idx == 0 { 1 } else { 0 };
+        app.preview_visible = false;
+
+        // Click the file row.
+        app.handle_click_row(file_idx as u16, &preview_tx);
+
+        assert!(
+            app.preview_visible,
+            "clicking a non-selected file should open the preview panel"
+        );
+        assert_eq!(app.tree.cursor, file_idx);
     }
 }
