@@ -7,12 +7,14 @@ A terminal file explorer that brings the VS Code sidebar experience to your comm
 ## Features
 
 - **Git status integration** — see modified, staged, and untracked files at a glance
+- **Git diff gutter** — see added/modified/removed lines in the preview panel
 - **Real-time filesystem watching** — tree auto-refreshes on file changes
 - **Syntax-highlighted preview** — preview files with full syntax highlighting (150+ languages)
+- **Bracketed paste protection** — prevents accidental actions from pasted text
 
 ## Pair with cmux
 
-croot works great alongside [cmux](https://github.com/manaflow-ai/cmux) for a full vibe coding setup in the terminal — file tree on one side, editor and shell on the other.
+croot works great alongside [cmux](https://github.com/manaflow-ai/cmux) for a full vibe coding setup in the terminal — file tree on one side, editor and shell on the other. Use the "Open in cmux Tab" context menu action to open files in a new cmux tab without suspending croot.
 
 ## Installation
 

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-03-18
+
+### Added
+- Git diff gutter indicators in preview panel
+- Bracketed paste support to prevent accidental actions from pasted text
+- cmux tab-based editor opening (avoids suspending croot)
+
+### Changed
+- Split "Open in Editor" context menu into two actions: "Open in Editor" and "Open in cmux Tab"
+- Bump CI actions (checkout v6, setup-go v6, upload-pages-artifact v4)
+- Bump MSRV to 1.90
+
+### Fixed
+- cmux double-quoting bug and error visibility on editor fallback
+- Click-to-preview broken when preview panel is hidden
+- Display-width bugs, state sync, Unicode sorting, and robustness (16 issues)
+- CI: allow NCSA license, remove stale advisory
+
 ## [0.5.2] - 2026-03-16
 
 ### Added
@@ -222,7 +240,8 @@ _Release-only commit (CI/packaging fix). No user-facing changes._
 - Git ignored file display: removed redundant status marker, fixed directory lookup
 - macOS x86_64 CI build using correct runner (macos-14)
 
-[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/realzhangshen/croot/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/realzhangshen/croot/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/realzhangshen/croot/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/realzhangshen/croot/compare/v0.4.1...v0.5.0
