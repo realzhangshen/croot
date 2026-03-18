@@ -15,6 +15,7 @@ pub struct MenuItem {
 #[allow(dead_code)]
 pub enum MenuAction {
     OpenInEditor,
+    OpenInCmuxTab,
     OpenExternally,
     CopyPath,
     CopyAbsPath,
@@ -46,12 +47,18 @@ pub struct ContextMenuState {
 }
 
 impl ContextMenuState {
-    pub fn new_for_file(x: u16, y: u16, node_idx: usize) -> Self {
-        let items = vec![
-            MenuItem {
-                label: "Open in Editor".into(),
-                action: MenuAction::OpenInEditor,
-            },
+    pub fn new_for_file(x: u16, y: u16, node_idx: usize, has_cmux: bool) -> Self {
+        let mut items = vec![MenuItem {
+            label: "Open in Editor".into(),
+            action: MenuAction::OpenInEditor,
+        }];
+        if has_cmux {
+            items.push(MenuItem {
+                label: "Open in cmux Tab".into(),
+                action: MenuAction::OpenInCmuxTab,
+            });
+        }
+        items.extend([
             MenuItem {
                 label: "Open Externally".into(),
                 action: MenuAction::OpenExternally,
@@ -59,7 +66,7 @@ impl ContextMenuState {
             MenuItem {
                 label: "─".into(),
                 action: MenuAction::Separator,
-            }, // separator (inert)
+            },
             MenuItem {
                 label: "Copy Relative Path".into(),
                 action: MenuAction::CopyPath,
@@ -75,7 +82,7 @@ impl ContextMenuState {
             MenuItem {
                 label: "─".into(),
                 action: MenuAction::Separator,
-            }, // separator (inert)
+            },
             MenuItem {
                 label: "Rename".into(),
                 action: MenuAction::Rename,
@@ -84,7 +91,7 @@ impl ContextMenuState {
                 label: "Delete".into(),
                 action: MenuAction::Delete,
             },
-        ];
+        ]);
         Self {
             x,
             y,
@@ -400,7 +407,7 @@ mod tests {
 
     #[test]
     fn normal_item_has_popup_bg_fg() {
-        let state = ContextMenuState::new_for_file(0, 0, 0);
+        let state = ContextMenuState::new_for_file(0, 0, 0, false);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
         // Item at index 1 (not selected when selected==0) — check a cell in that row
@@ -439,7 +446,7 @@ mod tests {
 
     #[test]
     fn selected_item_has_blue_bg_white_fg() {
-        let state = ContextMenuState::new_for_file(0, 0, 0);
+        let state = ContextMenuState::new_for_file(0, 0, 0, false);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
         // Item at index 0 is selected — check a cell in that row
@@ -465,7 +472,7 @@ mod tests {
 
     #[test]
     fn unselected_delete_has_no_red() {
-        let state = ContextMenuState::new_for_file(0, 0, 0);
+        let state = ContextMenuState::new_for_file(0, 0, 0, false);
         let buf = render_menu(&state);
         let rect = state.menu_rect(40, 20);
         // Find the Delete item index
@@ -493,7 +500,7 @@ mod tests {
 
     #[test]
     fn no_color_bleed_from_underlying_content() {
-        let state = ContextMenuState::new_for_file(0, 0, 0);
+        let state = ContextMenuState::new_for_file(0, 0, 0, false);
         let area = ratatui::layout::Rect::new(0, 0, 40, 20);
         let mut buf = ratatui::buffer::Buffer::empty(area);
 
@@ -543,7 +550,7 @@ mod tests {
 
     #[test]
     fn copy_path_label_says_relative() {
-        let file_state = ContextMenuState::new_for_file(0, 0, 0);
+        let file_state = ContextMenuState::new_for_file(0, 0, 0, false);
         let copy_item = file_state
             .items
             .iter()
@@ -562,7 +569,7 @@ mod tests {
 
     #[test]
     fn selected_delete_has_red_bg() {
-        let mut state = ContextMenuState::new_for_file(0, 0, 0);
+        let mut state = ContextMenuState::new_for_file(0, 0, 0, false);
         let delete_idx = state
             .items
             .iter()
@@ -610,5 +617,30 @@ mod tests {
         state.selected = 3; // Refresh
         state.move_up(); // → skip Separator (2) → NewDir (1)
         assert_eq!(state.items[state.selected].action, MenuAction::NewDir);
+    }
+
+    #[test]
+    fn file_menu_without_cmux_has_no_cmux_tab_item() {
+        let state = ContextMenuState::new_for_file(0, 0, 0, false);
+        assert!(
+            !state
+                .items
+                .iter()
+                .any(|i| i.action == MenuAction::OpenInCmuxTab),
+            "should not have OpenInCmuxTab when cmux is unavailable"
+        );
+        // First item should still be OpenInEditor
+        assert_eq!(state.items[0].action, MenuAction::OpenInEditor);
+    }
+
+    #[test]
+    fn file_menu_with_cmux_has_cmux_tab_item() {
+        let state = ContextMenuState::new_for_file(0, 0, 0, true);
+        assert_eq!(state.items[0].action, MenuAction::OpenInEditor);
+        assert_eq!(state.items[0].label, "Open in Editor");
+        assert_eq!(state.items[1].action, MenuAction::OpenInCmuxTab);
+        assert_eq!(state.items[1].label, "Open in cmux Tab");
+        // Open Externally should follow
+        assert_eq!(state.items[2].action, MenuAction::OpenExternally);
     }
 }

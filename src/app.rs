@@ -51,7 +51,12 @@ struct BranchSwitchResult {
 /// Signal from action handling that requires terminal-level processing.
 pub enum PostAction {
     None,
+    /// Auto-detect: try cmux first, fall back to suspend (keyboard shortcuts).
     OpenEditor(PathBuf),
+    /// Force suspend mode (context menu "Open in Editor").
+    OpenEditorSuspend(PathBuf),
+    /// Force cmux mode (context menu "Open in cmux Tab").
+    OpenEditorCmux(PathBuf),
 }
 
 #[allow(clippy::struct_excessive_bools)]
@@ -457,32 +462,35 @@ impl App {
             }
 
             // Process post-actions that require terminal access
-            if let PostAction::OpenEditor(path) =
-                std::mem::replace(&mut post_action, PostAction::None)
-            {
-                let opened_in_cmux = if let Some(ref cmux) = self.cmux {
-                    let editor = self.resolve_editor();
-                    cmux.open_in_editor(&editor, &path).is_ok()
-                } else {
-                    false
-                };
-
-                if !opened_in_cmux {
-                    // Fallback: suspend croot and open editor in the same terminal
+            match std::mem::replace(&mut post_action, PostAction::None) {
+                PostAction::OpenEditor(path) => {
+                    // Auto-detect: try cmux first, fall back to suspend
+                    let opened_in_cmux = if let Some(ref cmux) = self.cmux {
+                        let editor = self.resolve_editor();
+                        cmux.open_in_editor(&editor, &path).is_ok()
+                    } else {
+                        false
+                    };
+                    if !opened_in_cmux {
+                        self.open_editor_suspend(terminal, &path)?;
+                        self.refresh_after_editor(&preview_tx);
+                        reader = EventStream::new();
+                    }
+                }
+                PostAction::OpenEditorSuspend(path) => {
                     self.open_editor_suspend(terminal, &path)?;
-                    // Refresh tree, git, preview after editor exits
-                    self.tree.refresh();
-                    if let Some(ref mut git) = self.git {
-                        git.refresh();
-                    }
-                    self.reapply_git();
-                    if self.preview_visible {
-                        self.trigger_preview_load(&preview_tx);
-                    }
-                    // Recreate event stream to flush stale buffered events
+                    self.refresh_after_editor(&preview_tx);
                     reader = EventStream::new();
                 }
-                // cmux success: croot keeps running, no refresh needed
+                PostAction::OpenEditorCmux(path) => {
+                    if let Some(ref cmux) = self.cmux {
+                        let editor = self.resolve_editor();
+                        if let Err(e) = cmux.open_in_editor(&editor, &path) {
+                            self.show_error(format!("cmux failed: {e}"));
+                        }
+                    }
+                }
+                PostAction::None => {}
             }
 
             if self.should_quit {
@@ -1492,7 +1500,7 @@ impl App {
             if self.tree.nodes[node_idx].is_dir() {
                 ContextMenuState::new_for_dir(col, row, node_idx)
             } else {
-                ContextMenuState::new_for_file(col, row, node_idx)
+                ContextMenuState::new_for_file(col, row, node_idx, self.cmux.is_some())
             }
         };
 
@@ -1620,7 +1628,14 @@ impl App {
             MenuAction::OpenInEditor => {
                 if let Some(node) = self.tree.nodes.get(node_idx) {
                     if !node.is_dir() {
-                        return PostAction::OpenEditor(node.path.clone());
+                        return PostAction::OpenEditorSuspend(node.path.clone());
+                    }
+                }
+            }
+            MenuAction::OpenInCmuxTab => {
+                if let Some(node) = self.tree.nodes.get(node_idx) {
+                    if !node.is_dir() {
+                        return PostAction::OpenEditorCmux(node.path.clone());
                     }
                 }
             }
@@ -2467,6 +2482,18 @@ impl App {
         }
 
         Ok(())
+    }
+
+    /// Refresh tree, git, and preview after returning from a suspend-mode editor.
+    fn refresh_after_editor(&mut self, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
+        self.tree.refresh();
+        if let Some(ref mut git) = self.git {
+            git.refresh();
+        }
+        self.reapply_git();
+        if self.preview_visible {
+            self.trigger_preview_load(preview_tx);
+        }
     }
 
     /// Handle mouse events while in `GlobalSearch` mode.
