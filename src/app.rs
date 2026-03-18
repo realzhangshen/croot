@@ -3344,7 +3344,7 @@ mod tests {
             .expect("should have a file node");
 
         // Ensure cursor is NOT on that file and preview is hidden.
-        app.tree.cursor = if file_idx == 0 { 1 } else { 0 };
+        app.tree.cursor = usize::from(file_idx == 0);
         app.preview_visible = false;
 
         // Click the file row.

@@ -84,7 +84,7 @@ fn parse_surface_ref(output: &str) -> anyhow::Result<String> {
     output
         .split_whitespace()
         .find(|token| token.starts_with("surface:"))
-        .map(|s| s.to_string())
+        .map(str::to_string)
         .ok_or_else(|| anyhow::anyhow!("no surface reference found in cmux output: {output}"))
 }
 
