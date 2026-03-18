@@ -467,7 +467,15 @@ impl App {
                     // Auto-detect: try cmux first, fall back to suspend
                     let opened_in_cmux = if let Some(ref cmux) = self.cmux {
                         let editor = self.resolve_editor();
-                        cmux.open_in_editor(&editor, &path).is_ok()
+                        match cmux.open_in_editor(&editor, &path) {
+                            Ok(()) => true,
+                            Err(e) => {
+                                self.show_error(format!(
+                                    "cmux failed, falling back to suspend: {e}"
+                                ));
+                                false
+                            }
+                        }
                     } else {
                         false
                     };

@@ -50,10 +50,7 @@ impl CmuxBridge {
         editor_cmd: &str,
         path: &Path,
     ) -> anyhow::Result<()> {
-        let mut parts =
-            shell_words::split(editor_cmd).unwrap_or_else(|_| vec![editor_cmd.to_string()]);
-        parts.push(shell_words::quote(&path.to_string_lossy()).into_owned());
-        let full_cmd = format!("{}\n", shell_words::join(&parts));
+        let full_cmd = build_editor_command(editor_cmd, path);
 
         let output = Command::new("cmux")
             .args(["send", "--surface", surface_ref, &full_cmd])
@@ -68,6 +65,16 @@ impl CmuxBridge {
 
         Ok(())
     }
+}
+
+/// Build the shell command string to send to a cmux surface.
+///
+/// Splits the editor command (e.g. `"nvim --wait"`) into tokens, appends the file
+/// path, then joins everything with proper shell quoting via `shell_words::join`.
+fn build_editor_command(editor_cmd: &str, path: &Path) -> String {
+    let mut parts = shell_words::split(editor_cmd).unwrap_or_else(|_| vec![editor_cmd.to_string()]);
+    parts.push(path.to_string_lossy().into_owned());
+    format!("{}\n", shell_words::join(&parts))
 }
 
 /// Parse the surface reference (e.g. `"surface:15"`) from `cmux new-surface` output.
@@ -140,5 +147,49 @@ mod tests {
     fn parse_surface_ref_empty() {
         let result = parse_surface_ref("");
         assert!(result.is_err());
+    }
+
+    // --- build_editor_command tests ---
+
+    #[test]
+    fn build_cmd_simple_path() {
+        let cmd = build_editor_command("nvim", Path::new("/tmp/file.txt"));
+        assert_eq!(cmd, "nvim /tmp/file.txt\n");
+    }
+
+    #[test]
+    fn build_cmd_path_with_spaces() {
+        let cmd = build_editor_command("nvim", Path::new("/tmp/my file.txt"));
+        assert_eq!(cmd, "nvim '/tmp/my file.txt'\n");
+    }
+
+    #[test]
+    fn build_cmd_path_with_single_quotes() {
+        let cmd = build_editor_command("nvim", Path::new("/tmp/it's.txt"));
+        // shell_words escapes the single quote inside single quotes
+        assert!(cmd.starts_with("nvim "));
+        assert!(cmd.contains("it"));
+        assert!(cmd.contains("s.txt"));
+        // Verify round-trip: parsing the command back should yield the original path
+        let parts = shell_words::split(cmd.trim()).unwrap();
+        assert_eq!(parts.last().unwrap(), "/tmp/it's.txt");
+    }
+
+    #[test]
+    fn build_cmd_path_with_unicode() {
+        let cmd = build_editor_command("nvim", Path::new("/tmp/日本語.txt"));
+        assert_eq!(cmd, "nvim /tmp/日本語.txt\n");
+    }
+
+    #[test]
+    fn build_cmd_multi_word_editor() {
+        let cmd = build_editor_command("nvim --wait", Path::new("/tmp/file.txt"));
+        assert_eq!(cmd, "nvim --wait /tmp/file.txt\n");
+    }
+
+    #[test]
+    fn build_cmd_editor_with_quoted_args() {
+        let cmd = build_editor_command("code --goto", Path::new("/tmp/my file.txt"));
+        assert_eq!(cmd, "code --goto '/tmp/my file.txt'\n");
     }
 }
