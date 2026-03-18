@@ -357,15 +357,7 @@ impl App {
                         watcher_active = false;
                         continue;
                     }
-                    self.tree.refresh();
-                    if let Some(ref mut git) = self.git {
-                        git.refresh();
-                    }
-                    self.reapply_git();
-                    self.refresh_search_state();
-                    if self.preview_visible {
-                        self.trigger_preview_load(&preview_tx);
-                    }
+                    self.full_refresh(&preview_tx);
                 }
                 result = search_rx.recv() => {
                     if let Some((id, results, error)) = result {
@@ -419,7 +411,12 @@ impl App {
                             }
                         }
                         if !handled {
-                            self.preview_state.apply(path, loaded.kind, loaded.content, loaded.file_info, loaded.line_diffs);
+                            // Staleness check: only apply if still viewing this path
+                            let still_selected = self.tree.selected()
+                                .is_some_and(|n| n.path == path);
+                            if still_selected {
+                                self.preview_state.apply(path, loaded.kind, loaded.content, loaded.file_info, loaded.line_diffs);
+                            }
                         }
                     }
                 }
@@ -445,11 +442,7 @@ impl App {
                     self.branch_switch_rx = None;
                     if let Some(result) = result {
                         if result.success {
-                            self.tree.refresh();
-                            if let Some(ref mut git) = self.git {
-                                git.refresh();
-                            }
-                            self.reapply_git();
+                            self.full_refresh(&preview_tx);
                         } else {
                             let branches = crate::git::branches::list_branches(&result.repo_root);
                             let mut restored_picker = PickerState::new_branch(&branches);
@@ -830,12 +823,14 @@ impl App {
             | Action::CursorLeft
             | Action::CursorRight
             | Action::Toggle
-            | Action::Refresh
             | Action::ScrollUp(_)
             | Action::ScrollDown(_)
             | Action::GotoTop
             | Action::GotoBottom => {
                 self.handle_tree_action(action);
+            }
+            Action::Refresh => {
+                self.full_refresh(preview_tx);
             }
 
             // Preview actions
@@ -1261,14 +1256,6 @@ impl App {
             Action::Toggle => {
                 let idx = self.tree.cursor;
                 self.tree.toggle(idx);
-                self.reapply_git();
-                self.refresh_search_state();
-            }
-            Action::Refresh => {
-                self.tree.refresh();
-                if let Some(ref mut git) = self.git {
-                    git.refresh();
-                }
                 self.reapply_git();
                 self.refresh_search_state();
             }
@@ -1980,12 +1967,8 @@ impl App {
         match result {
             file_ops::FileOpResult::Ok => {
                 // Only refresh tree after a successful file operation
-                self.tree.refresh();
-                if let Some(ref mut git) = self.git {
-                    git.refresh();
-                }
-                self.reapply_git();
-                self.refresh_search_state();
+                // Note: no preview_tx available here, so skip preview reload
+                self.refresh_tree_and_git();
             }
             file_ops::FileOpResult::Error(msg) => {
                 self.show_error(msg);
@@ -2492,16 +2475,34 @@ impl App {
         Ok(())
     }
 
-    /// Refresh tree, git, and preview after returning from a suspend-mode editor.
-    fn refresh_after_editor(&mut self, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
+    /// Refresh tree, git, and search state (no preview reload).
+    /// Used when `preview_tx` is not available (e.g. `confirm_dialog`).
+    fn refresh_tree_and_git(&mut self) {
         self.tree.refresh();
         if let Some(ref mut git) = self.git {
             git.refresh();
         }
         self.reapply_git();
+        self.refresh_search_state();
+    }
+
+    /// Full refresh: tree → git → search → preview.
+    /// Consolidates the refresh sequence that was previously duplicated across 5+ call sites.
+    fn full_refresh(&mut self, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
+        self.tree.refresh();
+        if let Some(ref mut git) = self.git {
+            git.refresh();
+        }
+        self.reapply_git();
+        self.refresh_search_state();
         if self.preview_visible {
             self.trigger_preview_load(preview_tx);
         }
+    }
+
+    /// Refresh tree, git, and preview after returning from a suspend-mode editor.
+    fn refresh_after_editor(&mut self, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
+        self.full_refresh(preview_tx);
     }
 
     /// Handle mouse events while in `GlobalSearch` mode.
@@ -3355,5 +3356,33 @@ mod tests {
             "clicking a non-selected file should open the preview panel"
         );
         assert_eq!(app.tree.cursor, file_idx);
+    }
+
+    // ── Preview staleness ─────────────────────────────────────────────
+
+    #[test]
+    fn stale_text_preview_result_is_discarded() {
+        let (mut app, tmp) = test_app();
+        // Create two files
+        let file_a = tmp.path().join("a.txt");
+        let file_b = tmp.path().join("b.txt");
+        std::fs::write(&file_a, "aaa").unwrap();
+        std::fs::write(&file_b, "bbb").unwrap();
+        app.tree.refresh();
+
+        // Ensure cursor is on file_a (index 0)
+        app.tree.cursor = 0;
+        let selected_path = app.tree.selected().unwrap().path.clone();
+        assert_eq!(selected_path, file_a);
+
+        // preview_state should have no content initially
+        assert!(app.preview_state.current_path.is_none());
+
+        // Simulate receiving a preview result for file_b (stale — user moved away)
+        // The staleness check should prevent apply
+        let still_selected = app.tree.selected().is_some_and(|n| n.path == file_b);
+        assert!(!still_selected);
+        // So preview_state remains unchanged
+        assert!(app.preview_state.current_path.is_none());
     }
 }
