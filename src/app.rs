@@ -911,7 +911,7 @@ impl App {
                     menu.move_down();
                 }
             }
-            Action::MenuSelect(ref _placeholder) => {
+            Action::MenuSelect => {
                 // Resolve actual action from selected menu item
                 if let Some(menu) = self.context_menu.take() {
                     if let Some(menu_action) = menu.selected_action().cloned() {
@@ -1703,12 +1703,7 @@ impl App {
                 }
             }
             MenuAction::Refresh => {
-                self.tree.refresh();
-                if let Some(ref mut git) = self.git {
-                    git.refresh();
-                }
-                self.reapply_git();
-                self.refresh_search_state();
+                self.full_refresh(preview_tx);
             }
             MenuAction::CollapseAll => {
                 self.tree.collapse_all();

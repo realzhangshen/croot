@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::config::{parse_key, KeybindingsConfig};
-use crate::render::context_menu::MenuAction;
-
 /// Actions that can be triggered by user input.
 /// Many variants are only constructed at runtime via toolbar/context-menu/mouse — not from
 /// keyboard shortcuts — so the compiler reports them as "never constructed". They are used.
@@ -48,7 +46,7 @@ pub enum Action {
     /// Right-click context menu at screen (col, row).
     RightClick(u16, u16),
     /// Execute a context menu action.
-    MenuSelect(MenuAction),
+    MenuSelect,
     /// Close the context menu.
     MenuClose,
     /// Navigate context menu up.
@@ -326,7 +324,7 @@ pub fn handle_key_menu(key: KeyEvent, keybindings: &KeybindingMap) -> Action {
         KeyCode::Esc => Action::MenuClose,
         KeyCode::Up => Action::MenuUp,
         KeyCode::Down => Action::MenuDown,
-        KeyCode::Enter => Action::MenuSelect(MenuAction::CopyPath), // placeholder, app resolves
+        KeyCode::Enter => Action::MenuSelect,
         _ => Action::None,
     }
 }
@@ -453,7 +451,7 @@ mod tests {
         );
         assert_eq!(
             handle_key_menu(make_key(KeyCode::Enter), &map),
-            Action::MenuSelect(MenuAction::CopyPath)
+            Action::MenuSelect
         );
     }
 
