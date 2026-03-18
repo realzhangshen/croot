@@ -460,18 +460,29 @@ impl App {
             if let PostAction::OpenEditor(path) =
                 std::mem::replace(&mut post_action, PostAction::None)
             {
-                self.open_editor_suspend(terminal, &path)?;
-                // Refresh tree, git, preview after editor exits
-                self.tree.refresh();
-                if let Some(ref mut git) = self.git {
-                    git.refresh();
+                let opened_in_cmux = if let Some(ref cmux) = self.cmux {
+                    let editor = self.resolve_editor();
+                    cmux.open_in_editor(&editor, &path).is_ok()
+                } else {
+                    false
+                };
+
+                if !opened_in_cmux {
+                    // Fallback: suspend croot and open editor in the same terminal
+                    self.open_editor_suspend(terminal, &path)?;
+                    // Refresh tree, git, preview after editor exits
+                    self.tree.refresh();
+                    if let Some(ref mut git) = self.git {
+                        git.refresh();
+                    }
+                    self.reapply_git();
+                    if self.preview_visible {
+                        self.trigger_preview_load(&preview_tx);
+                    }
+                    // Recreate event stream to flush stale buffered events
+                    reader = EventStream::new();
                 }
-                self.reapply_git();
-                if self.preview_visible {
-                    self.trigger_preview_load(&preview_tx);
-                }
-                // Recreate event stream to flush stale buffered events
-                reader = EventStream::new();
+                // cmux success: croot keeps running, no refresh needed
             }
 
             if self.should_quit {
