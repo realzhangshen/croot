@@ -12,6 +12,7 @@ use ratatui::{
     widgets::{StatefulWidget, Widget},
     Terminal,
 };
+use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use unicode_width::UnicodeWidthStr;
@@ -336,7 +337,7 @@ impl App {
                                 post_action = self.handle_picker_mouse(mouse);
                             } else if self.ui.input_mode == InputMode::Dialog {
                                 // R5: Click outside dialog cancels it
-                                post_action = self.handle_dialog_mouse(mouse);
+                                post_action = self.handle_dialog_mouse(mouse, &preview_tx);
                             } else if self.ui.input_mode == InputMode::GlobalSearch {
                                 post_action = self.handle_global_search_mouse(mouse, &preview_tx);
                             } else {
@@ -961,7 +962,7 @@ impl App {
                 }
             }
             Action::DialogConfirm => {
-                self.confirm_dialog();
+                self.confirm_dialog(preview_tx);
             }
             Action::DialogCancel => {
                 self.ui.input_dialog = None;
@@ -1053,9 +1054,8 @@ impl App {
             Action::GlobalSearchBackspace => {
                 self.search_state.delete_char();
                 if self.search_state.query.is_empty() {
-                    self.search_state.global_results.clear();
-                    self.search_state.global_error = None;
-                    self.search_state.global_loading = false;
+                    self.abort_global_search_task(true);
+                    self.search_state.clear();
                 } else {
                     self.spawn_global_search(search_tx);
                 }
@@ -1092,10 +1092,9 @@ impl App {
                     .get(self.search_state.global_selected)
                     .cloned()
                 {
+                    self.abort_global_search_task(true);
                     self.ui.input_mode = InputMode::Normal;
-                    let last_id = self.search_state.request_id;
                     self.search_state.clear();
-                    self.search_state.request_id = last_id;
                     let path = result.path;
                     self.tree.navigate_to_path(&path);
                     self.reapply_git();
@@ -1103,13 +1102,9 @@ impl App {
                 }
             }
             Action::GlobalSearchCancel => {
-                let last_id = self.search_state.request_id;
+                self.abort_global_search_task(true);
                 self.search_state.clear();
-                self.search_state.request_id = last_id;
                 self.ui.input_mode = InputMode::Normal;
-                if let Some(handle) = self.global_search_handle.take() {
-                    handle.abort();
-                }
             }
 
             // Open file in editor
@@ -1403,16 +1398,11 @@ impl App {
         }
     }
 
-    /// Schedule a debounced preview load for the currently selected file.
+    /// Schedule a debounced preview load for the currently selected node.
     fn trigger_preview_load(&mut self, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
         let Some(node) = self.tree.selected() else {
             return;
         };
-
-        if node.is_dir() {
-            self.preview_state.clear();
-            return;
-        }
 
         let path = node.path.clone();
 
@@ -1746,7 +1736,11 @@ impl App {
 
     // ── Dialog mouse (R5: click outside dismisses) ───────────────────────
 
-    fn handle_dialog_mouse(&mut self, mouse: crossterm::event::MouseEvent) -> PostAction {
+    fn handle_dialog_mouse(
+        &mut self,
+        mouse: crossterm::event::MouseEvent,
+        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+    ) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
 
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
@@ -1770,7 +1764,7 @@ impl App {
                     && mouse.column < confirm_rect.x + confirm_rect.width
                     && mouse.row == confirm_rect.y
                 {
-                    self.confirm_dialog();
+                    self.confirm_dialog(preview_tx);
                     return PostAction::None;
                 }
                 if mouse.column >= cancel_rect.x
@@ -1958,7 +1952,7 @@ impl App {
         self.ui.error_message = Some((msg, Instant::now()));
     }
 
-    fn confirm_dialog(&mut self) {
+    fn confirm_dialog(&mut self, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
         let Some(dialog) = self.ui.input_dialog.take() else {
             return;
         };
@@ -1974,9 +1968,7 @@ impl App {
         );
         match result {
             file_ops::FileOpResult::Ok => {
-                // Only refresh tree after a successful file operation
-                // Note: no preview_tx available here, so skip preview reload
-                self.refresh_tree_and_git();
+                self.full_refresh(preview_tx);
             }
             file_ops::FileOpResult::Error(msg) => {
                 self.show_error(msg);
@@ -2186,10 +2178,7 @@ impl App {
         &mut self,
         search_tx: &mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)>,
     ) {
-        // Abort previous search
-        if let Some(handle) = self.global_search_handle.take() {
-            handle.abort();
-        }
+        self.abort_global_search_task(false);
 
         if self.search_state.query.is_empty() {
             return;
@@ -2228,16 +2217,7 @@ impl App {
                     let (bin, extra) = parts.split_first().unwrap_or((&rg_cmd, &[]));
                     tokio::process::Command::new(bin)
                         .args(extra)
-                        .args([
-                            "--line-number",
-                            "--no-heading",
-                            "--color",
-                            "never",
-                            "--max-count",
-                            "1",
-                            "--",
-                            &query,
-                        ])
+                        .args(["--json", "--line-number", "--max-count", "1", "--", &query])
                         .current_dir(&root)
                         .output()
                         .await
@@ -2248,8 +2228,12 @@ impl App {
                 Ok(out) => {
                     let stdout = String::from_utf8_lossy(&out.stdout);
                     let mut results = Vec::new();
+                    let mut parse_failed = false;
 
-                    for line in stdout.lines().take(max_results) {
+                    for line in stdout.lines() {
+                        if results.len() >= max_results {
+                            break;
+                        }
                         if line.is_empty() {
                             continue;
                         }
@@ -2263,20 +2247,21 @@ impl App {
                                     context: None,
                                 });
                             }
-                            GlobalSearchType::Content => {
-                                // Format: path:line_num:content
-                                // Parse from the right to handle paths containing colons:
-                                // find the last segment that looks like ":<digits>:" and
-                                // treat everything before it as the file path.
-                                let (file, line_num, context) = parse_rg_line(line);
-                                let path = root.join(file);
-                                results.push(GlobalSearchResult {
-                                    path,
-                                    display: file.to_string(),
-                                    line: line_num,
-                                    context,
-                                });
-                            }
+                            GlobalSearchType::Content => match parse_rg_json_match(line) {
+                                Ok(Some((file, line_num, context))) => {
+                                    let path = root.join(&file);
+                                    results.push(GlobalSearchResult {
+                                        path,
+                                        display: file,
+                                        line: line_num,
+                                        context,
+                                    });
+                                }
+                                Ok(None) => {}
+                                Err(_) => {
+                                    parse_failed = true;
+                                }
+                            },
                         }
                     }
 
@@ -2291,9 +2276,13 @@ impl App {
                                 GlobalSearchType::Content => &rg_cmd,
                             };
                             Some(format!("{cmd_name} not found"))
-                        } else {
+                        } else if stderr.trim().is_empty() {
                             None
+                        } else {
+                            Some(stderr.trim().to_string())
                         }
+                    } else if parse_failed && results.is_empty() {
+                        Some("Failed to parse ripgrep JSON output".to_string())
                     } else {
                         None
                     };
@@ -2311,6 +2300,15 @@ impl App {
                 }
             }
         }));
+    }
+
+    fn abort_global_search_task(&mut self, invalidate_request_id: bool) {
+        if invalidate_request_id {
+            self.search_state.request_id = self.search_state.request_id.wrapping_add(1);
+        }
+        if let Some(handle) = self.global_search_handle.take() {
+            handle.abort();
+        }
     }
 
     // ── Utility ─────────────────────────────────────────────────────────
@@ -2483,17 +2481,6 @@ impl App {
         Ok(())
     }
 
-    /// Refresh tree, git, and search state (no preview reload).
-    /// Used when `preview_tx` is not available (e.g. `confirm_dialog`).
-    fn refresh_tree_and_git(&mut self) {
-        self.tree.refresh();
-        if let Some(ref mut git) = self.git {
-            git.refresh();
-        }
-        self.reapply_git();
-        self.refresh_search_state();
-    }
-
     /// Full refresh: tree → git → search → preview.
     /// Consolidates the refresh sequence that was previously duplicated across 5+ call sites.
     fn full_refresh(&mut self, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
@@ -2538,13 +2525,9 @@ impl App {
 
         if !inside {
             // Click outside overlay → cancel
-            let last_id = self.search_state.request_id;
+            self.abort_global_search_task(true);
             self.search_state.clear();
-            self.search_state.request_id = last_id;
             self.ui.input_mode = InputMode::Normal;
-            if let Some(handle) = self.global_search_handle.take() {
-                handle.abort();
-            }
             return PostAction::None;
         }
 
@@ -2563,10 +2546,9 @@ impl App {
                     .get(self.search_state.global_selected)
                     .cloned()
                 {
+                    self.abort_global_search_task(true);
                     self.ui.input_mode = InputMode::Normal;
-                    let last_id = self.search_state.request_id;
                     self.search_state.clear();
-                    self.search_state.request_id = last_id;
                     let path = result.path;
                     self.tree.navigate_to_path(&path);
                     self.reapply_git();
@@ -2580,37 +2562,57 @@ impl App {
     }
 }
 
-/// Parse a line of `rg --line-number --no-heading` output into `(file, line_num, context)`.
-///
-/// The format is `path:line_num:content`, but file paths can contain colons.
-/// We scan for the first `:digits:` pattern to split reliably.
-fn parse_rg_line(line: &str) -> (&str, Option<usize>, Option<String>) {
-    let bytes = line.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b':' {
-            // Try to read digits after this colon
-            let num_start = i + 1;
-            let mut j = num_start;
-            while j < bytes.len() && bytes[j].is_ascii_digit() {
-                j += 1;
-            }
-            // Must have at least one digit followed by ':' or end-of-string
-            if j > num_start && (j == bytes.len() || bytes[j] == b':') {
-                let file = &line[..i];
-                let num: Option<usize> = line[num_start..j].parse().ok();
-                let context = if j < bytes.len() && bytes[j] == b':' {
-                    Some(line[j + 1..].to_string())
-                } else {
-                    None
-                };
-                return (file, num, context);
+#[derive(Debug, Deserialize)]
+struct RgJsonMessage {
+    #[serde(rename = "type")]
+    kind: String,
+    data: RgJsonData,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RgJsonData {
+    path: Option<RgJsonText>,
+    lines: Option<RgJsonText>,
+    line_number: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum RgJsonText {
+    Text { text: String },
+    Bytes { bytes: String },
+}
+
+impl RgJsonText {
+    fn into_text(self) -> Option<String> {
+        match self {
+            Self::Text { text } => Some(text),
+            Self::Bytes { bytes } => {
+                let _ = bytes;
+                None
             }
         }
-        i += 1;
     }
-    // Fallback: treat the whole line as a file path
-    (line, None, None)
+}
+
+/// Parse a ripgrep `--json` line into `(file, line_num, context)`.
+type ParsedRgMatch = (String, Option<usize>, Option<String>);
+
+fn parse_rg_json_match(line: &str) -> Result<Option<ParsedRgMatch>, serde_json::Error> {
+    let message: RgJsonMessage = serde_json::from_str(line)?;
+    if message.kind != "match" {
+        return Ok(None);
+    }
+
+    let Some(file) = message.data.path.and_then(RgJsonText::into_text) else {
+        return Ok(None);
+    };
+
+    Ok(Some((
+        file,
+        message.data.line_number,
+        message.data.lines.and_then(RgJsonText::into_text),
+    )))
 }
 
 #[cfg(test)]
@@ -2728,6 +2730,7 @@ mod tests {
     #[test]
     fn test_confirm_dialog_rename_nonexistent_shows_error() {
         let (mut app, _tmp) = test_app();
+        let (preview_tx, _preview_rx) = mpsc::channel(1);
         let fake_path = std::env::temp_dir().join("croot_nonexistent_for_rename");
         app.ui.input_dialog = Some(InputDialogState::new(
             DialogKind::Rename,
@@ -2737,7 +2740,7 @@ mod tests {
         app.ui.input_mode = InputMode::Dialog;
         // Set the input to something different to trigger rename
         app.ui.input_dialog.as_mut().unwrap().input = "new_name".to_string();
-        app.confirm_dialog();
+        app.confirm_dialog(&preview_tx);
         assert!(
             app.ui.error_message.is_some(),
             "Rename of nonexistent file should show error"
@@ -2747,6 +2750,7 @@ mod tests {
     #[test]
     fn test_confirm_dialog_delete_nonexistent_shows_error() {
         let (mut app, _tmp) = test_app();
+        let (preview_tx, _preview_rx) = mpsc::channel(1);
         let fake_path = std::env::temp_dir().join("croot_nonexistent_for_delete");
         app.ui.input_dialog = Some(InputDialogState::new(
             DialogKind::ConfirmDelete,
@@ -2754,7 +2758,7 @@ mod tests {
             "ghost".to_string(),
         ));
         app.ui.input_mode = InputMode::Dialog;
-        app.confirm_dialog();
+        app.confirm_dialog(&preview_tx);
         assert!(
             app.ui.error_message.is_some(),
             "Delete of nonexistent file should show error"
@@ -2773,6 +2777,7 @@ mod tests {
     #[test]
     fn confirm_dialog_error_skips_refresh() {
         let (mut app, _tmp) = test_app();
+        let (preview_tx, _preview_rx) = mpsc::channel(1);
         // Enter filter mode with a stale visible index
         app.search_state = SearchState::new(SearchMode::Filter);
         app.search_state.query = "nonexistent_xyz".to_string();
@@ -2786,7 +2791,7 @@ mod tests {
             "ghost".to_string(),
         ));
         app.ui.input_mode = InputMode::Dialog;
-        app.confirm_dialog();
+        app.confirm_dialog(&preview_tx);
 
         // On error, tree refresh is skipped — stale indices remain unchanged
         assert!(
@@ -2803,6 +2808,7 @@ mod tests {
     #[test]
     fn confirm_dialog_noop_skips_refresh() {
         let (mut app, _tmp) = test_app();
+        let (preview_tx, _preview_rx) = mpsc::channel(1);
         app.search_state = SearchState::new(SearchMode::Filter);
         app.search_state.visible_indices = vec![0, 999];
 
@@ -2814,7 +2820,7 @@ mod tests {
         dialog.cursor_pos = 0;
         app.ui.input_dialog = Some(dialog);
         app.ui.input_mode = InputMode::Dialog;
-        app.confirm_dialog();
+        app.confirm_dialog(&preview_tx);
 
         // On noop, stale indices remain unchanged and no error
         assert!(
@@ -2908,31 +2914,91 @@ mod tests {
         assert_eq!(parts, vec!["fd"]);
     }
 
-    // ── parse_rg_line ─────────────────────────────────────────────────
+    #[tokio::test]
+    async fn confirm_dialog_success_refreshes_preview() {
+        let (mut app, tmp) = test_app();
+        let file = tmp.path().join("keep.txt");
+        std::fs::write(&file, "content").unwrap();
+        app.tree.refresh();
+        app.preview_visible = true;
+
+        app.ui.input_dialog = Some(InputDialogState::new(
+            DialogKind::Rename,
+            file,
+            "keep.txt".to_string(),
+        ));
+        app.ui.input_mode = InputMode::Dialog;
+        if let Some(dialog) = app.ui.input_dialog.as_mut() {
+            dialog.input = "renamed.txt".to_string();
+            dialog.cursor_pos = dialog.input.len();
+        }
+
+        let (preview_tx, _preview_rx) = mpsc::channel(16);
+        app.confirm_dialog(&preview_tx);
+
+        assert!(
+            app.preview_debounce_handle.is_some(),
+            "successful file operations should reload the preview"
+        );
+    }
+
+    #[tokio::test]
+    async fn action_global_search_backspace_empty_cancels_pending_search() {
+        let (mut app, _tmp) = test_app();
+        let (preview_tx, search_tx) = make_channels();
+        app.ui.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.query = "a".to_string();
+        app.search_state.cursor_pos = 1;
+        app.search_state.request_id = 7;
+        app.search_state.global_loading = true;
+        app.global_search_handle = Some(tokio::spawn(async {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }));
+
+        app.handle_action(&Action::GlobalSearchBackspace, &preview_tx, &search_tx);
+
+        assert!(app.search_state.query.is_empty());
+        assert!(!app.search_state.global_loading);
+        assert!(app.search_state.global_results.is_empty());
+        assert!(app.global_search_handle.is_none());
+        assert_eq!(app.search_state.request_id, 8);
+    }
+
+    // ── parse_rg_json_match ───────────────────────────────────────────
 
     #[test]
-    fn parse_rg_line_standard_format() {
-        let (file, line, ctx) = parse_rg_line("src/main.rs:42:fn main() {");
-        assert_eq!(file, "src/main.rs");
-        assert_eq!(line, Some(42));
-        assert_eq!(ctx.as_deref(), Some("fn main() {"));
+    fn parse_rg_json_match_standard_format() {
+        let line = r#"{"type":"match","data":{"path":{"text":"src/main.rs"},"lines":{"text":"fn main() {\n"},"line_number":42}}"#;
+        let parsed = parse_rg_json_match(line).unwrap();
+        assert_eq!(
+            parsed,
+            Some((
+                "src/main.rs".to_string(),
+                Some(42),
+                Some("fn main() {\n".to_string())
+            ))
+        );
     }
 
     #[test]
-    fn parse_rg_line_colon_in_path() {
-        // Colon in file path — should find the first :digits: pattern
-        let (file, line, ctx) = parse_rg_line("some:file.rs:10:content here");
-        assert_eq!(file, "some:file.rs");
-        assert_eq!(line, Some(10));
-        assert_eq!(ctx.as_deref(), Some("content here"));
+    fn parse_rg_json_match_handles_colons_in_path_and_context() {
+        let line = r#"{"type":"match","data":{"path":{"text":"foo:123:bar.rs"},"lines":{"text":"prefix:456:suffix\n"},"line_number":45}}"#;
+        let parsed = parse_rg_json_match(line).unwrap();
+        assert_eq!(
+            parsed,
+            Some((
+                "foo:123:bar.rs".to_string(),
+                Some(45),
+                Some("prefix:456:suffix\n".to_string())
+            ))
+        );
     }
 
     #[test]
-    fn parse_rg_line_no_match() {
-        let (file, line, ctx) = parse_rg_line("just a plain line");
-        assert_eq!(file, "just a plain line");
-        assert_eq!(line, None);
-        assert_eq!(ctx, None);
+    fn parse_rg_json_match_ignores_non_match_messages() {
+        let line = r#"{"type":"begin","data":{"path":{"text":"src/main.rs"}}}"#;
+        assert_eq!(parse_rg_json_match(line).unwrap(), None);
     }
 
     // ── Action handling: navigation ───────────────────────────────────
@@ -2968,8 +3034,8 @@ mod tests {
 
     // ── Action handling: toggle preview ─────────────────────────────────
 
-    #[test]
-    fn action_toggle_preview_flips_visibility() {
+    #[tokio::test]
+    async fn action_toggle_preview_flips_visibility() {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
         assert!(!app.preview_visible);
@@ -3364,6 +3430,25 @@ mod tests {
             "clicking a non-selected file should open the preview panel"
         );
         assert_eq!(app.tree.cursor, file_idx);
+    }
+
+    #[tokio::test]
+    async fn test_click_directory_schedules_directory_preview() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (preview_tx, _) = make_channels();
+
+        app.tree.rendered_indices = (0..app.tree.len()).collect();
+        let dir_idx = (0..app.tree.len())
+            .find(|&i| app.tree.nodes[i].is_dir())
+            .expect("should have a directory node");
+        app.preview_visible = true;
+
+        app.handle_click_row(dir_idx as u16, &preview_tx);
+
+        assert!(
+            app.preview_debounce_handle.is_some(),
+            "clicking a directory with preview visible should schedule a directory preview"
+        );
     }
 
     // ── Preview staleness ─────────────────────────────────────────────
