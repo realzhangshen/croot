@@ -43,7 +43,10 @@ close_on_exit = true      # Close preview when quitting
 
 ```toml
 [editor]
-command = "vim"  # Falls back to $VISUAL → $EDITOR → vi
+command = "vim"        # Falls back to $VISUAL → $EDITOR → vi
+external = "code -g"   # External/GUI editor for search results
+                       # Uses file:line syntax (VS Code, Sublime, etc.)
+                       # Falls back to [open] default if not set
 ```
 
 ### `[open]` — External Open Rules
@@ -93,6 +96,9 @@ max_results = 500      # Maximum results to display
                        # For filename search (s): caps total files shown
                        # For content search (S): caps unique files shown
                        #   (each file displays up to 20 matches)
+open_mode = "external" # How Enter opens search results:
+                       #   "external" — open in background editor (default)
+                       #   "editor"   — open in terminal editor (suspends TUI)
 ```
 
 ### `[colors]` — Color Customization
