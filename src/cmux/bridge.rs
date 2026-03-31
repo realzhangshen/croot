@@ -21,9 +21,16 @@ impl CmuxBridge {
     }
 
     /// Open a file in the editor via a new cmux surface (tab).
-    pub fn open_in_editor(&self, editor_cmd: &str, path: &Path) -> anyhow::Result<()> {
+    ///
+    /// When `line` is `Some(n)`, passes `+n` to the editor to jump to that line.
+    pub fn open_in_editor(
+        &self,
+        editor_cmd: &str,
+        path: &Path,
+        line: Option<usize>,
+    ) -> anyhow::Result<()> {
         let surface_ref = self.create_surface()?;
-        self.send_to_surface(&surface_ref, editor_cmd, path)
+        self.send_to_surface(&surface_ref, editor_cmd, path, line)
     }
 
     /// Run `cmux new-surface` and parse the surface reference from the output.
@@ -49,8 +56,9 @@ impl CmuxBridge {
         surface_ref: &str,
         editor_cmd: &str,
         path: &Path,
+        line: Option<usize>,
     ) -> anyhow::Result<()> {
-        let full_cmd = build_editor_command(editor_cmd, path);
+        let full_cmd = build_editor_command(editor_cmd, path, line);
 
         let output = Command::new("cmux")
             .args(["send", "--surface", surface_ref, &full_cmd])
@@ -69,10 +77,14 @@ impl CmuxBridge {
 
 /// Build the shell command string to send to a cmux surface.
 ///
-/// Splits the editor command (e.g. `"nvim --wait"`) into tokens, appends the file
-/// path, then joins everything with proper shell quoting via `shell_words::join`.
-fn build_editor_command(editor_cmd: &str, path: &Path) -> String {
+/// Splits the editor command (e.g. `"nvim --wait"`) into tokens, optionally inserts
+/// a `+LINE` goto argument, appends the file path, then joins everything with proper
+/// shell quoting via `shell_words::join`.
+fn build_editor_command(editor_cmd: &str, path: &Path, line: Option<usize>) -> String {
     let mut parts = shell_words::split(editor_cmd).unwrap_or_else(|_| vec![editor_cmd.to_string()]);
+    if let Some(n) = line {
+        parts.push(format!("+{n}"));
+    }
     parts.push(path.to_string_lossy().into_owned());
     format!("{}\n", shell_words::join(&parts))
 }
@@ -153,19 +165,19 @@ mod tests {
 
     #[test]
     fn build_cmd_simple_path() {
-        let cmd = build_editor_command("nvim", Path::new("/tmp/file.txt"));
+        let cmd = build_editor_command("nvim", Path::new("/tmp/file.txt"), None);
         assert_eq!(cmd, "nvim /tmp/file.txt\n");
     }
 
     #[test]
     fn build_cmd_path_with_spaces() {
-        let cmd = build_editor_command("nvim", Path::new("/tmp/my file.txt"));
+        let cmd = build_editor_command("nvim", Path::new("/tmp/my file.txt"), None);
         assert_eq!(cmd, "nvim '/tmp/my file.txt'\n");
     }
 
     #[test]
     fn build_cmd_path_with_single_quotes() {
-        let cmd = build_editor_command("nvim", Path::new("/tmp/it's.txt"));
+        let cmd = build_editor_command("nvim", Path::new("/tmp/it's.txt"), None);
         // shell_words escapes the single quote inside single quotes
         assert!(cmd.starts_with("nvim "));
         assert!(cmd.contains("it"));
@@ -177,19 +189,31 @@ mod tests {
 
     #[test]
     fn build_cmd_path_with_unicode() {
-        let cmd = build_editor_command("nvim", Path::new("/tmp/日本語.txt"));
+        let cmd = build_editor_command("nvim", Path::new("/tmp/日本語.txt"), None);
         assert_eq!(cmd, "nvim /tmp/日本語.txt\n");
     }
 
     #[test]
     fn build_cmd_multi_word_editor() {
-        let cmd = build_editor_command("nvim --wait", Path::new("/tmp/file.txt"));
+        let cmd = build_editor_command("nvim --wait", Path::new("/tmp/file.txt"), None);
         assert_eq!(cmd, "nvim --wait /tmp/file.txt\n");
     }
 
     #[test]
     fn build_cmd_editor_with_quoted_args() {
-        let cmd = build_editor_command("code --goto", Path::new("/tmp/my file.txt"));
+        let cmd = build_editor_command("code --goto", Path::new("/tmp/my file.txt"), None);
         assert_eq!(cmd, "code --goto '/tmp/my file.txt'\n");
+    }
+
+    #[test]
+    fn build_cmd_with_line_number() {
+        let cmd = build_editor_command("nvim", Path::new("/tmp/file.txt"), Some(42));
+        assert_eq!(cmd, "nvim +42 /tmp/file.txt\n");
+    }
+
+    #[test]
+    fn build_cmd_with_line_number_and_multi_word_editor() {
+        let cmd = build_editor_command("nvim --wait", Path::new("/tmp/file.txt"), Some(10));
+        assert_eq!(cmd, "nvim --wait +10 /tmp/file.txt\n");
     }
 }

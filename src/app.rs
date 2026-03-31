@@ -51,14 +51,16 @@ struct BranchSwitchResult {
 }
 
 /// Signal from action handling that requires terminal-level processing.
+#[derive(Debug)]
 pub enum PostAction {
     None,
     /// Auto-detect: try cmux first, fall back to suspend (keyboard shortcuts).
-    OpenEditor(PathBuf),
+    /// The optional `usize` is a 1-based line number for `+LINE` goto.
+    OpenEditor(PathBuf, Option<usize>),
     /// Force suspend mode (context menu "Open in Editor").
-    OpenEditorSuspend(PathBuf),
+    OpenEditorSuspend(PathBuf, Option<usize>),
     /// Force cmux mode (context menu "Open in cmux Tab").
-    OpenEditorCmux(PathBuf),
+    OpenEditorCmux(PathBuf, Option<usize>),
 }
 
 /// Modal overlay state: input mode, context menu, dialogs, picker, and error messages.
@@ -485,11 +487,11 @@ impl App {
 
             // Process post-actions that require terminal access
             match std::mem::replace(&mut post_action, PostAction::None) {
-                PostAction::OpenEditor(path) => {
+                PostAction::OpenEditor(path, line) => {
                     // Auto-detect: try cmux first, fall back to suspend
                     let opened_in_cmux = if let Some(ref cmux) = self.cmux {
                         let editor = self.resolve_editor();
-                        match cmux.open_in_editor(&editor, &path) {
+                        match cmux.open_in_editor(&editor, &path, line) {
                             Ok(()) => true,
                             Err(e) => {
                                 self.show_error(format!(
@@ -502,20 +504,20 @@ impl App {
                         false
                     };
                     if !opened_in_cmux {
-                        self.open_editor_suspend(terminal, &path)?;
+                        self.open_editor_suspend(terminal, &path, line)?;
                         self.refresh_after_editor(&preview_tx);
                         reader = EventStream::new();
                     }
                 }
-                PostAction::OpenEditorSuspend(path) => {
-                    self.open_editor_suspend(terminal, &path)?;
+                PostAction::OpenEditorSuspend(path, line) => {
+                    self.open_editor_suspend(terminal, &path, line)?;
                     self.refresh_after_editor(&preview_tx);
                     reader = EventStream::new();
                 }
-                PostAction::OpenEditorCmux(path) => {
+                PostAction::OpenEditorCmux(path, line) => {
                     if let Some(ref cmux) = self.cmux {
                         let editor = self.resolve_editor();
-                        if let Err(e) = cmux.open_in_editor(&editor, &path) {
+                        if let Err(e) = cmux.open_in_editor(&editor, &path, line) {
                             self.show_error(format!("cmux failed: {e}"));
                         }
                     }
@@ -1103,7 +1105,7 @@ impl App {
             }
             Action::GlobalSearchConfirm => {
                 if self.search_state.global_search_type == GlobalSearchType::Content {
-                    self.handle_content_search_confirm(preview_tx);
+                    post = self.handle_content_search_confirm();
                 } else if let Some(result) = self
                     .search_state
                     .global_results
@@ -1113,10 +1115,7 @@ impl App {
                     self.abort_global_search_task(true);
                     self.ui.input_mode = InputMode::Normal;
                     self.search_state.clear();
-                    let path = result.path;
-                    self.tree.navigate_to_path(&path);
-                    self.reapply_git();
-                    self.trigger_preview_load(preview_tx);
+                    post = PostAction::OpenEditor(result.path, None);
                 }
             }
             Action::GlobalSearchCancel => {
@@ -1124,12 +1123,29 @@ impl App {
                 self.search_state.clear();
                 self.ui.input_mode = InputMode::Normal;
             }
+            Action::GlobalSearchGoto => {
+                if self.search_state.global_search_type == GlobalSearchType::Content {
+                    self.handle_content_search_goto(preview_tx);
+                } else if let Some(result) = self
+                    .search_state
+                    .global_results
+                    .get(self.search_state.global_selected)
+                    .cloned()
+                {
+                    self.abort_global_search_task(true);
+                    self.ui.input_mode = InputMode::Normal;
+                    self.search_state.clear();
+                    self.tree.navigate_to_path(&result.path);
+                    self.reapply_git();
+                    self.trigger_preview_load(preview_tx);
+                }
+            }
 
             // Open file in editor
             Action::OpenInEditor => {
                 if let Some(node) = self.tree.selected() {
                     if !node.is_dir() {
-                        post = PostAction::OpenEditor(node.path.clone());
+                        post = PostAction::OpenEditor(node.path.clone(), None);
                     }
                 }
             }
@@ -1212,7 +1228,7 @@ impl App {
                     self.reapply_git();
                     self.refresh_search_state();
                 } else if let Some(path) = self.tree.selected().map(|n| n.path.clone()) {
-                    post = PostAction::OpenEditor(path);
+                    post = PostAction::OpenEditor(path, None);
                 }
             }
 
@@ -1644,14 +1660,14 @@ impl App {
             MenuAction::OpenInEditor => {
                 if let Some(node) = self.tree.nodes.get(node_idx) {
                     if !node.is_dir() {
-                        return PostAction::OpenEditorSuspend(node.path.clone());
+                        return PostAction::OpenEditorSuspend(node.path.clone(), None);
                     }
                 }
             }
             MenuAction::OpenInCmuxTab => {
                 if let Some(node) = self.tree.nodes.get(node_idx) {
                     if !node.is_dir() {
-                        return PostAction::OpenEditorCmux(node.path.clone());
+                        return PostAction::OpenEditorCmux(node.path.clone(), None);
                     }
                 }
             }
@@ -2333,15 +2349,12 @@ impl App {
     }
 
     /// Handle Enter in content search: toggle file header or navigate to match line.
-    fn handle_content_search_confirm(
-        &mut self,
-        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
-    ) {
+    fn handle_content_search_confirm(&mut self) -> PostAction {
         let Some(item) = self
             .search_state
             .resolve_item(self.search_state.global_selected)
         else {
-            return;
+            return PostAction::None;
         };
         match item {
             GroupedItem::FileHeader(g) => {
@@ -2357,6 +2370,37 @@ impl App {
                 self.search_state.grouped_results[g].collapsed =
                     !self.search_state.grouped_results[g].collapsed;
                 self.search_state.clamp_selection();
+                PostAction::None
+            }
+            GroupedItem::MatchLine(g, m) => {
+                let group = &self.search_state.grouped_results[g];
+                let path = group.path.clone();
+                let line = group.matches[m].line;
+                self.abort_global_search_task(true);
+                self.ui.input_mode = InputMode::Normal;
+                self.search_state.clear();
+                PostAction::OpenEditor(path, line)
+            }
+        }
+    }
+
+    /// Navigate to the selected search result in the file tree (Tab key).
+    fn handle_content_search_goto(&mut self, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
+        let Some(item) = self
+            .search_state
+            .resolve_item(self.search_state.global_selected)
+        else {
+            return;
+        };
+        match item {
+            GroupedItem::FileHeader(g) => {
+                let path = self.search_state.grouped_results[g].path.clone();
+                self.abort_global_search_task(true);
+                self.ui.input_mode = InputMode::Normal;
+                self.search_state.clear();
+                self.tree.navigate_to_path(&path);
+                self.reapply_git();
+                self.trigger_preview_load(preview_tx);
             }
             GroupedItem::MatchLine(g, m) => {
                 let group = &self.search_state.grouped_results[g];
@@ -2495,6 +2539,7 @@ impl App {
         &mut self,
         terminal: &mut Terminal<B>,
         path: &std::path::Path,
+        line: Option<usize>,
     ) -> anyhow::Result<()>
     where
         B::Error: Send + Sync + 'static,
@@ -2513,7 +2558,11 @@ impl App {
 
         // Resolve editor and split into command + args (e.g. "code --wait")
         let editor_str = self.resolve_editor();
-        let parts = shell_words::split(&editor_str).unwrap_or_else(|_| vec![editor_str.clone()]);
+        let mut parts =
+            shell_words::split(&editor_str).unwrap_or_else(|_| vec![editor_str.clone()]);
+        if let Some(n) = line {
+            parts.push(format!("+{n}"));
+        }
         let cmd = parts.first().map_or("vi", |s| s.as_str());
         let status = std::process::Command::new(cmd)
             .args(&parts[1..])
@@ -2578,7 +2627,7 @@ impl App {
     fn handle_global_search_mouse(
         &mut self,
         mouse: crossterm::event::MouseEvent,
-        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        _preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
     ) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
 
@@ -2614,7 +2663,7 @@ impl App {
             if self.search_state.global_search_type == GlobalSearchType::Content {
                 if clicked_index < self.search_state.visible_item_count() {
                     self.search_state.global_selected = clicked_index;
-                    self.handle_content_search_confirm(preview_tx);
+                    return self.handle_content_search_confirm();
                 }
             } else if clicked_index < self.search_state.global_results.len() {
                 self.search_state.global_selected = clicked_index;
@@ -2627,10 +2676,7 @@ impl App {
                     self.abort_global_search_task(true);
                     self.ui.input_mode = InputMode::Normal;
                     self.search_state.clear();
-                    let path = result.path;
-                    self.tree.navigate_to_path(&path);
-                    self.reapply_git();
-                    self.trigger_preview_load(preview_tx);
+                    return PostAction::OpenEditor(result.path, None);
                 }
             }
         }
@@ -2961,15 +3007,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn global_search_confirm_triggers_preview() {
+    async fn global_search_confirm_opens_editor() {
         let (mut app, _tmp) = test_app();
-        // Create a real file in the test app's root
         let test_file = app.root.join("preview_test.txt");
         std::fs::write(&test_file, "content").unwrap();
         app.tree.refresh();
-        app.preview_visible = true;
 
-        // Set up global search state with a result pointing to the test file
+        // Set up global search state with a filename result
         app.ui.input_mode = InputMode::GlobalSearch;
         app.search_state = SearchState::new(SearchMode::Global);
         app.search_state.global_results.push(GlobalSearchResult {
@@ -2984,18 +3028,145 @@ mod tests {
         let search_tx: mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)> =
             mpsc::channel(1).0;
 
-        // Fire GlobalSearchConfirm via handle_action
-        app.handle_action(&Action::GlobalSearchConfirm, &ptx, &search_tx);
-
-        // trigger_preview_load should have been called, setting the preview to Loading
-        // and spawning a debounce task
+        // Confirm should return OpenEditor instead of navigating
+        let post = app.handle_action(&Action::GlobalSearchConfirm, &ptx, &search_tx);
         assert_eq!(app.ui.input_mode, InputMode::Normal);
+        assert!(matches!(post, PostAction::OpenEditor(ref p, None) if *p == test_file));
+
+        let _ = std::fs::remove_file(&test_file);
+    }
+
+    #[tokio::test]
+    async fn global_search_goto_navigates_to_file() {
+        let (mut app, _tmp) = test_app();
+        let test_file = app.root.join("goto_test.txt");
+        std::fs::write(&test_file, "content").unwrap();
+        app.tree.refresh();
+        app.preview_visible = true;
+
+        // Set up global search state with a filename result
+        app.ui.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.global_results.push(GlobalSearchResult {
+            path: test_file.clone(),
+            display: "goto_test.txt".to_string(),
+            line: None,
+            context: None,
+        });
+        app.search_state.global_selected = 0;
+
+        let (ptx, _prx) = mpsc::channel(16);
+        let search_tx: mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)> =
+            mpsc::channel(1).0;
+
+        // Goto should navigate to file in tree (old Enter behavior)
+        let post = app.handle_action(&Action::GlobalSearchGoto, &ptx, &search_tx);
+        assert_eq!(app.ui.input_mode, InputMode::Normal);
+        assert!(matches!(post, PostAction::None));
         assert!(
             app.preview_debounce_handle.is_some(),
-            "Preview debounce handle should be set after confirm"
+            "Preview debounce handle should be set after goto"
         );
-        // Clean up
+
         let _ = std::fs::remove_file(&test_file);
+    }
+
+    // ── Content search: confirm opens editor, goto navigates ─────────
+
+    #[test]
+    fn content_search_confirm_on_match_returns_open_editor() {
+        let (mut app, _tmp) = test_app();
+        let test_file = app.root.join("match_test.rs");
+        std::fs::write(&test_file, "line1\nline2\nTODO: fix\n").unwrap();
+        app.tree.refresh();
+
+        app.ui.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.global_search_type = GlobalSearchType::Content;
+        app.search_state.grouped_results.push(FileGroup {
+            path: test_file.clone(),
+            display: "match_test.rs".to_string(),
+            matches: vec![ContentMatch {
+                line: Some(3),
+                context: Some("TODO: fix".to_string()),
+            }],
+            collapsed: false,
+        });
+        // Select the match line (index 0 = header, index 1 = first match)
+        app.search_state.global_selected = 1;
+
+        let (ptx, _prx) = mpsc::channel(16);
+        let stx = mpsc::channel(1).0;
+
+        let post = app.handle_action(&Action::GlobalSearchConfirm, &ptx, &stx);
+        assert_eq!(app.ui.input_mode, InputMode::Normal);
+        assert!(
+            matches!(post, PostAction::OpenEditor(ref p, Some(3)) if *p == test_file),
+            "Expected OpenEditor with line 3, got {post:?}"
+        );
+    }
+
+    #[test]
+    fn content_search_confirm_on_header_toggles_collapse() {
+        let (mut app, _tmp) = test_app();
+        app.ui.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.global_search_type = GlobalSearchType::Content;
+        app.search_state.grouped_results.push(FileGroup {
+            path: app.root.join("file.rs"),
+            display: "file.rs".to_string(),
+            matches: vec![ContentMatch {
+                line: Some(1),
+                context: Some("match".to_string()),
+            }],
+            collapsed: false,
+        });
+        // Select header (index 0)
+        app.search_state.global_selected = 0;
+
+        let (ptx, _prx) = mpsc::channel(16);
+        let stx = mpsc::channel(1).0;
+
+        let post = app.handle_action(&Action::GlobalSearchConfirm, &ptx, &stx);
+        assert!(matches!(post, PostAction::None));
+        assert!(app.search_state.grouped_results[0].collapsed);
+        // Still in GlobalSearch mode (didn't close overlay)
+        assert_eq!(app.ui.input_mode, InputMode::GlobalSearch);
+    }
+
+    #[tokio::test]
+    async fn content_search_goto_on_match_navigates_to_tree() {
+        let (mut app, _tmp) = test_app();
+        let test_file = app.root.join("goto_match.rs");
+        std::fs::write(&test_file, "hello\nworld\n").unwrap();
+        app.tree.refresh();
+        app.preview_visible = true;
+
+        app.ui.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.global_search_type = GlobalSearchType::Content;
+        app.search_state.grouped_results.push(FileGroup {
+            path: test_file.clone(),
+            display: "goto_match.rs".to_string(),
+            matches: vec![ContentMatch {
+                line: Some(2),
+                context: Some("world".to_string()),
+            }],
+            collapsed: false,
+        });
+        app.search_state.global_selected = 1; // match line
+
+        let (ptx, _prx) = mpsc::channel(16);
+        let stx = mpsc::channel(1).0;
+
+        let post = app.handle_action(&Action::GlobalSearchGoto, &ptx, &stx);
+        assert_eq!(app.ui.input_mode, InputMode::Normal);
+        assert!(matches!(post, PostAction::None));
+        // Should have set pending_preview_line for scroll
+        assert!(
+            app.pending_preview_line.is_none()
+                || app.pending_preview_line == Some((test_file.clone(), 2))
+        );
     }
 
     // Symlink path traversal tests are now in crate::file_ops::tests
@@ -3388,7 +3559,7 @@ mod tests {
             app.handle_action(&Action::CursorDown, &ptx, &stx);
         }
         let post = app.handle_action(&Action::OpenInEditor, &ptx, &stx);
-        assert!(matches!(post, PostAction::OpenEditor(_)));
+        assert!(matches!(post, PostAction::OpenEditor(_, None)));
     }
 
     #[test]

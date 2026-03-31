@@ -163,9 +163,9 @@ impl Widget for GlobalSearchOverlay<'_> {
         // Help line at bottom
         let help_y = dialog.y + dialog.height.saturating_sub(2);
         let help = if self.state.global_search_type == GlobalSearchType::Content {
-            "[Enter] toggle/go to  [Esc] cancel"
+            "[Enter] open  [Tab] go to  [Esc] cancel"
         } else {
-            "[Enter] go to  [Esc] cancel"
+            "[Enter] open  [Tab] go to  [Esc] cancel"
         };
         buf.set_string(dialog.x + 2, help_y, help, colors::popup_dim());
 

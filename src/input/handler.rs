@@ -125,8 +125,10 @@ pub enum Action {
     GlobalSearchChar(char),
     /// Global search input: backspace.
     GlobalSearchBackspace,
-    /// Global search: confirm selection (navigate to result).
+    /// Global search: confirm selection (open in editor).
     GlobalSearchConfirm,
+    /// Global search: navigate to file in tree without opening editor.
+    GlobalSearchGoto,
     /// Global search: cancel.
     GlobalSearchCancel,
     /// Global search: move selection up.
@@ -390,9 +392,10 @@ pub fn handle_key_global_search(key: KeyEvent) -> Action {
     match key.code {
         KeyCode::Esc => Action::GlobalSearchCancel,
         KeyCode::Enter => Action::GlobalSearchConfirm,
+        KeyCode::Tab => Action::GlobalSearchGoto,
         KeyCode::Backspace => Action::GlobalSearchBackspace,
         KeyCode::Up | KeyCode::BackTab => Action::GlobalSearchUp,
-        KeyCode::Down | KeyCode::Tab => Action::GlobalSearchDown,
+        KeyCode::Down => Action::GlobalSearchDown,
         KeyCode::Char(c) => Action::GlobalSearchChar(c),
         _ => Action::None,
     }
@@ -1018,10 +1021,10 @@ mod tests {
     }
 
     #[test]
-    fn global_search_tab_goes_down() {
+    fn global_search_tab_goes_to_file() {
         assert_eq!(
             handle_key_global_search(make_key(KeyCode::Tab)),
-            Action::GlobalSearchDown
+            Action::GlobalSearchGoto
         );
     }
 
