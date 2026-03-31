@@ -286,15 +286,30 @@ pub fn handle_key(
         return action.clone();
     }
 
-    // For uppercase chars, terminals may send Char('A') with SHIFT modifier (Kitty protocol)
-    // or Char('A') without SHIFT (legacy). Normalize by stripping SHIFT for letter chars.
+    // Uppercase char = Shift was pressed. Normalize terminal variations:
+    // - Kitty may send Char('S') + SHIFT
+    // - Legacy may send Char('S') + NONE (no SHIFT flag)
+    // Canonicalize to lowercase and try Shift binding first, then non-Shift fallback.
     if let KeyCode::Char(ch) = key.code {
-        if ch.is_ascii_uppercase() && key.modifiers.contains(KeyModifiers::SHIFT) {
-            let stripped = KeyBinding {
-                code: KeyCode::Char(ch.to_ascii_lowercase()),
-                modifiers: key.modifiers - KeyModifiers::SHIFT,
+        if ch.is_ascii_uppercase() {
+            let lower = ch.to_ascii_lowercase();
+            let other_mods = key.modifiers - KeyModifiers::SHIFT;
+
+            // Try Shift binding first (e.g., "S" is stored as Char('s') + SHIFT)
+            let with_shift = KeyBinding {
+                code: KeyCode::Char(lower),
+                modifiers: other_mods | KeyModifiers::SHIFT,
             };
-            if let Some(action) = keybindings.get(&stripped) {
+            if let Some(action) = keybindings.get(&with_shift) {
+                return action.clone();
+            }
+
+            // Fall back to non-Shift binding (e.g., only "s" is bound)
+            let without_shift = KeyBinding {
+                code: KeyCode::Char(lower),
+                modifiers: other_mods,
+            };
+            if let Some(action) = keybindings.get(&without_shift) {
                 return action.clone();
             }
         }
@@ -526,8 +541,9 @@ mod tests {
     }
 
     #[test]
-    fn kitty_uppercase_normalization() {
-        // Kitty sends Char('S') + SHIFT; we store Char('S') without SHIFT
+    fn uppercase_normalization_prefers_shift_binding() {
+        // Map has both: Char('s') + NONE → Search, Char('s') + SHIFT → SearchContent
+        // (this is how parse_key("s") and parse_key("S") store them)
         let mut map = KeybindingMap::new();
         map.insert(
             KeyBinding {
@@ -536,8 +552,41 @@ mod tests {
             },
             Action::StartGlobalSearch,
         );
-        // Legacy terminal: Char('S') without SHIFT modifier (not handled by normalization)
-        // Kitty protocol: Char('S') with SHIFT modifier → should normalize
+        map.insert(
+            KeyBinding {
+                code: KeyCode::Char('s'),
+                modifiers: KeyModifiers::SHIFT,
+            },
+            Action::StartGlobalSearchContent,
+        );
+
+        // Some terminals: Char('S') + SHIFT → should match Char('s') + SHIFT → content
+        let action = handle_key(
+            make_key_mod(KeyCode::Char('S'), KeyModifiers::SHIFT),
+            false,
+            false,
+            &map,
+        );
+        assert_eq!(action, Action::StartGlobalSearchContent);
+
+        // Legacy terminal: Char('S') + NONE → should also match Char('s') + SHIFT → content
+        let action = handle_key(make_key(KeyCode::Char('S')), false, false, &map);
+        assert_eq!(action, Action::StartGlobalSearchContent);
+    }
+
+    #[test]
+    fn uppercase_normalization_falls_back_to_lowercase_binding() {
+        // Only lowercase 's' bound, no uppercase 'S' binding
+        let mut map = KeybindingMap::new();
+        map.insert(
+            KeyBinding {
+                code: KeyCode::Char('s'),
+                modifiers: KeyModifiers::NONE,
+            },
+            Action::StartGlobalSearch,
+        );
+
+        // Char('S') + SHIFT → no Char('s') + SHIFT binding, falls back to Char('s') + NONE
         let action = handle_key(
             make_key_mod(KeyCode::Char('S'), KeyModifiers::SHIFT),
             false,
@@ -545,6 +594,30 @@ mod tests {
             &map,
         );
         assert_eq!(action, Action::StartGlobalSearch);
+
+        // Char('S') + NONE → same fallback
+        let action = handle_key(make_key(KeyCode::Char('S')), false, false, &map);
+        assert_eq!(action, Action::StartGlobalSearch);
+    }
+
+    #[test]
+    fn uppercase_normalization_via_default_config() {
+        // End-to-end: build_keybinding_map with default config, then handle_key
+        let config = KeybindingsConfig::default();
+        let map = build_keybinding_map(&config);
+
+        // Char('S') + SHIFT → should reach StartGlobalSearchContent
+        let action = handle_key(
+            make_key_mod(KeyCode::Char('S'), KeyModifiers::SHIFT),
+            false,
+            false,
+            &map,
+        );
+        assert_eq!(action, Action::StartGlobalSearchContent);
+
+        // Char('S') + NONE (legacy terminal) → should also reach StartGlobalSearchContent
+        let action = handle_key(make_key(KeyCode::Char('S')), false, false, &map);
+        assert_eq!(action, Action::StartGlobalSearchContent);
     }
 
     #[test]
