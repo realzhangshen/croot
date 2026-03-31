@@ -36,8 +36,8 @@ use crate::render::input_dialog::{InputDialogState, InputDialogWidget};
 use crate::render::picker::{PickerState, PickerWidget};
 use crate::render::preview_view::PreviewView;
 use crate::render::search_bar::{
-    do_match, do_match_positions, GlobalSearchResult, GlobalSearchType, SearchBar, SearchMode,
-    SearchState,
+    do_match, do_match_positions, ContentMatch, FileGroup, GlobalSearchResult, GlobalSearchType,
+    GroupedItem, SearchBar, SearchMode, SearchState,
 };
 use crate::render::status_bar::{HyperlinkRegion, StatusBar};
 use crate::render::tree_view::TreeView;
@@ -109,6 +109,8 @@ pub struct App {
     search_state: SearchState,
     /// Handle for the current async global search task.
     global_search_handle: Option<JoinHandle<()>>,
+    /// Path-keyed pending line for preview scroll after content search confirm.
+    pending_preview_line: Option<(PathBuf, usize)>,
     // Hyperlink regions for post-render OSC 8 emission
     hyperlink_regions: Vec<HyperlinkRegion>,
     // Whether Kitty keyboard enhancement protocol is active
@@ -190,6 +192,7 @@ impl App {
             ui: UiOverlayState::default(),
             search_state: SearchState::new(SearchMode::Find),
             global_search_handle: None,
+            pending_preview_line: None,
             hyperlink_regions: Vec::new(),
             enhanced_keyboard,
             click_tracker: ClickTracker::new(),
@@ -376,7 +379,12 @@ impl App {
                 result = search_rx.recv() => {
                     if let Some((id, results, error)) = result {
                         if id == self.search_state.request_id {
-                            self.search_state.global_results = results;
+                            if self.search_state.global_search_type == GlobalSearchType::Content {
+                                self.search_state.grouped_results = group_search_results(results);
+                                self.search_state.global_results.clear();
+                            } else {
+                                self.search_state.global_results = results;
+                            }
                             self.search_state.global_error = error;
                             self.search_state.global_loading = false;
                             self.search_state.global_selected = 0;
@@ -430,6 +438,13 @@ impl App {
                                 .is_some_and(|n| n.path == path);
                             if still_selected {
                                 self.preview_state.apply(path, loaded.kind, loaded.content, loaded.file_info, loaded.line_diffs);
+                                // Apply pending line scroll from content search confirm
+                                if let Some((ref target_path, line)) = self.pending_preview_line {
+                                    if self.preview_state.current_path.as_ref() == Some(target_path) {
+                                        self.preview_state.scroll_to_line(line);
+                                    }
+                                }
+                                self.pending_preview_line = None;
                             }
                         }
                     }
@@ -1069,12 +1084,13 @@ impl App {
                 }
             }
             Action::GlobalSearchDown => {
-                if !self.search_state.global_results.is_empty()
-                    && self.search_state.global_selected + 1
-                        < self.search_state.global_results.len()
-                {
+                let upper = if self.search_state.global_search_type == GlobalSearchType::Content {
+                    self.search_state.visible_item_count()
+                } else {
+                    self.search_state.global_results.len()
+                };
+                if upper > 0 && self.search_state.global_selected + 1 < upper {
                     self.search_state.global_selected += 1;
-                    // Keep selection visible by adjusting scroll offset
                     let visible = self.search_state.global_visible_height;
                     if visible > 0
                         && self.search_state.global_selected
@@ -1086,7 +1102,9 @@ impl App {
                 }
             }
             Action::GlobalSearchConfirm => {
-                if let Some(result) = self
+                if self.search_state.global_search_type == GlobalSearchType::Content {
+                    self.handle_content_search_confirm(preview_tx);
+                } else if let Some(result) = self
                     .search_state
                     .global_results
                     .get(self.search_state.global_selected)
@@ -2217,7 +2235,7 @@ impl App {
                     let (bin, extra) = parts.split_first().unwrap_or((&rg_cmd, &[]));
                     tokio::process::Command::new(bin)
                         .args(extra)
-                        .args(["--json", "--line-number", "--max-count", "1", "--", &query])
+                        .args(["--json", "--line-number", "--max-count", "20", "--", &query])
                         .current_dir(&root)
                         .output()
                         .await
@@ -2229,16 +2247,19 @@ impl App {
                     let stdout = String::from_utf8_lossy(&out.stdout);
                     let mut results = Vec::new();
                     let mut parse_failed = false;
+                    // For content search, cap by unique files, not raw matches.
+                    let mut unique_file_count = 0usize;
+                    let mut last_file: Option<String> = None;
 
                     for line in stdout.lines() {
-                        if results.len() >= max_results {
-                            break;
-                        }
                         if line.is_empty() {
                             continue;
                         }
                         match search_type {
                             GlobalSearchType::FileName => {
+                                if results.len() >= max_results {
+                                    break;
+                                }
                                 let path = root.join(line);
                                 results.push(GlobalSearchResult {
                                     path,
@@ -2249,6 +2270,15 @@ impl App {
                             }
                             GlobalSearchType::Content => match parse_rg_json_match(line) {
                                 Ok(Some((file, line_num, context))) => {
+                                    // Track unique file count
+                                    let is_new_file = last_file.as_ref().is_none_or(|f| f != &file);
+                                    if is_new_file {
+                                        unique_file_count += 1;
+                                        if unique_file_count > max_results {
+                                            break;
+                                        }
+                                        last_file = Some(file.clone());
+                                    }
                                     let path = root.join(&file);
                                     results.push(GlobalSearchResult {
                                         path,
@@ -2300,6 +2330,49 @@ impl App {
                 }
             }
         }));
+    }
+
+    /// Handle Enter in content search: toggle file header or navigate to match line.
+    fn handle_content_search_confirm(
+        &mut self,
+        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+    ) {
+        let Some(item) = self
+            .search_state
+            .resolve_item(self.search_state.global_selected)
+        else {
+            return;
+        };
+        match item {
+            GroupedItem::FileHeader(g) => {
+                let header_idx = self.search_state.flat_index_of_header(g);
+                let match_count = self.search_state.grouped_results[g].matches.len();
+                // If selection is inside this group's matches, remap to header
+                if !self.search_state.grouped_results[g].collapsed
+                    && self.search_state.global_selected > header_idx
+                    && self.search_state.global_selected <= header_idx + match_count
+                {
+                    self.search_state.global_selected = header_idx;
+                }
+                self.search_state.grouped_results[g].collapsed =
+                    !self.search_state.grouped_results[g].collapsed;
+                self.search_state.clamp_selection();
+            }
+            GroupedItem::MatchLine(g, m) => {
+                let group = &self.search_state.grouped_results[g];
+                let path = group.path.clone();
+                let line = group.matches[m].line;
+                self.abort_global_search_task(true);
+                self.ui.input_mode = InputMode::Normal;
+                if let Some(rg_line) = line {
+                    self.pending_preview_line = Some((path.clone(), rg_line));
+                }
+                self.search_state.clear();
+                self.tree.navigate_to_path(&path);
+                self.reapply_git();
+                self.trigger_preview_load(preview_tx);
+            }
+        }
     }
 
     fn abort_global_search_task(&mut self, invalidate_request_id: bool) {
@@ -2537,9 +2610,14 @@ impl App {
         if mouse.row >= results_y && mouse.row < results_end_y {
             let scroll = self.search_state.global_scroll_offset;
             let clicked_index = scroll + (mouse.row - results_y) as usize;
-            if clicked_index < self.search_state.global_results.len() {
+
+            if self.search_state.global_search_type == GlobalSearchType::Content {
+                if clicked_index < self.search_state.visible_item_count() {
+                    self.search_state.global_selected = clicked_index;
+                    self.handle_content_search_confirm(preview_tx);
+                }
+            } else if clicked_index < self.search_state.global_results.len() {
                 self.search_state.global_selected = clicked_index;
-                // Confirm the selection
                 if let Some(result) = self
                     .search_state
                     .global_results
@@ -2613,6 +2691,38 @@ fn parse_rg_json_match(line: &str) -> Result<Option<ParsedRgMatch>, serde_json::
         message.data.line_number,
         message.data.lines.and_then(RgJsonText::into_text),
     )))
+}
+
+/// Group flat search results by file path into `FileGroup`s.
+/// Fast path: checks the last group (rg output is typically grouped by file).
+/// Falls back to full scan for non-consecutive same-path entries.
+fn group_search_results(results: Vec<GlobalSearchResult>) -> Vec<FileGroup> {
+    let mut groups: Vec<FileGroup> = Vec::new();
+    for result in results {
+        let m = ContentMatch {
+            line: result.line,
+            context: result.context,
+        };
+        // Fast path: last group has same path
+        if let Some(last) = groups.last_mut() {
+            if last.path == result.path {
+                last.matches.push(m);
+                continue;
+            }
+        }
+        // Slow path: scan for existing group with this path
+        if let Some(existing) = groups.iter_mut().find(|g| g.path == result.path) {
+            existing.matches.push(m);
+        } else {
+            groups.push(FileGroup {
+                path: result.path,
+                display: result.display,
+                matches: vec![m],
+                collapsed: false,
+            });
+        }
+    }
+    groups
 }
 
 #[cfg(test)]
@@ -3477,5 +3587,104 @@ mod tests {
         assert!(!still_selected);
         // So preview_state remains unchanged
         assert!(app.preview_state.current_path.is_none());
+    }
+
+    // ── group_search_results tests ─────────────────────────────────────
+
+    #[test]
+    fn group_results_empty() {
+        let groups = group_search_results(vec![]);
+        assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn group_results_single_file_multiple_matches() {
+        let results = vec![
+            GlobalSearchResult {
+                path: PathBuf::from("/a.rs"),
+                display: "a.rs".into(),
+                line: Some(10),
+                context: Some("line 10".into()),
+            },
+            GlobalSearchResult {
+                path: PathBuf::from("/a.rs"),
+                display: "a.rs".into(),
+                line: Some(20),
+                context: Some("line 20".into()),
+            },
+        ];
+        let groups = group_search_results(results);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].display, "a.rs");
+        assert_eq!(groups[0].matches.len(), 2);
+        assert_eq!(groups[0].matches[0].line, Some(10));
+        assert_eq!(groups[0].matches[1].line, Some(20));
+        assert!(!groups[0].collapsed);
+    }
+
+    #[test]
+    fn group_results_multiple_files_preserves_order() {
+        let results = vec![
+            GlobalSearchResult {
+                path: PathBuf::from("/b.rs"),
+                display: "b.rs".into(),
+                line: Some(1),
+                context: None,
+            },
+            GlobalSearchResult {
+                path: PathBuf::from("/a.rs"),
+                display: "a.rs".into(),
+                line: Some(5),
+                context: Some("ctx".into()),
+            },
+        ];
+        let groups = group_search_results(results);
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].display, "b.rs");
+        assert_eq!(groups[1].display, "a.rs");
+    }
+
+    #[test]
+    fn group_results_non_consecutive_same_path_merges() {
+        let results = vec![
+            GlobalSearchResult {
+                path: PathBuf::from("/a.rs"),
+                display: "a.rs".into(),
+                line: Some(1),
+                context: None,
+            },
+            GlobalSearchResult {
+                path: PathBuf::from("/b.rs"),
+                display: "b.rs".into(),
+                line: Some(2),
+                context: None,
+            },
+            GlobalSearchResult {
+                path: PathBuf::from("/a.rs"),
+                display: "a.rs".into(),
+                line: Some(3),
+                context: None,
+            },
+        ];
+        let groups = group_search_results(results);
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].matches.len(), 2); // a.rs merged
+        assert_eq!(groups[0].matches[0].line, Some(1));
+        assert_eq!(groups[0].matches[1].line, Some(3));
+        assert_eq!(groups[1].matches.len(), 1); // b.rs
+    }
+
+    #[test]
+    fn group_results_optional_fields() {
+        let results = vec![GlobalSearchResult {
+            path: PathBuf::from("/x.rs"),
+            display: "x.rs".into(),
+            line: None,
+            context: None,
+        }];
+        let groups = group_search_results(results);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].matches[0].line, None);
+        assert_eq!(groups[0].matches[0].context, None);
     }
 }

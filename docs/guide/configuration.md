@@ -90,6 +90,9 @@ open_in_editor = "e"
 fd_command = "fd"      # Command for filename search
 rg_command = "rg"      # Command for content search
 max_results = 500      # Maximum results to display
+                       # For filename search (s): caps total files shown
+                       # For content search (S): caps unique files shown
+                       #   (each file displays up to 20 matches)
 ```
 
 ### `[colors]` — Color Customization

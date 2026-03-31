@@ -133,6 +133,14 @@ impl PreviewState {
         self.scroll_offset = self.scroll_offset.saturating_sub(n);
     }
 
+    /// Scroll so that `rg_line` (1-based) is visible with a few lines of context above.
+    /// Clamps to file length to avoid scrolling past EOF.
+    pub fn scroll_to_line(&mut self, rg_line: usize) {
+        let target_idx = rg_line.saturating_sub(1);
+        let offset = target_idx.saturating_sub(3);
+        self.scroll_offset = offset.min(self.total_lines.saturating_sub(1));
+    }
+
     pub fn scroll_down(&mut self, n: usize) {
         if self.total_lines > 0 {
             self.scroll_offset = (self.scroll_offset + n).min(self.total_lines.saturating_sub(1));
@@ -425,5 +433,55 @@ mod tests {
         // Should not panic; extracts what's available
         let text = state.extract_selected_text().unwrap();
         assert!(text.contains("only line"));
+    }
+
+    // ── scroll_to_line tests ──────────────────────────────────────────
+
+    #[test]
+    fn scroll_to_line_first_line() {
+        let mut state = PreviewState::new();
+        state.total_lines = 100;
+        state.scroll_to_line(1); // rg line 1 → index 0 → offset 0
+        assert_eq!(state.scroll_offset, 0);
+    }
+
+    #[test]
+    fn scroll_to_line_middle() {
+        let mut state = PreviewState::new();
+        state.total_lines = 100;
+        state.scroll_to_line(50); // index 49, minus 3 context = 46
+        assert_eq!(state.scroll_offset, 46);
+    }
+
+    #[test]
+    fn scroll_to_line_near_start() {
+        let mut state = PreviewState::new();
+        state.total_lines = 100;
+        state.scroll_to_line(2); // index 1, saturating_sub(3) = 0
+        assert_eq!(state.scroll_offset, 0);
+    }
+
+    #[test]
+    fn scroll_to_line_last_line() {
+        let mut state = PreviewState::new();
+        state.total_lines = 100;
+        state.scroll_to_line(100); // index 99, minus 3 = 96, clamped to 99
+        assert_eq!(state.scroll_offset, 96);
+    }
+
+    #[test]
+    fn scroll_to_line_past_eof() {
+        let mut state = PreviewState::new();
+        state.total_lines = 100;
+        state.scroll_to_line(200); // index 199, minus 3 = 196, clamped to 99
+        assert_eq!(state.scroll_offset, 99);
+    }
+
+    #[test]
+    fn scroll_to_line_empty_file() {
+        let mut state = PreviewState::new();
+        state.total_lines = 0;
+        state.scroll_to_line(1); // should not panic, offset stays 0
+        assert_eq!(state.scroll_offset, 0);
     }
 }

@@ -40,6 +40,29 @@ pub struct GlobalSearchResult {
     pub context: Option<String>,
 }
 
+/// A single match line within a file group (content search).
+#[derive(Debug, Clone)]
+pub struct ContentMatch {
+    pub line: Option<usize>,
+    pub context: Option<String>,
+}
+
+/// A file group containing all matches for a single file (content search).
+#[derive(Debug, Clone)]
+pub struct FileGroup {
+    pub path: PathBuf,
+    pub display: String,
+    pub matches: Vec<ContentMatch>,
+    pub collapsed: bool,
+}
+
+/// An item in the flattened visible list for grouped content search.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupedItem {
+    FileHeader(usize),
+    MatchLine(usize, usize),
+}
+
 /// State for the search/filter bar.
 #[derive(Debug, Clone)]
 pub struct SearchState {
@@ -64,6 +87,8 @@ pub struct SearchState {
     pub match_char_positions: HashMap<usize, Vec<usize>>,
     // Global search fields
     pub global_results: Vec<GlobalSearchResult>,
+    /// Grouped results for content search (VS Code-style).
+    pub grouped_results: Vec<FileGroup>,
     pub global_selected: usize,
     pub global_scroll_offset: usize,
     pub global_loading: bool,
@@ -87,6 +112,7 @@ impl SearchState {
             compiled_regex: None,
             match_char_positions: HashMap::new(),
             global_results: Vec::new(),
+            grouped_results: Vec::new(),
             global_selected: 0,
             global_scroll_offset: 0,
             global_loading: false,
@@ -151,6 +177,7 @@ impl SearchState {
         self.compiled_regex = None;
         self.match_char_positions.clear();
         self.global_results.clear();
+        self.grouped_results.clear();
         self.global_selected = 0;
         self.global_scroll_offset = 0;
         self.global_loading = false;
@@ -187,6 +214,71 @@ impl SearchState {
         } else {
             self.compiled_regex = None;
             (self.query.clone(), MatchMode::Fuzzy)
+        }
+    }
+
+    // ── Grouped content search helpers ─────────────────────────────────
+
+    /// Total visible rows in grouped content search view.
+    pub fn visible_item_count(&self) -> usize {
+        self.grouped_results
+            .iter()
+            .map(|g| if g.collapsed { 1 } else { 1 + g.matches.len() })
+            .sum()
+    }
+
+    /// Map a flat visible-row index to a logical `GroupedItem`.
+    pub fn resolve_item(&self, flat_idx: usize) -> Option<GroupedItem> {
+        let mut remaining = flat_idx;
+        for (gi, group) in self.grouped_results.iter().enumerate() {
+            if remaining == 0 {
+                return Some(GroupedItem::FileHeader(gi));
+            }
+            remaining -= 1; // consumed the header
+            if !group.collapsed {
+                if remaining < group.matches.len() {
+                    return Some(GroupedItem::MatchLine(gi, remaining));
+                }
+                remaining -= group.matches.len();
+            }
+        }
+        None
+    }
+
+    /// Flat row index of a group's header.
+    pub fn flat_index_of_header(&self, group_idx: usize) -> usize {
+        let mut idx = 0;
+        for (gi, group) in self.grouped_results.iter().enumerate() {
+            if gi == group_idx {
+                return idx;
+            }
+            idx += 1; // header
+            if !group.collapsed {
+                idx += group.matches.len();
+            }
+        }
+        idx
+    }
+
+    /// Clamp `global_selected` and `global_scroll_offset` to valid range.
+    /// Call after any state change that affects visible row count.
+    pub fn clamp_selection(&mut self) {
+        let count = self.visible_item_count();
+        if count == 0 {
+            self.global_selected = 0;
+            self.global_scroll_offset = 0;
+            return;
+        }
+        if self.global_selected >= count {
+            self.global_selected = count - 1;
+        }
+        if self.global_visible_height > 0
+            && self.global_scroll_offset + self.global_visible_height > count
+        {
+            self.global_scroll_offset = count.saturating_sub(self.global_visible_height);
+        }
+        if self.global_selected < self.global_scroll_offset {
+            self.global_scroll_offset = self.global_selected;
         }
     }
 }
@@ -780,5 +872,137 @@ mod tests {
                 "position {p} is not a char boundary in {target:?}"
             );
         }
+    }
+
+    // ── Grouped content search helper tests ────────────────────────────
+
+    fn make_groups(specs: &[(usize, bool)]) -> Vec<FileGroup> {
+        specs
+            .iter()
+            .enumerate()
+            .map(|(i, &(match_count, collapsed))| FileGroup {
+                path: PathBuf::from(format!("file{i}.rs")),
+                display: format!("file{i}.rs"),
+                matches: (0..match_count)
+                    .map(|m| ContentMatch {
+                        line: Some((m + 1) * 10),
+                        context: Some(format!("line {m}")),
+                    })
+                    .collect(),
+                collapsed,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn visible_item_count_all_expanded() {
+        let mut state = SearchState::new(SearchMode::Global);
+        // 2 groups: 3 matches + 2 matches = 2 headers + 5 matches = 7
+        state.grouped_results = make_groups(&[(3, false), (2, false)]);
+        assert_eq!(state.visible_item_count(), 7);
+    }
+
+    #[test]
+    fn visible_item_count_some_collapsed() {
+        let mut state = SearchState::new(SearchMode::Global);
+        // group 0 collapsed (1 header), group 1 expanded (1 header + 2 matches) = 4
+        state.grouped_results = make_groups(&[(3, true), (2, false)]);
+        assert_eq!(state.visible_item_count(), 4);
+    }
+
+    #[test]
+    fn visible_item_count_all_collapsed() {
+        let mut state = SearchState::new(SearchMode::Global);
+        state.grouped_results = make_groups(&[(3, true), (2, true)]);
+        assert_eq!(state.visible_item_count(), 2);
+    }
+
+    #[test]
+    fn visible_item_count_empty() {
+        let state = SearchState::new(SearchMode::Global);
+        assert_eq!(state.visible_item_count(), 0);
+    }
+
+    #[test]
+    fn resolve_item_expanded_groups() {
+        let mut state = SearchState::new(SearchMode::Global);
+        // group 0: 2 matches, group 1: 1 match
+        // flat: [Header(0), Match(0,0), Match(0,1), Header(1), Match(1,0)]
+        state.grouped_results = make_groups(&[(2, false), (1, false)]);
+        assert_eq!(state.resolve_item(0), Some(GroupedItem::FileHeader(0)));
+        assert_eq!(state.resolve_item(1), Some(GroupedItem::MatchLine(0, 0)));
+        assert_eq!(state.resolve_item(2), Some(GroupedItem::MatchLine(0, 1)));
+        assert_eq!(state.resolve_item(3), Some(GroupedItem::FileHeader(1)));
+        assert_eq!(state.resolve_item(4), Some(GroupedItem::MatchLine(1, 0)));
+        assert_eq!(state.resolve_item(5), None);
+    }
+
+    #[test]
+    fn resolve_item_with_collapsed_group() {
+        let mut state = SearchState::new(SearchMode::Global);
+        // group 0: collapsed 3 matches, group 1: expanded 2 matches
+        // flat: [Header(0), Header(1), Match(1,0), Match(1,1)]
+        state.grouped_results = make_groups(&[(3, true), (2, false)]);
+        assert_eq!(state.resolve_item(0), Some(GroupedItem::FileHeader(0)));
+        assert_eq!(state.resolve_item(1), Some(GroupedItem::FileHeader(1)));
+        assert_eq!(state.resolve_item(2), Some(GroupedItem::MatchLine(1, 0)));
+        assert_eq!(state.resolve_item(3), Some(GroupedItem::MatchLine(1, 1)));
+        assert_eq!(state.resolve_item(4), None);
+    }
+
+    #[test]
+    fn resolve_item_out_of_bounds() {
+        let state = SearchState::new(SearchMode::Global);
+        assert_eq!(state.resolve_item(0), None);
+    }
+
+    #[test]
+    fn flat_index_of_header_basic() {
+        let mut state = SearchState::new(SearchMode::Global);
+        // group 0: 2 expanded, group 1: 3 collapsed, group 2: 1 expanded
+        state.grouped_results = make_groups(&[(2, false), (3, true), (1, false)]);
+        assert_eq!(state.flat_index_of_header(0), 0);
+        assert_eq!(state.flat_index_of_header(1), 3); // 1 header + 2 matches
+        assert_eq!(state.flat_index_of_header(2), 4); // + 1 collapsed header
+    }
+
+    #[test]
+    fn clamp_selection_after_collapse() {
+        let mut state = SearchState::new(SearchMode::Global);
+        state.grouped_results = make_groups(&[(3, false), (2, false)]);
+        // Select last item (idx 6 = Match(1,1))
+        state.global_selected = 6;
+        state.global_visible_height = 5;
+        // Now collapse group 0 → visible = 1 + 1 + 2 = 4, selection 6 is out of bounds
+        state.grouped_results[0].collapsed = true;
+        state.clamp_selection();
+        assert_eq!(state.global_selected, 3); // clamped to last visible (4-1)
+    }
+
+    #[test]
+    fn clamp_selection_scroll_offset_adjusted() {
+        let mut state = SearchState::new(SearchMode::Global);
+        state.grouped_results = make_groups(&[(5, false), (2, false)]);
+        state.global_visible_height = 3;
+        state.global_scroll_offset = 5;
+        state.global_selected = 6;
+        // Collapse group 0: visible = 1 + 1 + 2 = 4
+        state.grouped_results[0].collapsed = true;
+        state.clamp_selection();
+        assert!(state.global_selected < state.visible_item_count());
+        assert!(
+            state.global_scroll_offset + state.global_visible_height <= state.visible_item_count()
+                || state.global_scroll_offset == 0
+        );
+    }
+
+    #[test]
+    fn clamp_selection_empty() {
+        let mut state = SearchState::new(SearchMode::Global);
+        state.global_selected = 5;
+        state.global_scroll_offset = 3;
+        state.clamp_selection();
+        assert_eq!(state.global_selected, 0);
+        assert_eq!(state.global_scroll_offset, 0);
     }
 }

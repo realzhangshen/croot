@@ -118,11 +118,22 @@ impl Widget for GlobalSearchOverlay<'_> {
         } else if let Some(ref err) = self.state.global_error {
             let display = truncate_str(err, content_width);
             buf.set_string(dialog.x + 2, results_y, display, colors::popup_error());
+        } else if self.state.global_search_type == GlobalSearchType::Content {
+            // ── Grouped content search results ──
+            self.render_grouped_results(
+                buf,
+                dialog,
+                results_y,
+                results_height,
+                content_width,
+                base,
+            );
         } else if self.state.global_results.is_empty() {
             if !self.state.query.is_empty() {
                 buf.set_string(dialog.x + 2, results_y, "No results", colors::popup_dim());
             }
         } else {
+            // ── Flat filename search results ──
             let start = self.state.global_scroll_offset;
             let end = (start + results_height).min(self.state.global_results.len());
 
@@ -136,7 +147,6 @@ impl Widget for GlobalSearchOverlay<'_> {
                     base
                 };
 
-                // Fill row background for selected item
                 if is_selected {
                     for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
                         if let Some(cell) = buf.cell_mut((col, row_y)) {
@@ -145,40 +155,162 @@ impl Widget for GlobalSearchOverlay<'_> {
                     }
                 }
 
-                // Display line
-                let display = match self.state.global_search_type {
-                    GlobalSearchType::FileName => truncate_str(&result.display, content_width),
-                    GlobalSearchType::Content => {
-                        if let (Some(line), Some(ref ctx)) = (result.line, &result.context) {
-                            let text = format!("{}:{} {}", result.display, line, ctx.trim());
-                            truncate_str(&text, content_width)
-                        } else {
-                            truncate_str(&result.display, content_width)
-                        }
-                    }
-                };
-
+                let display = truncate_str(&result.display, content_width);
                 buf.set_string(dialog.x + 2, row_y, &display, style);
             }
         }
 
         // Help line at bottom
         let help_y = dialog.y + dialog.height.saturating_sub(2);
-        let help = "[Enter] go to  [Esc] cancel";
+        let help = if self.state.global_search_type == GlobalSearchType::Content {
+            "[Enter] toggle/go to  [Esc] cancel"
+        } else {
+            "[Enter] go to  [Esc] cancel"
+        };
         buf.set_string(dialog.x + 2, help_y, help, colors::popup_dim());
 
         // Result count
-        if !self.state.global_results.is_empty() {
-            let count = format!(
-                " {}/{} ",
-                self.state.global_selected + 1,
-                self.state.global_results.len()
-            );
+        let (has_results, count_str) = if self.state.global_search_type == GlobalSearchType::Content
+        {
+            let total_files = self.state.grouped_results.len();
+            let total_matches: usize = self
+                .state
+                .grouped_results
+                .iter()
+                .map(|g| g.matches.len())
+                .sum();
+            if total_files > 0 {
+                (
+                    true,
+                    format!(" {} files, {} matches ", total_files, total_matches),
+                )
+            } else {
+                (false, String::new())
+            }
+        } else if !self.state.global_results.is_empty() {
+            (
+                true,
+                format!(
+                    " {}/{} ",
+                    self.state.global_selected + 1,
+                    self.state.global_results.len()
+                ),
+            )
+        } else {
+            (false, String::new())
+        };
+        if has_results {
             let count_x = dialog
                 .x
-                .saturating_add(dialog.width.saturating_sub(count.width() as u16 + 2));
+                .saturating_add(dialog.width.saturating_sub(count_str.width() as u16 + 2));
             if count_x > dialog.x + 2 {
-                buf.set_string(count_x, help_y, &count, colors::popup_success());
+                buf.set_string(count_x, help_y, &count_str, colors::popup_success());
+            }
+        }
+    }
+}
+
+impl GlobalSearchOverlay<'_> {
+    fn render_grouped_results(
+        &self,
+        buf: &mut Buffer,
+        dialog: Rect,
+        results_y: u16,
+        results_height: usize,
+        content_width: usize,
+        base: ratatui::style::Style,
+    ) {
+        use ratatui::style::Modifier;
+
+        if self.state.grouped_results.is_empty() {
+            if !self.state.query.is_empty() {
+                buf.set_string(dialog.x + 2, results_y, "No results", colors::popup_dim());
+            }
+            return;
+        }
+
+        let scroll = self.state.global_scroll_offset;
+        let mut flat_idx: usize = 0;
+        let mut rendered: usize = 0;
+
+        for group in &self.state.grouped_results {
+            if rendered >= results_height {
+                break;
+            }
+
+            // File header row
+            if flat_idx >= scroll {
+                let row_y = results_y + rendered as u16;
+                let is_selected = flat_idx == self.state.global_selected;
+                let style = if is_selected {
+                    colors::popup_selected()
+                } else {
+                    base
+                };
+
+                if is_selected {
+                    for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
+                        if let Some(cell) = buf.cell_mut((col, row_y)) {
+                            cell.set_style(style);
+                        }
+                    }
+                }
+
+                let indicator = if group.collapsed { "▶ " } else { "▼ " };
+                let match_label = if group.matches.len() == 1 {
+                    format!(" (1 match)")
+                } else {
+                    format!(" ({} matches)", group.matches.len())
+                };
+                let header = format!("{}{}{}", indicator, group.display, match_label);
+                let display = truncate_str(&header, content_width);
+                buf.set_string(
+                    dialog.x + 2,
+                    row_y,
+                    &display,
+                    style.add_modifier(Modifier::BOLD),
+                );
+
+                rendered += 1;
+            }
+            flat_idx += 1;
+
+            // Match lines (skip if collapsed)
+            if !group.collapsed {
+                for m in &group.matches {
+                    if rendered >= results_height {
+                        break;
+                    }
+                    if flat_idx >= scroll {
+                        let row_y = results_y + rendered as u16;
+                        let is_selected = flat_idx == self.state.global_selected;
+                        let style = if is_selected {
+                            colors::popup_selected()
+                        } else {
+                            base
+                        };
+
+                        if is_selected {
+                            for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
+                                if let Some(cell) = buf.cell_mut((col, row_y)) {
+                                    cell.set_style(style);
+                                }
+                            }
+                        }
+
+                        let line_text = match (m.line, &m.context) {
+                            (Some(ln), Some(ctx)) => format!("   {:>5}: {}", ln, ctx.trim()),
+                            (Some(ln), None) => format!("   {:>5}:", ln),
+                            (None, Some(ctx)) => format!("   {}", ctx.trim()),
+                            (None, None) => "   ...".to_string(),
+                        };
+                        let display = truncate_str(&line_text, content_width);
+                        buf.set_string(dialog.x + 2, row_y, &display, style);
+
+                        rendered += 1;
+                    }
+                    flat_idx += 1;
+                }
             }
         }
     }
@@ -254,5 +386,119 @@ mod tests {
             "popup body should have REVERSED, got {:?}",
             cell.modifier
         );
+    }
+
+    // ── Grouped content search rendering tests ─────────────────────────
+
+    use crate::render::search_bar::{ContentMatch, FileGroup};
+    use std::path::PathBuf;
+
+    fn make_content_state(groups: Vec<FileGroup>) -> SearchState {
+        let mut state = SearchState::new(SearchMode::Global);
+        state.global_search_type = GlobalSearchType::Content;
+        state.grouped_results = groups;
+        state
+    }
+
+    fn sample_groups() -> Vec<FileGroup> {
+        vec![
+            FileGroup {
+                path: PathBuf::from("src/app.rs"),
+                display: "src/app.rs".into(),
+                matches: vec![
+                    ContentMatch {
+                        line: Some(42),
+                        context: Some("// TODO: refactor".into()),
+                    },
+                    ContentMatch {
+                        line: Some(108),
+                        context: Some("// TODO: error handling".into()),
+                    },
+                ],
+                collapsed: false,
+            },
+            FileGroup {
+                path: PathBuf::from("src/config.rs"),
+                display: "src/config.rs".into(),
+                matches: vec![ContentMatch {
+                    line: Some(15),
+                    context: Some("// TODO: validate".into()),
+                }],
+                collapsed: false,
+            },
+        ]
+    }
+
+    #[test]
+    fn grouped_render_no_panic() {
+        let state = make_content_state(sample_groups());
+        let area = Rect::new(0, 0, 80, 24);
+        let mut buf = Buffer::empty(area);
+        let widget = GlobalSearchOverlay { state: &state };
+        widget.render(area, &mut buf);
+    }
+
+    #[test]
+    fn grouped_render_tiny_terminal_no_panic() {
+        let state = make_content_state(sample_groups());
+        for (w, h) in [(5, 3), (8, 5), (3, 3), (1, 1), (10, 6)] {
+            let area = Rect::new(0, 0, w, h);
+            let mut buf = Buffer::empty(area);
+            let widget = GlobalSearchOverlay { state: &state };
+            widget.render(area, &mut buf);
+        }
+    }
+
+    #[test]
+    fn grouped_render_collapsed_no_panic() {
+        let mut groups = sample_groups();
+        groups[0].collapsed = true;
+        let state = make_content_state(groups);
+        let area = Rect::new(0, 0, 80, 24);
+        let mut buf = Buffer::empty(area);
+        let widget = GlobalSearchOverlay { state: &state };
+        widget.render(area, &mut buf);
+    }
+
+    #[test]
+    fn grouped_render_empty_no_results_message() {
+        let mut state = make_content_state(vec![]);
+        state.query = "test".into();
+        let area = Rect::new(0, 0, 80, 24);
+        let mut buf = Buffer::empty(area);
+        let widget = GlobalSearchOverlay { state: &state };
+        widget.render(area, &mut buf);
+
+        // "No results" should appear somewhere in the buffer
+        let text: String = (0..area.width)
+            .filter_map(|x| {
+                let dialog = global_search_rect(area);
+                let y = dialog.y + 3;
+                buf.cell((x, y)).map(|c| c.symbol().to_string())
+            })
+            .collect();
+        assert!(
+            text.contains("No results"),
+            "Expected 'No results' in: {text}"
+        );
+    }
+
+    #[test]
+    fn grouped_render_optional_fields() {
+        let groups = vec![FileGroup {
+            path: PathBuf::from("x.rs"),
+            display: "x.rs".into(),
+            matches: vec![ContentMatch {
+                line: None,
+                context: None,
+            }],
+            collapsed: false,
+        }];
+        let state = make_content_state(groups);
+        let area = Rect::new(0, 0, 80, 24);
+        let mut buf = Buffer::empty(area);
+        let widget = GlobalSearchOverlay { state: &state };
+        widget.render(area, &mut buf);
+        // Should not panic
     }
 }
