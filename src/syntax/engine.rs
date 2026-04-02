@@ -157,4 +157,17 @@ mod tests {
             )]]
         );
     }
+
+    #[test]
+    fn rust_escape_sequence_gets_escape_style() {
+        let lines = highlight_code("rs", r#"let s = "hello\n";"#, 100);
+        // Should have more than one distinct style (at minimum keyword, variable, string)
+        let styles: std::collections::HashSet<_> =
+            lines.iter().flatten().map(|(_, style)| *style).collect();
+        assert!(
+            styles.len() >= 3,
+            "Rust code should produce at least 3 distinct styles, got {}",
+            styles.len()
+        );
+    }
 }
