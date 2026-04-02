@@ -10,3 +10,4 @@ web/.next/
 web/out/
 .playwright-mcp/
 *.png
+test_fixtures/
