@@ -16,6 +16,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: "1.90.0"
           components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
@@ -31,6 +32,43 @@ jobs:
 
       - name: cargo fmt
         run: cargo fmt --check
+
+  pedantic:
+    name: Pedantic (Advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90.0"
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo clippy --pedantic
+        run: |
+          cargo clippy -- -W clippy::pedantic \
+            -A clippy::module_name_repetitions \
+            -A clippy::must_use_candidate \
+            -A clippy::missing_errors_doc \
+            -A clippy::missing_panics_doc \
+            -A clippy::match_same_arms \
+            -A clippy::too_many_lines \
+            -A clippy::cast_possible_truncation \
+            -A clippy::cast_sign_loss \
+            -A clippy::cast_precision_loss \
+            -A clippy::manual_let_else \
+            -A clippy::similar_names \
+            -A clippy::uninlined_format_args \
+            -A clippy::return_self_not_must_use \
+            -A clippy::if_same_then_else \
+            -A clippy::useless_format \
+            -A clippy::derivable_impls \
+            -A clippy::map_unwrap_or \
+            -A clippy::needless_raw_string_hashes
 
   security:
     name: Security Audit
@@ -49,7 +87,7 @@ jobs:
       - name: Install MSRV toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.90"
+          toolchain: "1.90.0"
 
       - uses: Swatinem/rust-cache@v2
 

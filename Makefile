@@ -1,4 +1,24 @@
-.PHONY: ci fmt check clippy test fix install-hooks release
+.PHONY: ci fmt check clippy clippy-pedantic clippy-fix test fix install-hooks release
+
+PEDANTIC_ALLOW = \
+	-A clippy::module_name_repetitions \
+	-A clippy::must_use_candidate \
+	-A clippy::missing_errors_doc \
+	-A clippy::missing_panics_doc \
+	-A clippy::match_same_arms \
+	-A clippy::too_many_lines \
+	-A clippy::cast_possible_truncation \
+	-A clippy::cast_sign_loss \
+	-A clippy::cast_precision_loss \
+	-A clippy::manual_let_else \
+	-A clippy::similar_names \
+	-A clippy::uninlined_format_args \
+	-A clippy::return_self_not_must_use \
+	-A clippy::if_same_then_else \
+	-A clippy::useless_format \
+	-A clippy::derivable_impls \
+	-A clippy::map_unwrap_or \
+	-A clippy::needless_raw_string_hashes
 
 ## Run all CI checks (mirrors pre-push hook)
 ci: fmt check clippy test
@@ -16,6 +36,14 @@ check:
 ## Lint with clippy
 clippy:
 	cargo clippy --quiet -- -D warnings
+
+## Advisory pedantic lint sweep (non-blocking style feedback)
+clippy-pedantic:
+	cargo clippy --quiet -- -W clippy::pedantic $(PEDANTIC_ALLOW)
+
+## Apply machine-fixable Clippy suggestions
+clippy-fix:
+	cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
 
 ## Run tests
 test:

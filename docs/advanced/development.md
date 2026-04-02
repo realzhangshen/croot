@@ -4,7 +4,7 @@ Contributing to croot.
 
 ## Prerequisites
 
-- [Rust](https://rustup.rs/) 1.88+
+- [Rust](https://rustup.rs/) 1.90+ (the repo pins `1.90.0` via `rust-toolchain.toml`)
 - Git
 
 ## Setup
@@ -28,15 +28,21 @@ Every new feature and bug fix starts with a test.
 ## Make Commands
 
 ```bash
-make ci              # Run all CI checks (fmt, check, clippy, test)
-make fix             # Auto-format code
-make install-hooks   # Set up git hooks
+make ci               # Run blocking CI checks (fmt, check, clippy, test)
+make clippy-pedantic  # Advisory pedantic sweep with low-signal style lints filtered out
+make clippy-fix       # Apply machine-fixable Clippy suggestions
+make fix              # Auto-format code
+make install-hooks    # Set up git hooks
 ```
+
+`make ci` is the release gate. `make clippy-pedantic` is intentionally advisory
+and filters out the noisiest style-only lints so new Clippy releases do not block
+day-to-day work or releases.
 
 ## Git Hooks
 
 - **Pre-commit**: runs `cargo fmt --check` (sub-second)
-- **Pre-push**: mirrors CI with all four checks (fmt, check, clippy, test)
+- **Pre-push**: mirrors the blocking CI checks (fmt, check, clippy, test)
 
 Both are skippable with `--no-verify`.
 
@@ -70,4 +76,6 @@ src/
 make release VERSION=x.y.z
 ```
 
-This runs all CI checks, updates the changelog, creates a git tag, and pushes it. The tag triggers GitHub Actions to build binaries and generate the demo GIF.
+Before `make release`, update `Cargo.toml` and `CHANGELOG.md`, then run `make ci`.
+`make release` validates the version/changelog entry, creates the git tag, and pushes it.
+The tag triggers GitHub Actions to build binaries and generate the demo GIF.

@@ -36,8 +36,9 @@ preparation.
 ### Step 1: Ensure all changes are merged and CI is green
 
 ```bash
-make ci        # local CI: fmt, check, clippy, test
-git push       # push to main, wait for CI to pass
+make ci               # local blocking CI: fmt, check, clippy, test
+make clippy-pedantic  # optional advisory pedantic sweep (filtered for high-signal warnings)
+git push              # push to main, wait for CI to pass
 ```
 
 ### Step 2: Update version in Cargo.toml

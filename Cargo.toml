@@ -1,6 +1,6 @@
 [package]
 name = "croot"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2021"
 rust-version = "1.90"
 description = "A lightweight terminal file tree sidebar"
@@ -64,13 +64,20 @@ harness = false
 unsafe_code = "forbid"
 
 [lints.clippy]
-pedantic = { level = "warn", priority = -1 }
+## Pedantic runs are advisory (`make clippy-pedantic` / CI advisory job).
+## Keep low-signal style churn out of the blocking lint gate.
 module_name_repetitions = "allow"
 must_use_candidate = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
-## similar_names — removed: no warnings remain
-## unnecessary_wraps — removed: no warnings remain
+similar_names = "allow"
+uninlined_format_args = "allow"
+return_self_not_must_use = "allow"
+if_same_then_else = "allow"
+useless_format = "allow"
+derivable_impls = "allow"
+map_unwrap_or = "allow"
+needless_raw_string_hashes = "allow"
 match_same_arms = "allow"
 too_many_lines = "allow"
 cast_possible_truncation = "allow"

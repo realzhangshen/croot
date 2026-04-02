@@ -7,11 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-04-02
+
+### Added
+- VS Code-style grouped content search results for ripgrep matches
+- Configurable `search.open_mode` to open search results in an external editor or the terminal editor
+- `[syntax]` config section with per-token ANSI color customization (`[syntax.tokens.*]`)
+
 ### Changed
+- Press `Enter` in global search to open the selected result in the editor; `Tab` now navigates to the file in the tree
+- Content search now uses `rg --json` for more robust parsing and grouped per-file matches
 - Replace syntect/two-face with tree-sitter for ANSI-native syntax highlighting — code colors now follow the terminal theme instead of using fixed RGB palettes
-- Add `[syntax]` config section with per-token ANSI color customization (`[syntax.tokens.*]`)
-- Supported languages reduced to Rust, JavaScript, TypeScript/TSX, JSON, and Markdown (more grammars planned); legacy `preview.syntax_highlight` toggle still works as a fallback
+- Supported languages are currently Rust, JavaScript, TypeScript/TSX, JSON, and Markdown; legacy `preview.syntax_highlight` toggle still works as a fallback
 - Remove `syntect`, `two-face`, `bincode`, and `onig` dependencies
+
+### Fixed
+- Shift+letter keybinding normalization no longer drops the `SHIFT` modifier
+- Preview results are discarded when stale, preventing text preview desync after selection changes
 
 ## [0.5.3] - 2026-03-18
 
@@ -246,7 +258,8 @@ _Release-only commit (CI/packaging fix). No user-facing changes._
 - Git ignored file display: removed redundant status marker, fixed directory lookup
 - macOS x86_64 CI build using correct runner (macos-14)
 
-[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/realzhangshen/croot/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/realzhangshen/croot/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/realzhangshen/croot/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/realzhangshen/croot/compare/v0.5.0...v0.5.1
