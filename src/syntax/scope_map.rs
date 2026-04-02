@@ -7,6 +7,7 @@ use super::semantic::SemanticToken;
 const SCOPE_RULES: &[(&str, SemanticToken)] = &[
     // keyword (specific before general)
     ("keyword.operator", SemanticToken::Operator),
+    ("keyword.control.directive", SemanticToken::Macro),
     ("keyword", SemanticToken::Keyword),
     // storage → Keyword
     ("storage", SemanticToken::Keyword),
@@ -20,6 +21,12 @@ const SCOPE_RULES: &[(&str, SemanticToken)] = &[
     // comment
     ("comment", SemanticToken::Comment),
     // entity.name (specific before general)
+    ("entity.name.function.method", SemanticToken::Method),
+    (
+        "entity.name.function.constructor",
+        SemanticToken::Constructor,
+    ),
+    ("entity.name.function.macro", SemanticToken::Macro),
     ("entity.name.function", SemanticToken::Function),
     ("entity.name.type", SemanticToken::Type),
     ("entity.name.tag", SemanticToken::Tag),
@@ -30,6 +37,8 @@ const SCOPE_RULES: &[(&str, SemanticToken)] = &[
     // variable (specific before general)
     ("variable.parameter", SemanticToken::Parameter),
     ("variable.function", SemanticToken::Function),
+    ("variable.other.property", SemanticToken::Property),
+    ("variable.other.member", SemanticToken::Property),
     ("variable", SemanticToken::Variable),
     // support (specific before general)
     ("support.function", SemanticToken::Function),
@@ -38,6 +47,8 @@ const SCOPE_RULES: &[(&str, SemanticToken)] = &[
     ("support.constant", SemanticToken::Constant),
     ("support.module", SemanticToken::Module),
     ("support", SemanticToken::Variable),
+    // preprocessor / macro directives
+    ("meta.preprocessor", SemanticToken::Macro),
     // punctuation (specific before general)
     ("punctuation.definition.comment", SemanticToken::Comment),
     ("punctuation.definition.string", SemanticToken::String),
@@ -130,6 +141,10 @@ mod tests {
     fn entity_name_mappings() {
         check("entity.name.function", Function);
         check("entity.name.function.rust", Function);
+        check("entity.name.function.method", Method);
+        check("entity.name.function.method.python", Method);
+        check("entity.name.function.constructor", Constructor);
+        check("entity.name.function.macro", Macro);
         check("entity.name.type", Type);
         check("entity.name.type.class", Type);
         check("entity.name.tag", Tag);
@@ -148,6 +163,9 @@ mod tests {
     #[test]
     fn variable_mappings() {
         check("variable.other", Variable);
+        check("variable.other.property", Property);
+        check("variable.other.property.js", Property);
+        check("variable.other.member", Property);
         check("variable.parameter", Parameter);
         check("variable.language", Variable);
         check("variable.function", Function);
@@ -180,6 +198,13 @@ mod tests {
         check("markup.italic", Tag);
         check("markup.raw", String);
         check("markup.raw.inline", String);
+    }
+
+    #[test]
+    fn macro_and_preprocessor_mappings() {
+        check("meta.preprocessor", Macro);
+        check("meta.preprocessor.include", Macro);
+        check("keyword.control.directive", Macro);
     }
 
     #[test]

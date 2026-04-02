@@ -96,6 +96,7 @@ fn highlight_with_syntax(
             break;
         }
 
+        // PERF: allocates per line; could reuse a buffer or work with byte slices
         let line_with_nl = format!("{}\n", line);
         let ops = match parse_state.parse_line(&line_with_nl, ss) {
             Ok(ops) => ops,
@@ -125,6 +126,7 @@ fn highlight_with_syntax(
                 continue;
             }
 
+            // PERF: build_string() allocates per token; could cache Scope→SemanticToken
             let top_scope = scope_stack
                 .as_slice()
                 .last()
@@ -222,6 +224,16 @@ mod tests {
         assert!(
             lines.iter().flatten().any(|(_, style)| style.fg.is_some()),
             ".py file should be highlighted"
+        );
+    }
+
+    #[test]
+    fn highlight_file_detects_makefile_by_name() {
+        let path = std::path::PathBuf::from("Makefile");
+        let lines = highlight_file(&path, "all:\n\techo hello", 100);
+        assert!(
+            lines.iter().flatten().any(|(_, style)| style.fg.is_some()),
+            "Makefile should be highlighted by filename"
         );
     }
 
