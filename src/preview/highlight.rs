@@ -42,12 +42,23 @@ mod tests {
     fn supported_extensions_are_highlighted() {
         let cases = [
             ("main.rs", "fn main() { println!(\"hello\"); }"),
-            (
-                "Component.tsx",
-                "type Props = { title: string }\nexport function Card(_: Props) {}",
-            ),
+            ("app.tsx", "export const App = () => <div />;"),
             ("script.js", "function greet(name) { return name; }"),
             ("data.json", "{\"key\": true, \"count\": 3}"),
+            ("main.py", "def hello():\n    print('hi')"),
+            ("main.go", "func main() { fmt.Println(\"hi\") }"),
+            ("main.c", "int main() { return 0; }"),
+            ("main.cpp", "int main() { return 0; }"),
+            (
+                "Main.java",
+                "class Main { public static void main(String[] a) {} }",
+            ),
+            ("style.css", "body { color: red; }"),
+            ("page.html", "<html><body>hello</body></html>"),
+            ("config.yaml", "key: value\nlist:\n  - item"),
+            ("config.xml", "<config><key>value</key></config>"),
+            ("script.sh", "#!/bin/bash\necho hello"),
+            ("query.sql", "SELECT * FROM users WHERE id = 1;"),
         ];
         for (filename, content) in cases {
             let path = PathBuf::from(filename);
@@ -67,7 +78,15 @@ mod tests {
             ("tsx", "export const App = () => <div />;"),
             ("javascript", "const x = 1;"),
             ("json", "{\"ok\": true}"),
-            ("md", "# Heading"),
+            ("py", "def hello(): pass"),
+            ("go", "func main() {}"),
+            ("c", "int main() { return 0; }"),
+            ("java", "class Main {}"),
+            ("css", "body { color: red; }"),
+            ("html", "<html></html>"),
+            ("yaml", "key: value"),
+            ("sql", "SELECT 1;"),
+            ("sh", "echo hello"),
         ];
         for (token, code) in cases {
             let result = highlight_code(token, code, 100);
