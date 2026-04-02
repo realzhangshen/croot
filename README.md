@@ -9,7 +9,7 @@ A terminal file explorer that brings the VS Code sidebar experience to your comm
 - **Git status integration** — see modified, staged, and untracked files at a glance
 - **Git diff gutter** — see added/modified/removed lines in the preview panel
 - **Real-time filesystem watching** — tree auto-refreshes on file changes
-- **Syntax-highlighted preview** — preview files with full syntax highlighting (150+ languages)
+- **ANSI-native syntax-highlighted preview** — preview Rust, JavaScript, TypeScript, JSON, and Markdown with colors that follow your terminal theme
 - **Bracketed paste protection** — prevents accidental actions from pasted text
 
 ## Pair with cmux
@@ -46,6 +46,7 @@ Config file: `~/.config/croot/config.toml` (or `$XDG_CONFIG_HOME/croot/config.to
 
 The built-in default palette is ANSI-only and tuned for a light, higher-contrast popup/input experience inspired by Cursor Light in Ghostty.
 Add a `[colors]` section only if you want to override those defaults for your own terminal theme.
+Syntax highlighting also uses ANSI/indexed colors via `[syntax.tokens.*]`, so code colors follow the terminal theme instead of a fixed RGB code theme.
 
 ## Development
 

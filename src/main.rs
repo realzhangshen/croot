@@ -4,7 +4,7 @@ use std::process;
 
 use clap::{CommandFactory, Parser, Subcommand};
 use croot::app::App;
-use croot::{config, render};
+use croot::{config, render, syntax};
 use crossterm::{
     event::{
         DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
@@ -94,6 +94,7 @@ async fn main() -> anyhow::Result<()> {
     // Load config before terminal setup so we know whether to enable mouse
     let cfg = config::Config::load();
     render::colors::init(&cfg.colors);
+    syntax::theme::init(&cfg.syntax);
     let mouse_enabled = cfg.mouse.enabled;
 
     // Terminal setup

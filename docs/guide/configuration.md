@@ -33,11 +33,54 @@ auto_preview = false      # Auto-open preview on start
 preview_delay_ms = 150    # Debounce delay before updating preview
 show_line_numbers = true  # Show line numbers in preview
 max_file_size_kb = 1024   # Max file size to preview (KB)
-syntax_highlight = true   # Enable syntax highlighting
 split_ratio = 0.5         # Tree/preview width ratio (0.0–1.0)
 render_markdown = true    # Render Markdown or show raw
 close_on_exit = true      # Close preview when quitting
 ```
+
+`preview.syntax_highlight` is kept as a legacy fallback, but new syntax highlighting settings live in `[syntax]`.
+
+### `[syntax]` — ANSI Syntax Highlighting
+
+Syntax token colors are ANSI-only: `reset`, ANSI 16 names, or `indexed:N`. Hex/RGB is intentionally rejected so code colors keep adapting to your terminal theme.
+
+```toml
+[syntax]
+enabled = true
+
+[syntax.tokens.text]
+fg = "reset"
+
+[syntax.tokens.keyword]
+fg = "magenta"
+bold = true
+
+[syntax.tokens.type]
+fg = "cyan"
+
+[syntax.tokens.comment]
+fg = "dark_gray"
+italic = true
+```
+
+Available semantic tokens in v1 include:
+- `text`
+- `keyword`
+- `type`
+- `type_builtin`
+- `string`
+- `number`
+- `comment`
+- `function`
+- `method`
+- `variable`
+- `parameter`
+- `property`
+- `operator`
+- `punctuation`
+- `module`
+- `tag`
+- `attribute`
 
 ### `[editor]` — Editor Command
 

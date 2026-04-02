@@ -7,5 +7,6 @@ pub mod input;
 pub mod layout;
 pub mod preview;
 pub mod render;
+pub mod syntax;
 pub mod tree;
 pub mod watcher;

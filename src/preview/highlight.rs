@@ -1,144 +1,33 @@
 use std::path::Path;
-use std::sync::OnceLock;
 
-use ratatui::style::{Color, Modifier, Style};
-use syntect::highlighting::{Theme, ThemeSet};
-use syntect::parsing::SyntaxSet;
+use crate::syntax::engine;
 
 use super::state::StyledSpan;
-
-static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
-static THEME_DARK: OnceLock<Theme> = OnceLock::new();
-
-fn syntax_set() -> &'static SyntaxSet {
-    SYNTAX_SET.get_or_init(two_face::syntax::extra_newlines)
-}
-
-fn theme_dark() -> &'static Theme {
-    THEME_DARK.get_or_init(|| {
-        let ts = ThemeSet::load_defaults();
-        ts.themes["base16-ocean.dark"].clone()
-    })
-}
-
-/// Convert syntect foreground color to ratatui Style.
-fn syntect_style_to_ratatui(style: syntect::highlighting::Style) -> Style {
-    let fg = Color::Rgb(style.foreground.r, style.foreground.g, style.foreground.b);
-    let mut s = Style::default().fg(fg);
-    if style
-        .font_style
-        .contains(syntect::highlighting::FontStyle::BOLD)
-    {
-        s = s.add_modifier(Modifier::BOLD);
-    }
-    if style
-        .font_style
-        .contains(syntect::highlighting::FontStyle::ITALIC)
-    {
-        s = s.add_modifier(Modifier::ITALIC);
-    }
-    s
-}
 
 /// Highlight file content with syntax coloring.
 ///
 /// Returns pre-styled lines ready for rendering.
 /// `max_lines` caps how many lines we process (performance guard).
 pub fn highlight_file(path: &Path, content: &str, max_lines: usize) -> Vec<Vec<StyledSpan>> {
-    let ss = syntax_set();
-    let theme = theme_dark();
-
-    // Find syntax by extension, then by first line
-    let syntax = ss
-        .find_syntax_for_file(path)
-        .ok()
-        .flatten()
-        .or_else(|| {
-            content
-                .lines()
-                .next()
-                .and_then(|first| ss.find_syntax_by_first_line(first))
-        })
-        .unwrap_or_else(|| ss.find_syntax_plain_text());
-
-    // If no real syntax was found, use terminal-native colors instead of theme's muted fg
-    if syntax.name == "Plain Text" {
-        return plain_lines(content, max_lines);
-    }
-
-    let mut highlighter = syntect::easy::HighlightLines::new(syntax, theme);
-    let mut result = Vec::with_capacity(max_lines);
-
-    for (i, line) in content.lines().enumerate() {
-        if i >= max_lines {
-            break;
-        }
-
-        match highlighter.highlight_line(line, ss) {
-            Ok(ranges) => {
-                let spans: Vec<StyledSpan> = ranges
-                    .into_iter()
-                    .map(|(style, text)| (text.to_string(), syntect_style_to_ratatui(style)))
-                    .collect();
-                result.push(spans);
-            }
-            Err(_) => {
-                // Fallback: plain text for this line
-                result.push(vec![(line.to_string(), Style::default())]);
-            }
-        }
-    }
-
-    result
+    engine::highlight_file(path, content, max_lines)
 }
 
 /// Highlight a code snippet by language name (for use in Markdown fenced code blocks).
 ///
 /// Falls back to plain text if the language is not recognized.
 pub fn highlight_code(lang: &str, code: &str, max_lines: usize) -> Vec<Vec<StyledSpan>> {
-    let ss = syntax_set();
-    let theme = theme_dark();
-
-    let syntax = ss
-        .find_syntax_by_token(lang)
-        .unwrap_or_else(|| ss.find_syntax_plain_text());
-
-    let mut highlighter = syntect::easy::HighlightLines::new(syntax, theme);
-    let mut result = Vec::with_capacity(max_lines);
-
-    for (i, line) in code.lines().enumerate() {
-        if i >= max_lines {
-            break;
-        }
-        match highlighter.highlight_line(line, ss) {
-            Ok(ranges) => {
-                let spans: Vec<StyledSpan> = ranges
-                    .into_iter()
-                    .map(|(style, text)| (text.to_string(), syntect_style_to_ratatui(style)))
-                    .collect();
-                result.push(spans);
-            }
-            Err(_) => {
-                result.push(vec![(line.to_string(), Style::default())]);
-            }
-        }
-    }
-
-    result
+    engine::highlight_code(lang, code, max_lines)
 }
 
 /// Render plain text without syntax highlighting.
 pub fn plain_lines(content: &str, max_lines: usize) -> Vec<Vec<StyledSpan>> {
-    content
-        .lines()
-        .take(max_lines)
-        .map(|line| vec![(line.to_string(), Style::default())])
-        .collect()
+    engine::plain_lines(content, max_lines)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::style::Style;
     use std::path::PathBuf;
 
     /// Helper: returns true if the result contains any non-default styling.
@@ -150,17 +39,15 @@ mod tests {
     }
 
     #[test]
-    fn new_extensions_recognized_by_highlight_file() {
+    fn supported_extensions_are_highlighted() {
         let cases = [
-            ("Cargo.toml", "[package]\nname = \"foo\""),
-            ("Component.tsx", "const App = () => <div />;"),
-            ("Dockerfile", "FROM rust:latest\nRUN cargo build"),
-            ("main.zig", "const std = @import(\"std\");"),
+            ("main.rs", "fn main() { println!(\"hello\"); }"),
             (
-                "flake.nix",
-                "{ inputs.nixpkgs.url = \"github:NixOS/nixpkgs\"; }",
+                "Component.tsx",
+                "type Props = { title: string }\nexport function Card(_: Props) {}",
             ),
-            ("App.vue", "<template><div /></template>"),
+            ("script.js", "function greet(name) { return name; }"),
+            ("data.json", "{\"key\": true, \"count\": 3}"),
         ];
         for (filename, content) in cases {
             let path = PathBuf::from(filename);
@@ -173,14 +60,14 @@ mod tests {
     }
 
     #[test]
-    fn new_tokens_recognized_by_highlight_code() {
+    fn supported_tokens_are_highlighted() {
         let cases = [
-            ("toml", "[package]\nname = \"foo\""),
-            ("tsx", "const App = () => <div />;"),
-            ("dockerfile", "FROM rust:latest"),
-            ("zig", "const std = @import(\"std\");"),
-            ("nix", "{ pkgs ? import <nixpkgs> {} }: pkgs"),
-            ("vue", "<template><div /></template>"),
+            ("rs", "fn main() { println!(\"hello\"); }"),
+            ("ts", "type User = string;"),
+            ("tsx", "export const App = () => <div />;"),
+            ("javascript", "const x = 1;"),
+            ("json", "{\"ok\": true}"),
+            ("md", "# Heading"),
         ];
         for (token, code) in cases {
             let result = highlight_code(token, code, 100);
@@ -204,29 +91,9 @@ mod tests {
     #[test]
     fn unknown_token_falls_back_to_plain_text() {
         let result = highlight_code("unknownlang12345", "hello world", 100);
-        // plain_text path is not taken by highlight_code (it still uses the theme),
-        // but the token lookup falls back to Plain Text syntax, which produces
-        // uniform styling — check it doesn't panic and returns content.
-        assert_eq!(result.len(), 1);
-        assert!(!result[0].is_empty());
-    }
-
-    #[test]
-    fn existing_languages_still_highlighted() {
-        let cases = [
-            ("main.rs", "fn main() { println!(\"hello\"); }"),
-            ("script.py", "def hello():\n    print('hi')"),
-            ("app.js", "const x = () => {};"),
-            ("data.json", "{\"key\": \"value\"}"),
-            ("config.yaml", "key: value\nlist:\n  - item"),
-        ];
-        for (filename, content) in cases {
-            let path = PathBuf::from(filename);
-            let result = highlight_file(&path, content, 100);
-            assert!(
-                has_highlighting(&result),
-                "{filename} should still be syntax-highlighted (regression)"
-            );
-        }
+        assert_eq!(
+            result,
+            vec![vec![("hello world".to_string(), Style::default())]]
+        );
     }
 }

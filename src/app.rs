@@ -1465,7 +1465,7 @@ impl App {
         let tx = preview_tx.clone();
         let delay = Duration::from_millis(self.config.preview.preview_delay_ms);
         let max_file_size_kb = self.config.preview.max_file_size_kb;
-        let syntax_highlight = self.config.preview.syntax_highlight;
+        let syntax_highlight = self.config.syntax_enabled();
         let render_markdown = self.preview_state.render_markdown;
         let preview_width = self.preview_content_width as usize;
         let image_preview = self.config.preview.image_preview;

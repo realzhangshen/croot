@@ -6,6 +6,8 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 
+use crate::syntax::theme::SyntaxConfig;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GeneralConfig {
     #[serde(default = "default_true")]
@@ -38,6 +40,8 @@ pub struct Config {
     pub search: SearchConfig,
     #[serde(default)]
     pub colors: ColorConfig,
+    #[serde(default)]
+    pub syntax: SyntaxConfig,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -594,6 +598,10 @@ impl Default for PreviewConfig {
 }
 
 impl Config {
+    pub fn syntax_enabled(&self) -> bool {
+        self.syntax.enabled.unwrap_or(self.preview.syntax_highlight)
+    }
+
     /// Load config from ~/.config/croot/config.toml, or return defaults.
     pub fn load() -> Self {
         let path = config_path();
@@ -670,6 +678,20 @@ auto_preview = false
 # render_markdown = true
 # image_preview = true
 # show_git_diff = true
+
+[syntax]
+# enabled = true
+#
+# [syntax.tokens.keyword]
+# fg = "magenta"
+# bold = true
+#
+# [syntax.tokens.type]
+# fg = "cyan"
+#
+# [syntax.tokens.comment]
+# fg = "dark_gray"
+# italic = true
 
 [editor]
 # command = "vim"    # Falls back to $VISUAL, $EDITOR, vi
@@ -1035,6 +1057,37 @@ use_trash = false
 
         assert!(template.contains("[colors]"));
         assert!(template.contains("popup_bg"));
+    }
+
+    #[test]
+    fn default_template_mentions_syntax_section() {
+        let template = Config::default_toml_with_comments();
+
+        assert!(template.contains("[syntax]"));
+        assert!(template.contains("[syntax.tokens.keyword]"));
+    }
+
+    #[test]
+    fn syntax_enabled_uses_new_section_when_set() {
+        let content = r#"
+[preview]
+syntax_highlight = false
+
+[syntax]
+enabled = true
+"#;
+        let cfg: Config = toml::from_str(content).unwrap();
+        assert!(cfg.syntax_enabled());
+    }
+
+    #[test]
+    fn syntax_enabled_falls_back_to_legacy_preview_toggle() {
+        let content = r#"
+[preview]
+syntax_highlight = false
+"#;
+        let cfg: Config = toml::from_str(content).unwrap();
+        assert!(!cfg.syntax_enabled());
     }
 
     #[test]
