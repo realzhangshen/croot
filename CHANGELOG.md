@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Replace syntect/two-face with tree-sitter for ANSI-native syntax highlighting — code colors now follow the terminal theme instead of using fixed RGB palettes
+- Add `[syntax]` config section with per-token ANSI color customization (`[syntax.tokens.*]`)
+- Supported languages reduced to Rust, JavaScript, TypeScript/TSX, JSON, and Markdown (more grammars planned); legacy `preview.syntax_highlight` toggle still works as a fallback
+- Remove `syntect`, `two-face`, `bincode`, and `onig` dependencies
+
 ## [0.5.3] - 2026-03-18
 
 ### Added

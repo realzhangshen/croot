@@ -80,8 +80,11 @@ fn highlight_with_config(
         }
     }
 
+    // Push the final in-progress line unless we already hit max_lines.
+    // The degenerate `source == "\n"` case pushes an empty trailing line
+    // so that a lone newline produces one (empty) line rather than zero.
     if lines.len() < max_lines
-        && (!current_line.is_empty() || source.ends_with('\n') && source == "\n")
+        && (!current_line.is_empty() || (source.ends_with('\n') && source == "\n"))
     {
         lines.push(current_line);
     }
