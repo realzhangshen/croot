@@ -203,8 +203,9 @@ pub fn parse_ansi_color(input: &str) -> Result<Color, &'static str> {
 
 fn default_theme() -> HashMap<SemanticToken, AnsiStyleSpec> {
     use SemanticToken::{
-        Attribute, Comment, Function, Keyword, Method, Module, Number, Operator, Parameter,
-        Property, Punctuation, String, Tag, Text, Type, TypeBuiltin, Variable,
+        Attribute, Comment, Constant, Constructor, Escape, Function, Keyword, Lifetime, Macro,
+        Method, Module, Number, Operator, Parameter, Property, Punctuation, String, Tag, Text,
+        Type, TypeBuiltin, Variable,
     };
 
     HashMap::from([
@@ -219,21 +220,41 @@ fn default_theme() -> HashMap<SemanticToken, AnsiStyleSpec> {
             AnsiStyleSpec::plain().with_fg(Color::LightCyan),
         ),
         (String, AnsiStyleSpec::plain().with_fg(Color::Green)),
+        (Escape, AnsiStyleSpec::plain().with_fg(Color::LightGreen)),
         (Number, AnsiStyleSpec::plain().with_fg(Color::Yellow)),
+        (Constant, AnsiStyleSpec::plain().with_fg(Color::LightYellow)),
         (
             Comment,
             AnsiStyleSpec::plain().with_fg(Color::DarkGray).italic(),
         ),
         (Function, AnsiStyleSpec::plain().with_fg(Color::Blue)),
         (Method, AnsiStyleSpec::plain().with_fg(Color::LightBlue)),
-        (Variable, AnsiStyleSpec::plain().with_fg(Color::Reset)),
-        (Parameter, AnsiStyleSpec::plain().with_fg(Color::White)),
+        (
+            Constructor,
+            AnsiStyleSpec::plain().with_fg(Color::LightCyan).bold(),
+        ),
+        (Variable, AnsiStyleSpec::plain().with_fg(Color::White)),
+        (
+            Parameter,
+            AnsiStyleSpec::plain().with_fg(Color::White).italic(),
+        ),
         (Property, AnsiStyleSpec::plain().with_fg(Color::LightBlue)),
-        (Operator, AnsiStyleSpec::plain().with_fg(Color::Reset)),
-        (Punctuation, AnsiStyleSpec::plain().with_fg(Color::DarkGray)),
+        (
+            Operator,
+            AnsiStyleSpec::plain().with_fg(Color::LightMagenta),
+        ),
+        (Punctuation, AnsiStyleSpec::plain().with_fg(Color::Gray)),
         (Module, AnsiStyleSpec::plain().with_fg(Color::Blue).bold()),
         (Tag, AnsiStyleSpec::plain().with_fg(Color::Magenta)),
-        (Attribute, AnsiStyleSpec::plain().with_fg(Color::Yellow)),
+        (
+            Attribute,
+            AnsiStyleSpec::plain().with_fg(Color::Yellow).italic(),
+        ),
+        (Macro, AnsiStyleSpec::plain().with_fg(Color::LightRed)),
+        (
+            Lifetime,
+            AnsiStyleSpec::plain().with_fg(Color::Red).italic(),
+        ),
     ])
 }
 
@@ -276,6 +297,31 @@ mod tests {
         let spec = theme.spec_for(SemanticToken::Type);
         assert_eq!(spec.fg, Some(Color::LightBlue));
         assert!(spec.bold);
+    }
+
+    #[test]
+    fn default_theme_covers_all_tokens_with_distinct_styles() {
+        let theme = default_theme();
+        // Every token should have an entry
+        for token in SemanticToken::ALL {
+            assert!(
+                theme.contains_key(&token),
+                "default theme missing entry for {:?}",
+                token
+            );
+        }
+        // Every non-Text token should have fg or a modifier (not completely plain)
+        for token in SemanticToken::ALL {
+            if token == SemanticToken::Text {
+                continue;
+            }
+            let spec = theme[&token];
+            assert!(
+                spec.fg.is_some() || spec.bold || spec.italic || spec.underline,
+                "{:?} has no visual distinction from plain text",
+                token
+            );
+        }
     }
 
     #[test]
