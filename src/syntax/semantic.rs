@@ -7,10 +7,13 @@ pub enum SemanticToken {
     Type,
     TypeBuiltin,
     String,
+    Escape,
     Number,
+    Constant,
     Comment,
     Function,
     Method,
+    Constructor,
     Variable,
     Parameter,
     Property,
@@ -19,19 +22,24 @@ pub enum SemanticToken {
     Module,
     Tag,
     Attribute,
+    Macro,
+    Lifetime,
 }
 
 impl SemanticToken {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 22] = [
         Self::Text,
         Self::Keyword,
         Self::Type,
         Self::TypeBuiltin,
         Self::String,
+        Self::Escape,
         Self::Number,
+        Self::Constant,
         Self::Comment,
         Self::Function,
         Self::Method,
+        Self::Constructor,
         Self::Variable,
         Self::Parameter,
         Self::Property,
@@ -40,6 +48,8 @@ impl SemanticToken {
         Self::Module,
         Self::Tag,
         Self::Attribute,
+        Self::Macro,
+        Self::Lifetime,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -61,6 +71,11 @@ impl SemanticToken {
             Self::Module => "module",
             Self::Tag => "tag",
             Self::Attribute => "attribute",
+            Self::Escape => "escape",
+            Self::Constant => "constant",
+            Self::Constructor => "constructor",
+            Self::Macro => "macro",
+            Self::Lifetime => "lifetime",
         }
     }
 }
@@ -87,6 +102,11 @@ impl FromStr for SemanticToken {
             "module" => Ok(Self::Module),
             "tag" => Ok(Self::Tag),
             "attribute" => Ok(Self::Attribute),
+            "escape" => Ok(Self::Escape),
+            "constant" => Ok(Self::Constant),
+            "constructor" => Ok(Self::Constructor),
+            "macro" | "macro_call" | "macro-call" => Ok(Self::Macro),
+            "lifetime" => Ok(Self::Lifetime),
             _ => Err(()),
         }
     }
@@ -113,6 +133,20 @@ mod tests {
 
     #[test]
     fn rejects_unknown_token() {
-        assert!("constructor".parse::<SemanticToken>().is_err());
+        assert!("unknown_token_xyz".parse::<SemanticToken>().is_err());
+    }
+
+    #[test]
+    fn new_tokens_round_trip() {
+        // These tokens are new — verify they parse and stringify
+        for name in ["escape", "constant", "constructor", "macro", "lifetime"] {
+            let token: SemanticToken = name.parse().expect(name);
+            assert_eq!(token.as_str(), name);
+        }
+    }
+
+    #[test]
+    fn all_array_has_22_tokens() {
+        assert_eq!(SemanticToken::ALL.len(), 22);
     }
 }

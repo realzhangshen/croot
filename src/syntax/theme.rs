@@ -282,7 +282,7 @@ mod tests {
     fn theme_from_config_warns_on_unknown_tokens_and_hex() {
         let mut tokens = BTreeMap::new();
         tokens.insert(
-            "constructor".to_string(),
+            "aaa_unknown_token".to_string(),
             SyntaxTokenConfig {
                 fg: Some("#ff0000".to_string()),
                 ..SyntaxTokenConfig::default()
