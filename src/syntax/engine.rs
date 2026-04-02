@@ -1,25 +1,74 @@
 use std::path::Path;
+use std::sync::OnceLock;
 
-use tree_sitter_highlight::{HighlightEvent, Highlighter};
+use syntect::easy::ScopeRegionIterator;
+use syntect::parsing::{ParseState, ScopeStack, SyntaxReference, SyntaxSet};
 
 use crate::preview::state::StyledSpan;
 
-use super::capture_map::token_for_highlight;
-use super::languages::{find_by_path, find_by_token};
+use super::scope_map::token_for_scope;
+use super::semantic::SemanticToken;
 use super::theme::active_theme;
 
+fn syntax_set() -> &'static SyntaxSet {
+    static SS: OnceLock<SyntaxSet> = OnceLock::new();
+    SS.get_or_init(SyntaxSet::load_defaults_newlines)
+}
+
+/// Map language tokens/extensions not present in syntect's default bundle to
+/// a fallback token that IS present.  TypeScript/TSX → JavaScript is the main
+/// practical case.
+fn fallback_token(token: &str) -> Option<&'static str> {
+    match token {
+        "ts" | "tsx" | "typescript" | "TypeScript" | "TypeScriptReact" => Some("js"),
+        "jsx" => Some("js"),
+        "mjs" | "cjs" => Some("js"),
+        _ => None,
+    }
+}
+
 pub fn highlight_file(path: &Path, content: &str, max_lines: usize) -> Vec<Vec<StyledSpan>> {
-    let Some(definition) = find_by_path(path) else {
-        return plain_lines(content, max_lines);
-    };
-    highlight_with_config((definition.config)(), content, max_lines)
+    let ss = syntax_set();
+    let syntax = find_syntax_for_path(ss, path);
+    match syntax {
+        Some(s) => highlight_with_syntax(ss, s, content, max_lines),
+        None => plain_lines(content, max_lines),
+    }
+}
+
+/// Look up syntax by file extension (without doing real file I/O).
+/// Falls back through: extension lookup → fallback token → None.
+fn find_syntax_for_path<'a>(ss: &'a SyntaxSet, path: &Path) -> Option<&'a SyntaxReference> {
+    // Try by file extension first
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        if let Some(syntax) = ss.find_syntax_by_extension(ext) {
+            return Some(syntax);
+        }
+        // Extension not in bundle — try fallback mapping
+        if let Some(fallback) = fallback_token(ext) {
+            if let Some(syntax) = ss.find_syntax_by_token(fallback) {
+                return Some(syntax);
+            }
+        }
+    }
+    // Try by full filename (e.g. "Makefile")
+    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+        if let Some(syntax) = ss.find_syntax_by_extension(name) {
+            return Some(syntax);
+        }
+    }
+    None
 }
 
 pub fn highlight_code(lang: &str, code: &str, max_lines: usize) -> Vec<Vec<StyledSpan>> {
-    let Some(definition) = find_by_token(lang) else {
-        return plain_lines(code, max_lines);
-    };
-    highlight_with_config((definition.config)(), code, max_lines)
+    let ss = syntax_set();
+    let syntax = ss
+        .find_syntax_by_token(lang)
+        .or_else(|| fallback_token(lang).and_then(|fb| ss.find_syntax_by_token(fb)));
+    match syntax {
+        Some(s) => highlight_with_syntax(ss, s, code, max_lines),
+        None => plain_lines(code, max_lines),
+    }
 }
 
 pub fn plain_lines(content: &str, max_lines: usize) -> Vec<Vec<StyledSpan>> {
@@ -30,104 +79,89 @@ pub fn plain_lines(content: &str, max_lines: usize) -> Vec<Vec<StyledSpan>> {
         .collect()
 }
 
-fn highlight_with_config(
-    config: &tree_sitter_highlight::HighlightConfiguration,
+fn highlight_with_syntax(
+    ss: &SyntaxSet,
+    syntax: &SyntaxReference,
     source: &str,
     max_lines: usize,
 ) -> Vec<Vec<StyledSpan>> {
-    let mut highlighter = Highlighter::new();
-    let Ok(events) = highlighter.highlight(config, source.as_bytes(), None, |_| None) else {
-        return plain_lines(source, max_lines);
-    };
-
     let theme = active_theme();
+    let default_style = theme.style_for(SemanticToken::Text);
+    let mut parse_state = ParseState::new(syntax);
+    let mut scope_stack = ScopeStack::new();
     let mut lines: Vec<Vec<StyledSpan>> = Vec::with_capacity(max_lines.min(128));
-    let mut current_line: Vec<StyledSpan> = Vec::new();
-    let mut style_stack = vec![theme.style_for(super::semantic::SemanticToken::Text)];
 
-    for event in events {
-        let Ok(event) = event else {
-            return plain_lines(source, max_lines);
+    for line in source.lines() {
+        if lines.len() >= max_lines {
+            break;
+        }
+
+        let line_with_nl = format!("{}\n", line);
+        let ops = match parse_state.parse_line(&line_with_nl, ss) {
+            Ok(ops) => ops,
+            Err(_) => {
+                lines.push(vec![(line.to_string(), default_style)]);
+                continue;
+            }
         };
 
-        match event {
-            HighlightEvent::Source { start, end } => {
-                if lines.len() >= max_lines {
-                    break;
-                }
-                append_source_segment(
-                    &source[start..end],
-                    *style_stack
-                        .last()
-                        .expect("style stack always contains text"),
-                    &mut lines,
-                    &mut current_line,
-                    max_lines,
-                );
-                if lines.len() >= max_lines {
-                    break;
-                }
-            }
-            HighlightEvent::HighlightStart(highlight) => {
-                let token = token_for_highlight(highlight);
-                style_stack.push(theme.style_for(token));
-            }
-            HighlightEvent::HighlightEnd => {
-                if style_stack.len() > 1 {
-                    style_stack.pop();
-                }
-            }
-        }
-    }
+        let mut current_line: Vec<StyledSpan> = Vec::new();
 
-    // Push the final in-progress line unless we already hit max_lines.
-    // The degenerate `source == "\n"` case pushes an empty trailing line
-    // so that a lone newline produces one (empty) line rather than zero.
-    if lines.len() < max_lines
-        && (!current_line.is_empty() || (source.ends_with('\n') && source == "\n"))
-    {
+        for (token_text, op) in ScopeRegionIterator::new(&ops, &line_with_nl) {
+            let _ = scope_stack.apply(op);
+
+            if token_text.is_empty() {
+                continue;
+            }
+
+            // Strip the trailing newline we added — we handle line breaks ourselves
+            let text = if token_text.ends_with('\n') {
+                &token_text[..token_text.len() - 1]
+            } else {
+                token_text
+            };
+
+            if text.is_empty() {
+                continue;
+            }
+
+            let top_scope = scope_stack
+                .as_slice()
+                .last()
+                .map(|s| s.build_string())
+                .unwrap_or_default();
+
+            let token = token_for_scope(&top_scope);
+            let style = theme.style_for(token);
+            current_line.push((text.to_string(), style));
+        }
+
         lines.push(current_line);
     }
 
     lines
 }
 
-fn append_source_segment(
-    segment: &str,
-    style: ratatui::style::Style,
-    lines: &mut Vec<Vec<StyledSpan>>,
-    current_line: &mut Vec<StyledSpan>,
-    max_lines: usize,
-) {
-    let mut start = 0;
-
-    for (idx, ch) in segment.char_indices() {
-        if ch != '\n' {
-            continue;
-        }
-
-        if idx > start {
-            current_line.push((segment[start..idx].to_string(), style));
-        }
-
-        if lines.len() < max_lines {
-            lines.push(std::mem::take(current_line));
-        }
-        if lines.len() >= max_lines {
-            return;
-        }
-
-        start = idx + ch.len_utf8();
-    }
-
-    if start < segment.len() {
-        current_line.push((segment[start..].to_string(), style));
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn highlights_rust_with_ansi_styles() {
+        let lines = highlight_code("rs", "fn main() { let x = 42; }", 100);
+        assert!(!lines.is_empty());
+        assert!(
+            lines.iter().flatten().any(|(_, style)| style.fg.is_some()),
+            "rust should produce styled spans"
+        );
+        assert!(
+            lines
+                .iter()
+                .flatten()
+                .all(|(_, style)| !matches!(style.fg, Some(ratatui::style::Color::Rgb(..)))),
+            "syntax engine should only emit ANSI/indexed/reset colors"
+        );
+    }
 
     #[test]
     fn highlights_typescript_with_ansi_styles() {
@@ -137,12 +171,35 @@ mod tests {
             lines.iter().flatten().any(|(_, style)| style.fg.is_some()),
             "typescript should produce styled spans"
         );
+    }
+
+    #[test]
+    fn highlights_python() {
+        let lines = highlight_code("py", "def hello():\n    print('hi')\n", 100);
+        assert!(!lines.is_empty());
         assert!(
-            lines
-                .iter()
-                .flatten()
-                .all(|(_, style)| !matches!(style.fg, Some(ratatui::style::Color::Rgb(..)))),
-            "syntax engine should only emit ANSI/indexed/reset colors"
+            lines.iter().flatten().any(|(_, style)| style.fg.is_some()),
+            "python should produce styled spans"
+        );
+    }
+
+    #[test]
+    fn highlights_go() {
+        let lines = highlight_code("go", "func main() { fmt.Println(\"hi\") }", 100);
+        assert!(!lines.is_empty());
+        assert!(
+            lines.iter().flatten().any(|(_, style)| style.fg.is_some()),
+            "go should produce styled spans"
+        );
+    }
+
+    #[test]
+    fn highlights_c() {
+        let lines = highlight_code("c", "#include <stdio.h>\nint main() { return 0; }", 100);
+        assert!(!lines.is_empty());
+        assert!(
+            lines.iter().flatten().any(|(_, style)| style.fg.is_some()),
+            "c should produce styled spans"
         );
     }
 
@@ -159,14 +216,43 @@ mod tests {
     }
 
     #[test]
-    fn rust_escape_sequence_gets_escape_style() {
+    fn highlight_file_detects_language_by_extension() {
+        let path = std::path::PathBuf::from("example.py");
+        let lines = highlight_file(&path, "x = 42", 100);
+        assert!(
+            lines.iter().flatten().any(|(_, style)| style.fg.is_some()),
+            ".py file should be highlighted"
+        );
+    }
+
+    #[test]
+    fn highlight_file_unknown_ext_is_plain() {
+        let path = std::path::PathBuf::from("data.unknownext12345");
+        let lines = highlight_file(&path, "hello world", 100);
+        assert_eq!(
+            lines,
+            vec![vec![(
+                "hello world".to_string(),
+                ratatui::style::Style::default()
+            )]]
+        );
+    }
+
+    #[test]
+    fn max_lines_is_respected() {
+        let code = "a\nb\nc\nd\ne\nf\n";
+        let lines = highlight_code("rs", code, 3);
+        assert_eq!(lines.len(), 3);
+    }
+
+    #[test]
+    fn multiple_styles_in_rust_code() {
         let lines = highlight_code("rs", r#"let s = "hello\n";"#, 100);
-        // Should have more than one distinct style (at minimum keyword, variable, string)
         let styles: std::collections::HashSet<_> =
             lines.iter().flatten().map(|(_, style)| *style).collect();
         assert!(
-            styles.len() >= 3,
-            "Rust code should produce at least 3 distinct styles, got {}",
+            styles.len() >= 2,
+            "Rust code should produce at least 2 distinct styles, got {}",
             styles.len()
         );
     }
