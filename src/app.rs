@@ -3593,7 +3593,7 @@ mod tests {
 
     #[test]
     fn test_global_search_down_adjusts_scroll_offset() {
-        use crate::render::search_bar::GlobalSearchResult;
+        use crate::search::GlobalSearchResult;
         use std::path::PathBuf;
 
         let mut state = SearchState::new(SearchMode::Global);

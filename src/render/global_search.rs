@@ -3,7 +3,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::colors;
 use super::input_dialog::draw_border;
-use crate::render::search_bar::{GlobalSearchType, SearchState};
+use crate::search::{GlobalSearchType, SearchState};
 
 /// Compute the centered overlay rect for the global search dialog.
 /// Shared between render and mouse-hit-test to avoid layout drift.
@@ -338,7 +338,7 @@ fn truncate_str(s: &str, max_width: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::search_bar::{SearchMode, SearchState};
+    use crate::search::{SearchMode, SearchState};
     use ratatui::style::Modifier;
 
     #[test]
@@ -390,7 +390,7 @@ mod tests {
 
     // ── Grouped content search rendering tests ─────────────────────────
 
-    use crate::render::search_bar::{ContentMatch, FileGroup};
+    use crate::search::{ContentMatch, FileGroup};
     use std::path::PathBuf;
 
     fn make_content_state(groups: Vec<FileGroup>) -> SearchState {

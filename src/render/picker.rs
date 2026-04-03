@@ -5,7 +5,7 @@ use super::colors;
 use super::input_dialog::draw_border;
 use super::status_bar::truncate_to_display_width;
 use crate::git::branches::BranchInfo;
-use crate::render::search_bar::fuzzy_match;
+use crate::search::matcher::fuzzy_match;
 
 /// The kind of picker being shown (extensible for future use).
 #[derive(Debug, Clone, PartialEq, Eq)]
