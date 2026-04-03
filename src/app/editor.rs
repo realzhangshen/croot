@@ -135,9 +135,10 @@ impl App {
         Ok(())
     }
 
-    /// Full refresh: tree -> git -> search -> preview.
-    /// Consolidates the refresh sequence that was previously duplicated across 5+ call sites.
-    pub(super) fn full_refresh(
+    /// Full synchronous refresh: tree -> git -> search -> preview.
+    /// Used when the result must be available immediately (e.g. after editor suspend,
+    /// manual refresh, file operations).
+    pub(super) fn full_refresh_sync(
         &mut self,
         preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) {
@@ -152,11 +153,45 @@ impl App {
         }
     }
 
+    /// Background refresh: spawns a blocking task to rebuild tree + git state.
+    /// The result is sent via `refresh_tx` and applied on the next event loop iteration.
+    /// Uses generation tracking to discard stale results.
+    pub(super) fn background_refresh(&mut self, refresh_tx: &mpsc::Sender<RefreshResult>) {
+        self.refresh_generation = self.refresh_generation.wrapping_add(1);
+        let generation = self.refresh_generation;
+
+        let root = self.root.clone();
+        let config = self.tree.config.clone();
+        let expanded_paths: std::collections::HashSet<PathBuf> = self
+            .tree
+            .nodes
+            .iter()
+            .filter(|n| n.is_dir() && n.is_expanded)
+            .map(|n| n.path.clone())
+            .collect();
+
+        let tx = refresh_tx.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let tree = crate::tree::forest::FileTree::snapshot_refresh(
+                root.clone(),
+                config,
+                &expanded_paths,
+            );
+            let git = crate::git::status::GitState::snapshot_refresh(&root);
+            let _ = tx.blocking_send(RefreshResult {
+                generation,
+                tree,
+                git,
+            });
+        });
+    }
+
     /// Refresh tree, git, and preview after returning from a suspend-mode editor.
     pub(super) fn refresh_after_editor(
         &mut self,
         preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) {
-        self.full_refresh(preview_tx);
+        self.full_refresh_sync(preview_tx);
     }
 }

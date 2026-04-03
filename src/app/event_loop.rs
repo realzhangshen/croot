@@ -48,6 +48,9 @@ impl App {
         // Channel for receiving loaded preview results
         let (preview_tx, mut preview_rx) = mpsc::channel::<(u64, PathBuf, LoadedPreview)>(4);
 
+        // Channel for receiving background refresh results
+        let (refresh_tx, mut refresh_rx) = mpsc::channel::<RefreshResult>(2);
+
         // Channel for receiving global search results (streaming batches)
         let (search_tx, mut search_rx) = mpsc::channel::<SearchBatch>(16);
 
@@ -162,7 +165,7 @@ impl App {
                         watcher_active = false;
                         continue;
                     }
-                    self.full_refresh(&preview_tx);
+                    self.background_refresh(&refresh_tx);
                 }
                 result = search_rx.recv() => {
                     if let Some(batch) = result {
@@ -275,13 +278,38 @@ impl App {
                     self.branch_switch_rx = None;
                     if let Some(result) = result {
                         if result.success {
-                            self.full_refresh(&preview_tx);
+                            self.background_refresh(&refresh_tx);
                         } else {
                             let branches = crate::git::branches::list_branches(&result.repo_root);
                             let mut restored_picker = PickerState::new_branch(&branches);
                             restored_picker.error_message = Some(result.stderr);
                             self.ui.picker_state = Some(restored_picker);
                             self.ui.input_mode = InputMode::Picker;
+                        }
+                    }
+                }
+                result = refresh_rx.recv() => {
+                    if let Some(refresh) = result {
+                        if refresh.generation == self.refresh_generation {
+                            // Capture cursor path at APPLY time (not request time)
+                            let cursor_path = self.tree.selected().map(|n| n.path.clone());
+
+                            self.tree = refresh.tree;
+                            self.git = refresh.git;
+
+                            // Restore cursor by path
+                            if let Some(ref path) = cursor_path {
+                                if let Some(idx) = self.tree.nodes.iter().position(|n| n.path == *path) {
+                                    self.tree.cursor = idx;
+                                }
+                            }
+                            self.tree.cursor = self.tree.cursor.min(self.tree.nodes.len().saturating_sub(1));
+
+                            self.reapply_git();
+                            self.refresh_search_state();
+                            if self.preview_visible {
+                                self.trigger_preview_load(&preview_tx);
+                            }
                         }
                     }
                 }

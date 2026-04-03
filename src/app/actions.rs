@@ -33,7 +33,7 @@ impl App {
                 self.handle_tree_action(action);
             }
             Action::Refresh => {
-                self.full_refresh(preview_tx);
+                self.full_refresh_sync(preview_tx);
             }
 
             // Preview actions

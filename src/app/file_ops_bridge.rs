@@ -20,7 +20,7 @@ impl App {
         );
         match result {
             file_ops::FileOpResult::Ok => {
-                self.full_refresh(preview_tx);
+                self.full_refresh_sync(preview_tx);
             }
             file_ops::FileOpResult::Error(msg) => {
                 self.show_error(msg);
@@ -119,7 +119,7 @@ impl App {
                 }
             }
             MenuAction::Refresh => {
-                self.full_refresh(preview_tx);
+                self.full_refresh_sync(preview_tx);
             }
             MenuAction::CollapseAll => {
                 self.tree.collapse_all();

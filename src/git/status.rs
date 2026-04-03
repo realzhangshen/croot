@@ -38,6 +38,12 @@ impl GitState {
         Some(state)
     }
 
+    /// Create a fresh `GitState` by re-reading all statuses.
+    /// Pure function suitable for background threads.
+    pub fn snapshot_refresh(repo_root: &Path) -> Option<Self> {
+        Self::load(repo_root)
+    }
+
     /// Re-read all statuses from the repository.
     pub fn refresh(&mut self) {
         if let Ok(repo) = Repository::open(&self.repo_root) {

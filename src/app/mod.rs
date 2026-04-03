@@ -64,6 +64,13 @@ pub(super) struct BranchSwitchResult {
     repo_root: PathBuf,
 }
 
+/// Result of a background refresh operation.
+pub(super) struct RefreshResult {
+    pub(super) generation: u64,
+    pub(super) tree: FileTree,
+    pub(super) git: Option<GitState>,
+}
+
 /// Signal from action handling that requires terminal-level processing.
 #[derive(Debug)]
 pub enum PostAction {
@@ -146,6 +153,8 @@ pub struct App {
     pub(super) status_bar_branch_region: Option<(u16, u16)>,
     // Channel for receiving branch switch results
     pub(super) branch_switch_rx: Option<mpsc::Receiver<BranchSwitchResult>>,
+    /// Generation counter for background refresh. Stale results are discarded.
+    pub(super) refresh_generation: u64,
     // Cached terminal area from last draw, used by mouse handlers
     pub(super) last_terminal_area: ratatui::layout::Rect,
     /// Monotonic counter for preview requests. Stale results are discarded.
@@ -219,6 +228,7 @@ impl App {
             search_bar_y: None,
             status_bar_branch_region: None,
             branch_switch_rx: None,
+            refresh_generation: 0,
             last_terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24),
             preview_generation: 0,
             #[cfg(feature = "image-preview")]

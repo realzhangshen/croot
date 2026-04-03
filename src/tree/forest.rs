@@ -498,6 +498,25 @@ impl FileTree {
         false
     }
 
+    /// Create a fresh `FileTree` from disk, re-expanding the given paths.
+    /// Pure function suitable for calling on a background thread.
+    pub fn snapshot_refresh(
+        root: PathBuf,
+        config: TreeConfig,
+        expanded_paths: &HashSet<PathBuf>,
+    ) -> Self {
+        let mut tree = Self::new(root, config);
+        let mut i = 0;
+        while i < tree.nodes.len() {
+            if tree.nodes[i].is_dir() && expanded_paths.contains(&tree.nodes[i].path) {
+                tree.expand(i);
+            }
+            i += 1;
+        }
+        tree.recount();
+        tree
+    }
+
     /// Precompute connector guides for all nodes in O(N) total using a reverse scan.
     /// Returns a Vec where entry[i] is the guides Vec for node i.
     pub fn precompute_all_guides(&self) -> Vec<Vec<bool>> {
@@ -925,5 +944,59 @@ mod tests {
         // build_displayable_indices should return the same
         let fresh = tree.build_displayable_indices();
         assert_eq!(cached, fresh);
+    }
+
+    // ── snapshot_refresh tests ─────────────────────────────────────────
+
+    #[test]
+    fn snapshot_refresh_preserves_expanded_dirs() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("a/b")).unwrap();
+        std::fs::write(tmp.path().join("a/b/c.txt"), "c").unwrap();
+        std::fs::write(tmp.path().join("d.txt"), "d").unwrap();
+
+        let config = TreeConfig::default();
+        let mut tree = FileTree::new(tmp.path().to_path_buf(), config.clone());
+        let a_idx = tree.nodes.iter().position(|n| n.name == "a").unwrap();
+        tree.expand(a_idx);
+
+        let expanded: HashSet<PathBuf> = tree
+            .nodes
+            .iter()
+            .filter(|n| n.is_dir() && n.is_expanded)
+            .map(|n| n.path.clone())
+            .collect();
+
+        let refreshed = FileTree::snapshot_refresh(tmp.path().to_path_buf(), config, &expanded);
+
+        let a = refreshed.nodes.iter().find(|n| n.name == "a").unwrap();
+        assert!(a.is_expanded);
+        assert!(refreshed.nodes.iter().any(|n| n.name == "b"));
+    }
+
+    #[test]
+    fn snapshot_refresh_equivalent_to_refresh() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("x")).unwrap();
+        std::fs::write(tmp.path().join("x/y.txt"), "y").unwrap();
+        std::fs::write(tmp.path().join("z.txt"), "z").unwrap();
+
+        let config = TreeConfig::default();
+        let mut original = FileTree::new(tmp.path().to_path_buf(), config.clone());
+        // expand "x"
+        let x_idx = original.nodes.iter().position(|n| n.name == "x").unwrap();
+        original.expand(x_idx);
+
+        let expanded: HashSet<PathBuf> = original
+            .nodes
+            .iter()
+            .filter(|n| n.is_dir() && n.is_expanded)
+            .map(|n| n.path.clone())
+            .collect();
+
+        let snapshot = FileTree::snapshot_refresh(tmp.path().to_path_buf(), config, &expanded);
+
+        // Same node count
+        assert_eq!(original.nodes.len(), snapshot.nodes.len());
     }
 }
