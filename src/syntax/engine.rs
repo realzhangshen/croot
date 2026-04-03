@@ -1,10 +1,16 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::OnceLock;
 
 use syntect::easy::ScopeRegionIterator;
-use syntect::parsing::{ParseState, ScopeStack, SyntaxReference, SyntaxSet};
+use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxReference, SyntaxSet};
 
 use crate::preview::state::StyledSpan;
+
+/// Lines longer than this (in bytes) are parsed but not styled, to prevent
+/// pathological highlighting on minified files. The parse state is still
+/// maintained so subsequent lines remain correct.
+const LONG_LINE_BYTES: usize = 8192;
 
 use super::scope_map::token_for_scope;
 use super::semantic::SemanticToken;
@@ -90,15 +96,20 @@ fn highlight_with_syntax(
     let mut parse_state = ParseState::new(syntax);
     let mut scope_stack = ScopeStack::new();
     let mut lines: Vec<Vec<StyledSpan>> = Vec::with_capacity(max_lines.min(128));
+    let mut line_buf = String::with_capacity(256);
+    let mut scope_cache: HashMap<Scope, SemanticToken> = HashMap::new();
 
     for line in source.lines() {
         if lines.len() >= max_lines {
             break;
         }
 
-        // PERF: allocates per line; could reuse a buffer or work with byte slices
-        let line_with_nl = format!("{}\n", line);
-        let ops = match parse_state.parse_line(&line_with_nl, ss) {
+        // Reuse buffer to avoid per-line allocation (syntect requires trailing \n)
+        line_buf.clear();
+        line_buf.push_str(line);
+        line_buf.push('\n');
+
+        let ops = match parse_state.parse_line(&line_buf, ss) {
             Ok(ops) => ops,
             Err(_) => {
                 lines.push(vec![(line.to_string(), default_style)]);
@@ -106,9 +117,19 @@ fn highlight_with_syntax(
             }
         };
 
+        // Long lines: still iterate ops to maintain scope_stack state,
+        // but skip the expensive build_string()/styling per token.
+        if line.len() > LONG_LINE_BYTES {
+            for (_, op) in ScopeRegionIterator::new(&ops, &line_buf) {
+                let _ = scope_stack.apply(op);
+            }
+            lines.push(vec![(line.to_string(), default_style)]);
+            continue;
+        }
+
         let mut current_line: Vec<StyledSpan> = Vec::new();
 
-        for (token_text, op) in ScopeRegionIterator::new(&ops, &line_with_nl) {
+        for (token_text, op) in ScopeRegionIterator::new(&ops, &line_buf) {
             let _ = scope_stack.apply(op);
 
             if token_text.is_empty() {
@@ -126,14 +147,16 @@ fn highlight_with_syntax(
                 continue;
             }
 
-            // PERF: build_string() allocates per token; could cache Scope→SemanticToken
-            let top_scope = scope_stack
-                .as_slice()
-                .last()
-                .map(|s| s.build_string())
-                .unwrap_or_default();
+            // Cache Scope→SemanticToken to avoid repeated build_string()
+            // (which locks a global mutex and allocates a String each call).
+            let token = match scope_stack.as_slice().last() {
+                Some(&scope) => *scope_cache.entry(scope).or_insert_with(|| {
+                    let s = scope.build_string();
+                    token_for_scope(&s)
+                }),
+                None => SemanticToken::Text,
+            };
 
-            let token = token_for_scope(&top_scope);
             let style = theme.style_for(token);
             current_line.push((text.to_string(), style));
         }
@@ -266,6 +289,56 @@ mod tests {
             styles.len() >= 2,
             "Rust code should produce at least 2 distinct styles, got {}",
             styles.len()
+        );
+    }
+
+    #[test]
+    fn long_line_gets_default_style() {
+        // A line exceeding LONG_LINE_BYTES should be rendered as a single span
+        // with the theme's default text style, even if it contains code that
+        // would normally produce multiple styled spans.
+        let chunk = "let x = 42; ";
+        let repeats = (LONG_LINE_BYTES / chunk.len()) + 1;
+        let long_line = chunk.repeat(repeats);
+        assert!(long_line.len() > LONG_LINE_BYTES);
+
+        let code = format!("fn main() {{\n{long_line}\n}}");
+        let lines = highlight_code("rs", &code, 100);
+        assert_eq!(lines.len(), 3);
+
+        // The long line (index 1) should be a single span with the default
+        // text style — not multiple spans with keyword/number/operator colors.
+        let long_spans = &lines[1];
+        assert_eq!(
+            long_spans.len(),
+            1,
+            "long line should be a single unstyled span"
+        );
+        let default_text_style = active_theme().style_for(SemanticToken::Text);
+        assert_eq!(
+            long_spans[0].1, default_text_style,
+            "long line should have default text style"
+        );
+    }
+
+    #[test]
+    fn highlighting_correct_after_long_line() {
+        // After a long line, parse state must still be valid so subsequent lines
+        // are highlighted correctly (not broken by skipped styling).
+        let chunk = "let x = 42; ";
+        let repeats = (LONG_LINE_BYTES / chunk.len()) + 1;
+        let long_line = chunk.repeat(repeats);
+
+        let code = format!("fn main() {{\n{long_line}\nlet y = 42;\n}}");
+        let lines = highlight_code("rs", &code, 100);
+        assert_eq!(lines.len(), 4);
+
+        // Line after the long line (index 2: "let y = 42;") should still be styled
+        let after_spans = &lines[2];
+        assert!(
+            after_spans.iter().any(|(_, style)| style.fg.is_some()),
+            "line after a long line should still be highlighted, got: {:?}",
+            after_spans
         );
     }
 }
