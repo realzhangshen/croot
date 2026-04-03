@@ -4,7 +4,7 @@ impl App {
     pub(super) fn handle_context_menu_mouse(
         &mut self,
         mouse: crossterm::event::MouseEvent,
-        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
 
@@ -117,7 +117,7 @@ impl App {
     pub(super) fn handle_dialog_mouse(
         &mut self,
         mouse: crossterm::event::MouseEvent,
-        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
 
@@ -164,7 +164,7 @@ impl App {
     pub(super) fn handle_global_search_mouse(
         &mut self,
         mouse: crossterm::event::MouseEvent,
-        _preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        _preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
 
@@ -225,7 +225,7 @@ impl App {
     pub(super) fn handle_status_bar_click(
         &mut self,
         col: u16,
-        _preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        _preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) -> PostAction {
         // Check if click is on the branch name region
         if let Some((start, end)) = self.status_bar_branch_region {
@@ -239,7 +239,7 @@ impl App {
     pub(super) fn handle_search_bar_click(
         &mut self,
         col: u16,
-        _preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        _preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) -> PostAction {
         use crate::render::search_bar::SearchBar;
 

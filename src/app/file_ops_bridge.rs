@@ -1,7 +1,10 @@
 use super::*;
 
 impl App {
-    pub(super) fn confirm_dialog(&mut self, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
+    pub(super) fn confirm_dialog(
+        &mut self,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
+    ) {
         let Some(dialog) = self.ui.input_dialog.take() else {
             return;
         };
@@ -30,7 +33,7 @@ impl App {
         &mut self,
         action: &MenuAction,
         node_idx: usize,
-        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) -> PostAction {
         match action {
             MenuAction::OpenInEditor => {

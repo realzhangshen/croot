@@ -66,7 +66,7 @@ impl App {
     /// Schedule a debounced preview load for the currently selected node.
     pub(super) fn trigger_preview_load(
         &mut self,
-        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) {
         let Some(node) = self.tree.selected() else {
             return;
@@ -89,8 +89,10 @@ impl App {
             handle.abort();
         }
 
+        self.preview_generation += 1;
         self.preview_state.kind = PreviewKind::Loading;
 
+        let generation = self.preview_generation;
         let tx = preview_tx.clone();
         let delay = Duration::from_millis(self.config.preview.preview_delay_ms);
         let max_file_size_kb = self.config.preview.max_file_size_kb;
@@ -118,7 +120,7 @@ impl App {
             .await;
 
             if let Ok(loaded) = loaded {
-                let _ = tx.send((path_for_send, loaded)).await;
+                let _ = tx.send((generation, path_for_send, loaded)).await;
             }
         }));
     }

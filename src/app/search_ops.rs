@@ -258,7 +258,7 @@ impl App {
     /// Navigate to the selected search result in the file tree (Tab key).
     pub(super) fn handle_content_search_goto(
         &mut self,
-        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) {
         let Some(item) = self
             .search_state

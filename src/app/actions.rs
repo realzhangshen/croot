@@ -4,7 +4,7 @@ impl App {
     pub(super) fn handle_action(
         &mut self,
         action: &Action,
-        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
         search_tx: &mpsc::Sender<SearchBatch>,
     ) -> PostAction {
         let mut post = PostAction::None;

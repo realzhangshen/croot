@@ -46,7 +46,7 @@ impl App {
         let mut watcher_active = true;
 
         // Channel for receiving loaded preview results
-        let (preview_tx, mut preview_rx) = mpsc::channel::<(PathBuf, LoadedPreview)>(4);
+        let (preview_tx, mut preview_rx) = mpsc::channel::<(u64, PathBuf, LoadedPreview)>(4);
 
         // Channel for receiving global search results (streaming batches)
         let (search_tx, mut search_rx) = mpsc::channel::<SearchBatch>(16);
@@ -191,7 +191,11 @@ impl App {
                     }
                 }
                 result = preview_rx.recv() => {
-                    if let Some((path, loaded)) = result {
+                    if let Some((gen, path, loaded)) = result {
+                        // Discard stale preview results from older generations
+                        if gen != self.preview_generation {
+                            continue;
+                        }
                         #[allow(unused_mut)]
                         let mut handled = false;
                         #[cfg(feature = "image-preview")]
@@ -205,6 +209,7 @@ impl App {
                                 let tx = image_tx.clone();
                                 let path_clone = path.clone();
                                 let preview_tx_clone = preview_tx.clone();
+                                let gen_for_error = gen;
                                 tokio::task::spawn_blocking(move || {
                                     match crate::preview::image::load_image(&path_clone, &picker) {
                                         Ok(proto) => {
@@ -217,6 +222,7 @@ impl App {
                                         }
                                         Err(e) => {
                                             let _ = preview_tx_clone.blocking_send((
+                                                gen_for_error,
                                                 path_clone,
                                                 LoadedPreview {
                                                     kind: PreviewKind::Error(e),

@@ -78,7 +78,7 @@ impl App {
     pub(super) fn handle_click_row(
         &mut self,
         row: u16,
-        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) {
         self.focus = FocusPane::Tree;
         self.preview_state.selection.clear();

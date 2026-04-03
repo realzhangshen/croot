@@ -137,7 +137,10 @@ impl App {
 
     /// Full refresh: tree -> git -> search -> preview.
     /// Consolidates the refresh sequence that was previously duplicated across 5+ call sites.
-    pub(super) fn full_refresh(&mut self, preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>) {
+    pub(super) fn full_refresh(
+        &mut self,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
+    ) {
         self.tree.refresh();
         if let Some(ref mut git) = self.git {
             git.refresh();
@@ -152,7 +155,7 @@ impl App {
     /// Refresh tree, git, and preview after returning from a suspend-mode editor.
     pub(super) fn refresh_after_editor(
         &mut self,
-        preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) {
         self.full_refresh(preview_tx);
     }

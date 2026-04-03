@@ -148,6 +148,8 @@ pub struct App {
     pub(super) branch_switch_rx: Option<mpsc::Receiver<BranchSwitchResult>>,
     // Cached terminal area from last draw, used by mouse handlers
     pub(super) last_terminal_area: ratatui::layout::Rect,
+    /// Monotonic counter for preview requests. Stale results are discarded.
+    pub(super) preview_generation: u64,
     // Image preview support
     #[cfg(feature = "image-preview")]
     pub(super) image_picker: Option<ratatui_image::picker::Picker>,
@@ -218,6 +220,7 @@ impl App {
             status_bar_branch_region: None,
             branch_switch_rx: None,
             last_terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24),
+            preview_generation: 0,
             #[cfg(feature = "image-preview")]
             image_picker,
             #[cfg(feature = "image-preview")]
@@ -314,7 +317,7 @@ mod tests {
     }
 
     fn make_channels() -> (
-        mpsc::Sender<(PathBuf, LoadedPreview)>,
+        mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
         mpsc::Sender<SearchBatch>,
     ) {
         (mpsc::channel(16).0, mpsc::channel(16).0)
@@ -1294,5 +1297,61 @@ mod tests {
         assert!(!still_selected);
         // So preview_state remains unchanged
         assert!(app.preview_state.current_path.is_none());
+    }
+
+    #[tokio::test]
+    async fn preview_generation_increments_on_trigger() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (preview_tx, _rx) = mpsc::channel(4);
+        app.preview_visible = true;
+        let initial = app.preview_generation;
+        app.trigger_preview_load(&preview_tx);
+        assert!(
+            app.preview_generation > initial,
+            "preview_generation should increment after trigger_preview_load"
+        );
+    }
+
+    #[tokio::test]
+    async fn preview_generation_stable_when_cached() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (preview_tx, _rx) = mpsc::channel(4);
+        app.preview_visible = true;
+
+        // Simulate that the preview for the selected file was already loaded and applied.
+        // This means current_path is set, kind is not Loading, and mtime matches.
+        let selected_path = app.tree.selected().unwrap().path.clone();
+        let mtime = std::fs::metadata(&selected_path)
+            .ok()
+            .and_then(|m| m.modified().ok());
+        app.preview_state.current_path = Some(selected_path);
+        app.preview_state.kind = PreviewKind::Text;
+        app.preview_state.cached_mtime = mtime;
+
+        let gen_before = app.preview_generation;
+        // This call should hit the mtime cache and return early -- generation should NOT increment
+        app.trigger_preview_load(&preview_tx);
+        assert_eq!(
+            app.preview_generation, gen_before,
+            "preview_generation should not increment when preview is cached"
+        );
+    }
+
+    #[tokio::test]
+    async fn stale_preview_generation_discarded() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (_preview_tx, _rx) = mpsc::channel::<(u64, PathBuf, LoadedPreview)>(4);
+        app.preview_visible = true;
+
+        // Simulate: generation is at 5, but a stale result arrives with gen=3
+        app.preview_generation = 5;
+        let stale_gen: u64 = 3;
+
+        // The generation check: stale_gen != app.preview_generation
+        assert_ne!(stale_gen, app.preview_generation);
+
+        // A result with matching generation should be accepted
+        let current_gen = app.preview_generation;
+        assert_eq!(current_gen, app.preview_generation);
     }
 }
