@@ -182,6 +182,100 @@ fn bench_markdown_render_narrow(c: &mut Criterion) {
     });
 }
 
+fn bench_tree_refresh(c: &mut Criterion) {
+    let tmp = create_test_tree(2000, 400);
+    let config = TreeConfig::default();
+
+    c.bench_function("tree_refresh_2000files_400dirs", |b| {
+        b.iter_batched(
+            || {
+                let mut tree = FileTree::new(tmp.path().to_path_buf(), config.clone());
+                // Expand some directories to simulate real usage
+                for i in 0..tree.nodes.len().min(50) {
+                    if tree.nodes[i].is_dir() && !tree.nodes[i].is_expanded {
+                        tree.expand(i);
+                    }
+                }
+                tree
+            },
+            |mut tree| {
+                tree.refresh();
+                black_box(tree.len());
+            },
+            criterion::BatchSize::SmallInput,
+        );
+    });
+}
+
+fn bench_fuzzy_match_5k(c: &mut Criterion) {
+    use croot::search::matcher::fuzzy_match;
+
+    let names: Vec<String> = (0..5000)
+        .map(|i| format!("src/components/feature_{i}/handler_{}.rs", i % 100))
+        .collect();
+
+    c.bench_function("fuzzy_match_5k_nodes", |b| {
+        b.iter(|| {
+            let count = names
+                .iter()
+                .filter(|n| fuzzy_match(black_box("handler"), black_box(n)))
+                .count();
+            black_box(count);
+        });
+    });
+}
+
+fn bench_build_displayable_5k(c: &mut Criterion) {
+    let tmp = create_test_tree(3000, 500);
+    let mut config = TreeConfig::default();
+    config.compact_folders = true;
+
+    c.bench_function("build_displayable_indices_5k_compact", |b| {
+        b.iter_batched(
+            || {
+                let mut tree = FileTree::new(tmp.path().to_path_buf(), config.clone());
+                // Expand all directories
+                let mut i = 0;
+                while i < tree.nodes.len() {
+                    if tree.nodes[i].is_dir() && !tree.nodes[i].is_expanded {
+                        tree.expand(i);
+                    }
+                    i += 1;
+                }
+                tree
+            },
+            |mut tree| {
+                let indices = tree.build_displayable_indices();
+                black_box(indices.len());
+            },
+            criterion::BatchSize::SmallInput,
+        );
+    });
+}
+
+fn bench_precompute_guides(c: &mut Criterion) {
+    let tmp = create_test_tree(2000, 400);
+
+    c.bench_function("precompute_all_guides_2k", |b| {
+        b.iter_batched(
+            || {
+                let mut tree = FileTree::new(tmp.path().to_path_buf(), TreeConfig::default());
+                for i in 0..tree.nodes.len().min(100) {
+                    if tree.nodes[i].is_dir() && !tree.nodes[i].is_expanded {
+                        tree.expand(i);
+                    }
+                }
+                tree
+            },
+            |tree| {
+                let guides = tree.precompute_all_guides();
+                black_box(guides.len());
+            },
+            criterion::BatchSize::SmallInput,
+        );
+    });
+}
+
 criterion_group!(
     benches,
     bench_tree_loading,
@@ -192,5 +286,9 @@ criterion_group!(
     bench_syntax_highlight_short,
     bench_markdown_render,
     bench_markdown_render_narrow,
+    bench_tree_refresh,
+    bench_fuzzy_match_5k,
+    bench_build_displayable_5k,
+    bench_precompute_guides,
 );
 criterion_main!(benches);
