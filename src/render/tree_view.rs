@@ -66,8 +66,8 @@ impl StatefulWidget for TreeView<'_> {
         } else {
             Option::None
         };
-        let all_guides = if filtered_guides.is_none() {
-            state.precompute_all_guides()
+        let all_guides: Vec<Vec<bool>> = if filtered_guides.is_none() {
+            state.cached_guides().to_vec()
         } else {
             Vec::new()
         };
@@ -711,6 +711,10 @@ mod tests {
             dir_count: 0,
             chain_len_cache: std::collections::HashMap::new(),
             chain_cache_valid: false,
+            displayable_cache: Vec::new(),
+            displayable_cache_valid: false,
+            guides_cache: Vec::new(),
+            guides_cache_valid: false,
         }
     }
 

@@ -23,6 +23,14 @@ pub struct FileTree {
     pub(crate) chain_len_cache: HashMap<usize, usize>,
     /// Whether `chain_len_cache` is valid.
     pub(crate) chain_cache_valid: bool,
+    /// Cached list of displayable node indices (skipping compact chain intermediates).
+    pub(crate) displayable_cache: Vec<usize>,
+    /// Whether `displayable_cache` is valid.
+    pub(crate) displayable_cache_valid: bool,
+    /// Cached connector guides for all nodes.
+    pub(crate) guides_cache: Vec<Vec<bool>>,
+    /// Whether `guides_cache` is valid.
+    pub(crate) guides_cache_valid: bool,
 }
 
 impl FileTree {
@@ -44,6 +52,10 @@ impl FileTree {
             dir_count,
             chain_len_cache: HashMap::new(),
             chain_cache_valid: false,
+            displayable_cache: Vec::new(),
+            displayable_cache_valid: false,
+            guides_cache: Vec::new(),
+            guides_cache_valid: false,
         }
     }
 
@@ -62,6 +74,8 @@ impl FileTree {
     /// Mark the chain length cache as stale. Must be called after any node list mutation.
     fn invalidate_chain_cache(&mut self) {
         self.chain_cache_valid = false;
+        self.displayable_cache_valid = false;
+        self.guides_cache_valid = false;
     }
 
     /// Get the compact chain length for a node, using the cache if available.
@@ -87,6 +101,30 @@ impl FileTree {
             "cached_chain_len called with mid-chain index {index}; use displayable-head indices only"
         );
         result
+    }
+
+    /// Get displayable indices, using cache if valid. Rebuilds in O(N) if stale.
+    pub fn cached_displayable_indices(&mut self) -> &[usize] {
+        if !self.displayable_cache_valid {
+            self.displayable_cache.clear();
+            let mut i = 0;
+            while i < self.nodes.len() {
+                self.displayable_cache.push(i);
+                let chain = self.cached_chain_len(i);
+                i += chain + 1;
+            }
+            self.displayable_cache_valid = true;
+        }
+        &self.displayable_cache
+    }
+
+    /// Get connector guides, using cache if valid.
+    pub fn cached_guides(&mut self) -> &[Vec<bool>] {
+        if !self.guides_cache_valid {
+            self.guides_cache = self.precompute_all_guides();
+            self.guides_cache_valid = true;
+        }
+        &self.guides_cache
     }
 
     /// Expand a directory node: load its children and insert them after it.
@@ -411,14 +449,7 @@ impl FileTree {
     /// Build a list of node indices that are actually displayable on screen,
     /// skipping intermediate nodes in compact chains.
     pub fn build_displayable_indices(&mut self) -> Vec<usize> {
-        let mut indices = Vec::with_capacity(self.nodes.len());
-        let mut i = 0;
-        while i < self.nodes.len() {
-            indices.push(i);
-            let chain = self.cached_chain_len(i);
-            i += chain + 1;
-        }
-        indices
+        self.cached_displayable_indices().to_vec()
     }
 
     /// Get the display name for a node, using the compact chain name if applicable.
@@ -538,6 +569,10 @@ mod tests {
             dir_count,
             chain_len_cache: HashMap::new(),
             chain_cache_valid: false,
+            displayable_cache: Vec::new(),
+            displayable_cache_valid: false,
+            guides_cache: Vec::new(),
+            guides_cache_valid: false,
         }
     }
 
@@ -734,6 +769,10 @@ mod tests {
             dir_count,
             chain_len_cache: HashMap::new(),
             chain_cache_valid: false,
+            displayable_cache: Vec::new(),
+            displayable_cache_valid: false,
+            guides_cache: Vec::new(),
+            guides_cache_valid: false,
         }
     }
 
@@ -802,5 +841,89 @@ mod tests {
         ]);
         // src has two children (utils and other), so no compaction
         assert_eq!(tree.compact_chain_len(0), 0);
+    }
+
+    // ── Displayable & guides cache tests ───────────────────────────────
+
+    #[test]
+    fn displayable_cache_invalidated_on_expand() {
+        // Build a tree with a dir (not expanded) and a file, compact_folders on
+        let mut tree = tree_from_compact(&[
+            ("src", NodeKind::Directory, 0, false),
+            ("readme.txt", NodeKind::File, 0, false),
+        ]);
+
+        // Warm cache
+        let indices_before = tree.cached_displayable_indices().to_vec();
+        assert_eq!(indices_before, vec![0, 1]);
+        assert!(tree.displayable_cache_valid);
+
+        // Simulate expand by manually marking expanded and inserting a child,
+        // then calling invalidate via collapse/expand path.
+        // We can't call expand() because it hits the filesystem; instead
+        // we manually mutate and call invalidate_chain_cache.
+        tree.nodes[0].is_expanded = true;
+        tree.nodes[0].children_loaded = true;
+        let child = TreeNode::new(PathBuf::from("main.rs"), NodeKind::File, 1);
+        tree.nodes.insert(1, child);
+        tree.invalidate_chain_cache();
+
+        // Cache should be invalid now
+        assert!(!tree.displayable_cache_valid);
+
+        // Getting cached indices should rebuild
+        let indices_after = tree.cached_displayable_indices().to_vec();
+        assert_eq!(indices_after, vec![0, 1, 2]);
+        assert!(tree.displayable_cache_valid);
+    }
+
+    #[test]
+    fn guides_cache_invalidated_on_collapse() {
+        // Build a tree with expanded dir + children
+        let mut tree = tree_from_compact(&[
+            ("src", NodeKind::Directory, 0, true),
+            ("main.rs", NodeKind::File, 1, false),
+            ("lib.rs", NodeKind::File, 1, false),
+            ("readme.txt", NodeKind::File, 0, false),
+        ]);
+
+        // Warm guides cache
+        let guides_before = tree.cached_guides().to_vec();
+        assert!(!guides_before.is_empty());
+        assert!(tree.guides_cache_valid);
+
+        // Collapse src — removes children, invalidates caches
+        tree.collapse(0);
+
+        // Cache should be invalid
+        assert!(!tree.guides_cache_valid);
+
+        // Rebuild should reflect new structure
+        let guides_after = tree.cached_guides().to_vec();
+        // After collapse: ["src", "readme.txt"] — 2 nodes
+        assert_eq!(guides_after.len(), 2);
+        assert!(tree.guides_cache_valid);
+    }
+
+    #[test]
+    fn cached_displayable_matches_fresh_computation() {
+        // Build a tree with compact chain: src/ → utils/ → format.rs, plus a sibling
+        let mut tree = tree_from_compact(&[
+            ("src", NodeKind::Directory, 0, true),
+            ("utils", NodeKind::Directory, 1, true),
+            ("format.rs", NodeKind::File, 2, false),
+            ("readme.txt", NodeKind::File, 0, false),
+        ]);
+
+        // Manually compute expected displayable indices:
+        // Index 0: src (chain_len=1, skips utils at index 1)
+        // Index 2: format.rs (chain_len=0)
+        // Index 3: readme.txt (chain_len=0)
+        let cached = tree.cached_displayable_indices().to_vec();
+        assert_eq!(cached, vec![0, 2, 3]);
+
+        // build_displayable_indices should return the same
+        let fresh = tree.build_displayable_indices();
+        assert_eq!(cached, fresh);
     }
 }
