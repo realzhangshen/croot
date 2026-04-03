@@ -127,6 +127,15 @@ impl FileTree {
         &self.guides_cache
     }
 
+    /// Get the node indices visible in the current viewport, using cached display list.
+    /// Does NOT modify scroll/cursor — use `build_visible_indices` in tree_view for that.
+    pub fn viewport_indices(&mut self, viewport_height: usize) -> Vec<usize> {
+        let all = self.cached_displayable_indices().to_vec();
+        let start = self.scroll_offset.min(all.len());
+        let end = (start + viewport_height).min(all.len());
+        all[start..end].to_vec()
+    }
+
     /// Expand a directory node: load its children and insert them after it.
     pub fn expand(&mut self, index: usize) {
         if index >= self.nodes.len() {
@@ -998,5 +1007,35 @@ mod tests {
 
         // Same node count
         assert_eq!(original.nodes.len(), snapshot.nodes.len());
+    }
+
+    // ── viewport_indices tests ────────────────────────────────────────
+
+    #[test]
+    fn viewport_indices_respects_scroll() {
+        let tmp = tempfile::tempdir().unwrap();
+        for i in 0..20 {
+            std::fs::write(tmp.path().join(format!("file_{i:02}.txt")), "x").unwrap();
+        }
+        let mut tree = FileTree::new(tmp.path().to_path_buf(), TreeConfig::default());
+        tree.scroll_offset = 5;
+
+        let slice = tree.viewport_indices(10);
+        assert_eq!(slice.len(), 10);
+        // First visible should be the 6th file (index 5)
+        assert_eq!(slice[0], 5);
+    }
+
+    #[test]
+    fn viewport_indices_clamps_to_end() {
+        let tmp = tempfile::tempdir().unwrap();
+        for i in 0..5 {
+            std::fs::write(tmp.path().join(format!("file_{i}.txt")), "x").unwrap();
+        }
+        let mut tree = FileTree::new(tmp.path().to_path_buf(), TreeConfig::default());
+        tree.scroll_offset = 3;
+
+        let slice = tree.viewport_indices(10);
+        assert_eq!(slice.len(), 2); // only 2 items left from offset 3
     }
 }

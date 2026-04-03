@@ -292,15 +292,12 @@ impl StatefulWidget for TreeView<'_> {
 
 /// Build a list of node indices to render, skipping intermediate compacted directories.
 /// Also adjusts scroll so the cursor stays on a visible (non-skipped) row.
+/// Uses `cached_displayable_indices()` for O(1) on cache hit instead of O(N) iteration.
 fn build_visible_indices(state: &mut FileTree, viewport_height: usize) -> Vec<usize> {
-    // First pass: determine which indices are visible (not compacted away)
-    let mut all_visible = Vec::with_capacity(state.nodes.len());
-    let mut i = 0;
-    while i < state.nodes.len() {
-        all_visible.push(i);
-        let chain = state.cached_chain_len(i);
-        // Skip the intermediate dirs in the chain (they're merged into the display)
-        i += chain + 1;
+    let all_visible = state.cached_displayable_indices().to_vec();
+
+    if all_visible.is_empty() {
+        return Vec::new();
     }
 
     // Ensure cursor snaps to a visible index
@@ -309,7 +306,6 @@ fn build_visible_indices(state: &mut FileTree, viewport_height: usize) -> Vec<us
             state.cursor = all_visible[pos]; // snap forward to nearest visible
         }
     } else if let Some(&last) = all_visible.last() {
-        // Cursor is past all visible nodes — clamp to the last one
         state.cursor = last;
     }
 
@@ -319,7 +315,6 @@ fn build_visible_indices(state: &mut FileTree, viewport_height: usize) -> Vec<us
         .position(|&idx| idx == state.cursor)
         .unwrap_or(0);
 
-    // Adjust scroll offset to be in terms of visible rows
     if cursor_vis_pos < state.scroll_offset {
         state.scroll_offset = cursor_vis_pos;
     }
