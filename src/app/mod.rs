@@ -38,8 +38,8 @@ use crate::render::search_bar::SearchBar;
 use crate::render::status_bar::{HyperlinkRegion, StatusBar};
 use crate::render::tree_view::TreeView;
 use crate::search::{
-    do_match, do_match_positions, group_search_results, parse_rg_json_match, GlobalSearchResult,
-    GlobalSearchType, GroupedItem, SearchMode, SearchState,
+    do_match, do_match_positions, group_search_results, GlobalSearchType, GroupedItem, SearchBatch,
+    SearchJob, SearchMode, SearchState,
 };
 use crate::tree::forest::FileTree;
 
@@ -126,7 +126,7 @@ pub struct App {
     // Search state
     pub(super) search_state: SearchState,
     /// Handle for the current async global search task.
-    pub(super) global_search_handle: Option<JoinHandle<()>>,
+    pub(super) global_search_job: Option<crate::search::SearchJob>,
     /// Path-keyed pending line for preview scroll after content search confirm.
     pub(super) pending_preview_line: Option<(PathBuf, usize)>,
     // Hyperlink regions for post-render OSC 8 emission
@@ -206,7 +206,7 @@ impl App {
             hover_row: None,
             ui: UiOverlayState::default(),
             search_state: SearchState::new(SearchMode::Find),
-            global_search_handle: None,
+            global_search_job: None,
             pending_preview_line: None,
             hyperlink_regions: Vec::new(),
             enhanced_keyboard,
@@ -273,7 +273,9 @@ fn build_external_editor_argv(
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::search::{ContentMatch, FileGroup, GlobalSearchType, SearchMode, SearchState};
+    use crate::search::{
+        ContentMatch, FileGroup, GlobalSearchResult, GlobalSearchType, SearchMode, SearchState,
+    };
     use crate::tree::node::TreeNode;
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
     use std::path::Path;
@@ -311,10 +313,9 @@ mod tests {
         (app, tmp)
     }
 
-    #[allow(clippy::type_complexity)]
     fn make_channels() -> (
         mpsc::Sender<(PathBuf, LoadedPreview)>,
-        mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)>,
+        mpsc::Sender<SearchBatch>,
     ) {
         (mpsc::channel(16).0, mpsc::channel(16).0)
     }
@@ -524,8 +525,7 @@ mod tests {
         app.search_state.global_selected = 0;
 
         let (ptx, _prx) = mpsc::channel(16);
-        let search_tx: mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)> =
-            mpsc::channel(1).0;
+        let search_tx: mpsc::Sender<SearchBatch> = mpsc::channel(1).0;
 
         // Default open_mode is External -> should return OpenExternalEditor
         let post = app.handle_action(&Action::GlobalSearchConfirm, &ptx, &search_tx);
@@ -558,8 +558,7 @@ mod tests {
         app.search_state.global_selected = 0;
 
         let (ptx, _prx) = mpsc::channel(16);
-        let search_tx: mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)> =
-            mpsc::channel(1).0;
+        let search_tx: mpsc::Sender<SearchBatch> = mpsc::channel(1).0;
 
         // Goto should navigate to file in tree (old Enter behavior)
         let post = app.handle_action(&Action::GlobalSearchGoto, &ptx, &search_tx);
@@ -769,16 +768,26 @@ mod tests {
         app.search_state.cursor_pos = 1;
         app.search_state.request_id = 7;
         app.search_state.global_loading = true;
-        app.global_search_handle = Some(tokio::spawn(async {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-        }));
+        // Create a dummy SearchJob with a long debounce so it stays alive
+        let (dummy_tx, _dummy_rx) = mpsc::channel(1);
+        app.global_search_job = Some(SearchJob::spawn(
+            7,
+            "a".to_string(),
+            GlobalSearchType::FileName,
+            app.root.clone(),
+            "sleep".to_string(),
+            "rg".to_string(),
+            100,
+            dummy_tx,
+            60_000,
+        ));
 
         app.handle_action(&Action::GlobalSearchBackspace, &preview_tx, &search_tx);
 
         assert!(app.search_state.query.is_empty());
         assert!(!app.search_state.global_loading);
         assert!(app.search_state.global_results.is_empty());
-        assert!(app.global_search_handle.is_none());
+        assert!(app.global_search_job.is_none());
         assert_eq!(app.search_state.request_id, 8);
     }
 

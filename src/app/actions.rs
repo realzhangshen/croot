@@ -5,7 +5,7 @@ impl App {
         &mut self,
         action: &Action,
         preview_tx: &mpsc::Sender<(PathBuf, LoadedPreview)>,
-        search_tx: &mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)>,
+        search_tx: &mpsc::Sender<SearchBatch>,
     ) -> PostAction {
         let mut post = PostAction::None;
         match *action {

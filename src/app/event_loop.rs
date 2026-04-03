@@ -48,9 +48,8 @@ impl App {
         // Channel for receiving loaded preview results
         let (preview_tx, mut preview_rx) = mpsc::channel::<(PathBuf, LoadedPreview)>(4);
 
-        // Channel for receiving global search results
-        let (search_tx, mut search_rx) =
-            mpsc::channel::<(u64, Vec<GlobalSearchResult>, Option<String>)>(4);
+        // Channel for receiving global search results (streaming batches)
+        let (search_tx, mut search_rx) = mpsc::channel::<SearchBatch>(16);
 
         // Trigger initial preview load if auto_preview is on
         if self.preview_visible {
@@ -166,18 +165,28 @@ impl App {
                     self.full_refresh(&preview_tx);
                 }
                 result = search_rx.recv() => {
-                    if let Some((id, results, error)) = result {
-                        if id == self.search_state.request_id {
-                            if self.search_state.global_search_type == GlobalSearchType::Content {
-                                self.search_state.grouped_results = group_search_results(results);
-                                self.search_state.global_results.clear();
-                            } else {
-                                self.search_state.global_results = results;
+                    if let Some(batch) = result {
+                        if batch.generation == self.search_state.request_id {
+                            if !batch.results.is_empty() {
+                                if self.search_state.global_search_type == GlobalSearchType::Content {
+                                    // Merge new results into existing grouped results
+                                    let new_groups = group_search_results(batch.results);
+                                    for ng in new_groups {
+                                        if let Some(existing) = self.search_state.grouped_results.iter_mut().find(|g| g.path == ng.path) {
+                                            existing.matches.extend(ng.matches);
+                                        } else {
+                                            self.search_state.grouped_results.push(ng);
+                                        }
+                                    }
+                                    self.search_state.global_results.clear();
+                                } else {
+                                    self.search_state.global_results.extend(batch.results);
+                                }
                             }
-                            self.search_state.global_error = error;
-                            self.search_state.global_loading = false;
-                            self.search_state.global_selected = 0;
-                            self.search_state.global_scroll_offset = 0;
+                            if batch.is_final {
+                                self.search_state.global_error = batch.error;
+                                self.search_state.global_loading = false;
+                            }
                         }
                     }
                 }

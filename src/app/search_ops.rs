@@ -177,11 +177,8 @@ impl App {
         self.tree.cursor = self.search_state.match_indices[prev];
     }
 
-    /// Spawn an async global search (fd or rg) with debounce.
-    pub(super) fn spawn_global_search(
-        &mut self,
-        search_tx: &mpsc::Sender<(u64, Vec<GlobalSearchResult>, Option<String>)>,
-    ) {
+    /// Spawn an async global search (fd or rg) with debounce via `SearchJob`.
+    pub(super) fn spawn_global_search(&mut self, search_tx: &mpsc::Sender<SearchBatch>) {
         self.abort_global_search_task(false);
 
         if self.search_state.query.is_empty() {
@@ -190,140 +187,26 @@ impl App {
 
         self.search_state.request_id = self.search_state.request_id.wrapping_add(1);
         self.search_state.global_loading = true;
-        let id = self.search_state.request_id;
-        let query = self.search_state.query.clone();
-        let search_type = self.search_state.global_search_type;
-        let root = self.root.clone();
-        let fd_cmd = self.config.search.fd_command.clone();
-        let rg_cmd = self.config.search.rg_command.clone();
-        let max_results = self.config.search.max_results;
-        let tx = search_tx.clone();
 
-        self.global_search_handle = Some(tokio::spawn(async move {
-            // Debounce: wait 200ms before executing
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-            let output = match search_type {
-                GlobalSearchType::FileName => {
-                    let parts =
-                        shell_words::split(&fd_cmd).unwrap_or_else(|_| vec![fd_cmd.clone()]);
-                    let (bin, extra) = parts.split_first().unwrap_or((&fd_cmd, &[]));
-                    tokio::process::Command::new(bin)
-                        .args(extra)
-                        .args(["--type", "f", "--color", "never", "--", &query])
-                        .current_dir(&root)
-                        .output()
-                        .await
-                }
-                GlobalSearchType::Content => {
-                    let parts =
-                        shell_words::split(&rg_cmd).unwrap_or_else(|_| vec![rg_cmd.clone()]);
-                    let (bin, extra) = parts.split_first().unwrap_or((&rg_cmd, &[]));
-                    tokio::process::Command::new(bin)
-                        .args(extra)
-                        .args(["--json", "--line-number", "--max-count", "20", "--", &query])
-                        .current_dir(&root)
-                        .output()
-                        .await
-                }
-            };
-
-            match output {
-                Ok(out) => {
-                    let stdout = String::from_utf8_lossy(&out.stdout);
-                    let mut results = Vec::new();
-                    let mut parse_failed = false;
-                    // For content search, cap by unique files, not raw matches.
-                    let mut unique_file_count = 0usize;
-                    let mut last_file: Option<String> = None;
-
-                    for line in stdout.lines() {
-                        if line.is_empty() {
-                            continue;
-                        }
-                        match search_type {
-                            GlobalSearchType::FileName => {
-                                if results.len() >= max_results {
-                                    break;
-                                }
-                                let path = root.join(line);
-                                results.push(GlobalSearchResult {
-                                    path,
-                                    display: line.to_string(),
-                                    line: None,
-                                    context: None,
-                                });
-                            }
-                            GlobalSearchType::Content => match parse_rg_json_match(line) {
-                                Ok(Some((file, line_num, context))) => {
-                                    // Track unique file count
-                                    let is_new_file = last_file.as_ref().is_none_or(|f| f != &file);
-                                    if is_new_file {
-                                        unique_file_count += 1;
-                                        if unique_file_count > max_results {
-                                            break;
-                                        }
-                                        last_file = Some(file.clone());
-                                    }
-                                    let path = root.join(&file);
-                                    results.push(GlobalSearchResult {
-                                        path,
-                                        display: file,
-                                        line: line_num,
-                                        context,
-                                    });
-                                }
-                                Ok(None) => {}
-                                Err(_) => {
-                                    parse_failed = true;
-                                }
-                            },
-                        }
-                    }
-
-                    let error = if !out.status.success() && results.is_empty() {
-                        let stderr = String::from_utf8_lossy(&out.stderr);
-                        if stderr.contains("not found")
-                            || stderr.contains("No such file")
-                            || out.status.code() == Some(127)
-                        {
-                            let cmd_name = match search_type {
-                                GlobalSearchType::FileName => &fd_cmd,
-                                GlobalSearchType::Content => &rg_cmd,
-                            };
-                            Some(format!("{cmd_name} not found"))
-                        } else if stderr.trim().is_empty() {
-                            None
-                        } else {
-                            Some(stderr.trim().to_string())
-                        }
-                    } else if parse_failed && results.is_empty() {
-                        Some("Failed to parse ripgrep JSON output".to_string())
-                    } else {
-                        None
-                    };
-
-                    let _ = tx.send((id, results, error)).await;
-                }
-                Err(e) => {
-                    let cmd_name = match search_type {
-                        GlobalSearchType::FileName => &fd_cmd,
-                        GlobalSearchType::Content => &rg_cmd,
-                    };
-                    let _ = tx
-                        .send((id, Vec::new(), Some(format!("{cmd_name}: {e}"))))
-                        .await;
-                }
-            }
-        }));
+        self.global_search_job = Some(SearchJob::spawn(
+            self.search_state.request_id,
+            self.search_state.query.clone(),
+            self.search_state.global_search_type,
+            self.root.clone(),
+            self.config.search.fd_command.clone(),
+            self.config.search.rg_command.clone(),
+            self.config.search.max_results,
+            search_tx.clone(),
+            200,
+        ));
     }
 
     pub(super) fn abort_global_search_task(&mut self, invalidate_request_id: bool) {
         if invalidate_request_id {
             self.search_state.request_id = self.search_state.request_id.wrapping_add(1);
         }
-        if let Some(handle) = self.global_search_handle.take() {
-            handle.abort();
+        if let Some(job) = self.global_search_job.take() {
+            job.cancel();
         }
     }
 
