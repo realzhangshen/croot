@@ -12,7 +12,7 @@ This installs the latest release and makes `croot` available in your PATH.
 
 ## From Source
 
-Requires [Rust](https://rustup.rs/) 1.88 or later.
+Requires [Rust](https://rustup.rs/) 1.90 or later.
 
 ```bash
 git clone https://github.com/realzhangshen/croot.git

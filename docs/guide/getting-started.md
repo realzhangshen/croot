@@ -47,7 +47,6 @@ Navigate the tree while the preview updates automatically.
 | `A` | Create new directory |
 | `R` | Rename |
 | `D` | Delete |
-| `v` | Toggle multi-select |
 | `e` | Open in editor |
 
 ## Git Status

@@ -43,7 +43,6 @@ croot provides two layers of keybindings: built-in defaults that work out of the
 | `A` | Create new directory |
 | `R` | Rename file/directory |
 | `D` | Delete file/directory |
-| `v` | Toggle multi-select |
 | `e` | Open in editor |
 | `x` | Open externally (Finder, xdg-open) |
 

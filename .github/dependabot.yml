@@ -15,3 +15,11 @@ updates:
     labels: ["dependencies", "ci"]
     commit-message:
       prefix: "chore(ci)"
+
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "web"]
+    commit-message:
+      prefix: "chore(web-deps)"

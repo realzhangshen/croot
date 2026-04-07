@@ -137,8 +137,8 @@ fn highlight_with_syntax(
             }
 
             // Strip the trailing newline we added — we handle line breaks ourselves
-            let text = if token_text.ends_with('\n') {
-                &token_text[..token_text.len() - 1]
+            let text = if let Some(stripped) = token_text.strip_suffix('\n') {
+                stripped
             } else {
                 token_text
             };

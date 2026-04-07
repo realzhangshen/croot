@@ -19,12 +19,6 @@ Press `R` to rename the selected file or directory. The dialog pre-fills with th
 
 Press `D` to delete the selected file or directory. A confirmation dialog appears before deletion.
 
-## Multi-Select
-
-Press `v` to toggle selection on the current item. Selected items are highlighted. You can then perform bulk operations (delete) on all selected items.
-
-Navigate with `j`/`k` or arrow keys while selecting multiple items.
-
 ## Open in Editor
 
 Press `e` to open the selected file in your configured editor.

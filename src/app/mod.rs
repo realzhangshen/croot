@@ -815,6 +815,20 @@ mod tests {
         assert_eq!(app.tree.cursor, 1);
     }
 
+    #[tokio::test]
+    async fn action_cursor_down_refreshes_preview_when_visible() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.preview_visible = true;
+        let initial_generation = app.preview_generation;
+
+        app.handle_action(&Action::CursorDown, &ptx, &stx);
+
+        assert_eq!(app.tree.cursor, 1);
+        assert!(app.preview_generation > initial_generation);
+        assert!(app.preview_debounce_handle.is_some());
+    }
+
     #[test]
     fn action_cursor_up_at_top_stays() {
         let (mut app, _tmp) = test_app_with_files();

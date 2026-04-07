@@ -80,6 +80,11 @@ pub fn is_path_within_root_strict(root: &Path, target: &Path) -> bool {
     }
 }
 
+fn is_single_name(input: &str) -> bool {
+    let mut components = Path::new(input).components();
+    matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
+}
+
 /// Execute a confirmed dialog operation on the filesystem.
 /// Returns a `FileOpResult` indicating success, error, or no-op.
 pub fn execute_dialog(
@@ -95,16 +100,20 @@ pub fn execute_dialog(
             if input.is_empty() {
                 return FileOpResult::Noop;
             }
+            if !is_single_name(input) {
+                return FileOpResult::Error(
+                    "Name must be a single file or directory name".to_string(),
+                );
+            }
             let new_path = context_path.join(input);
             if !is_path_within_root_strict(root, &new_path) {
                 return FileOpResult::Error("Path escapes workspace root".to_string());
             }
-            if let Some(parent) = new_path.parent() {
-                if let Err(e) = std::fs::create_dir_all(parent) {
-                    return FileOpResult::Error(format!("Create dirs failed: {e}"));
-                }
-            }
-            if let Err(e) = std::fs::File::create(&new_path) {
+            if let Err(e) = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&new_path)
+            {
                 return FileOpResult::Error(format!("Create file failed: {e}"));
             }
             FileOpResult::Ok
@@ -113,11 +122,16 @@ pub fn execute_dialog(
             if input.is_empty() {
                 return FileOpResult::Noop;
             }
+            if !is_single_name(input) {
+                return FileOpResult::Error(
+                    "Name must be a single file or directory name".to_string(),
+                );
+            }
             let new_path = context_path.join(input);
             if !is_path_within_root_strict(root, &new_path) {
                 return FileOpResult::Error("Path escapes workspace root".to_string());
             }
-            if let Err(e) = std::fs::create_dir_all(&new_path) {
+            if let Err(e) = std::fs::create_dir(&new_path) {
                 return FileOpResult::Error(format!("Create directory failed: {e}"));
             }
             FileOpResult::Ok
@@ -126,10 +140,31 @@ pub fn execute_dialog(
             if input.is_empty() || input == target_name {
                 return FileOpResult::Noop;
             }
+            if !is_single_name(input) {
+                return FileOpResult::Error(
+                    "Name must be a single file or directory name".to_string(),
+                );
+            }
             if let Some(parent) = context_path.parent() {
                 let new_path = parent.join(input);
                 if !is_path_within_root_strict(root, &new_path) {
                     return FileOpResult::Error("Path escapes workspace root".to_string());
+                }
+                // TOCTOU note: there is a microsecond-scale race between this
+                // existence check and the rename below — on Unix, `rename(2)`
+                // silently overwrites an existing target, so a file that races
+                // into existence here could still be clobbered. This is
+                // intentionally accepted: croot is an interactive single-user
+                // TUI, the rename is driven by a human keystroke, and a truly
+                // atomic cross-platform "rename if not exists" would require
+                // either `renameat2(RENAME_NOREPLACE)` (Linux-only, unsafe) or
+                // a hard-link/unlink dance that does not work for directories.
+                match new_path.try_exists() {
+                    Ok(true) => {
+                        return FileOpResult::Error("Target already exists".to_string());
+                    }
+                    Err(e) => return FileOpResult::Error(format!("Rename failed: {e}")),
+                    Ok(false) => {}
                 }
                 if let Err(e) = std::fs::rename(context_path, &new_path) {
                     return FileOpResult::Error(format!("Rename failed: {e}"));
@@ -283,6 +318,30 @@ mod tests {
     }
 
     #[test]
+    fn new_file_rejects_nested_name() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+
+        let result = execute_dialog(&DialogKind::NewFile, "nested/file.txt", "", dir, dir, false);
+
+        assert!(matches!(result, FileOpResult::Error(_)));
+        assert!(!dir.join("nested").exists());
+    }
+
+    #[test]
+    fn new_file_does_not_truncate_existing_file() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let file = dir.join("existing.txt");
+        std::fs::write(&file, "keep me").unwrap();
+
+        let result = execute_dialog(&DialogKind::NewFile, "existing.txt", "", dir, dir, false);
+
+        assert!(matches!(result, FileOpResult::Error(_)));
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "keep me");
+    }
+
+    #[test]
     fn new_dir_creates_directory() {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path();
@@ -290,6 +349,17 @@ mod tests {
         let result = execute_dialog(&DialogKind::NewDir, "subdir", "", dir, dir, false);
         assert!(matches!(result, FileOpResult::Ok));
         assert!(dir.join("subdir").is_dir());
+    }
+
+    #[test]
+    fn new_dir_existing_path_returns_error() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        std::fs::create_dir(dir.join("subdir")).unwrap();
+
+        let result = execute_dialog(&DialogKind::NewDir, "subdir", "", dir, dir, false);
+
+        assert!(matches!(result, FileOpResult::Error(_)));
     }
 
     #[test]
@@ -321,6 +391,50 @@ mod tests {
             false,
         );
         assert!(matches!(result, FileOpResult::Error(_)));
+    }
+
+    #[test]
+    fn rename_rejects_nested_name() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let file = dir.join("old.txt");
+        std::fs::write(&file, "old").unwrap();
+
+        let result = execute_dialog(
+            &DialogKind::Rename,
+            "nested/new.txt",
+            "old.txt",
+            &file,
+            dir,
+            false,
+        );
+
+        assert!(matches!(result, FileOpResult::Error(_)));
+        assert!(file.exists());
+        assert!(!dir.join("nested").exists());
+    }
+
+    #[test]
+    fn rename_existing_target_does_not_overwrite() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let source = dir.join("source.txt");
+        let target = dir.join("target.txt");
+        std::fs::write(&source, "source").unwrap();
+        std::fs::write(&target, "target").unwrap();
+
+        let result = execute_dialog(
+            &DialogKind::Rename,
+            "target.txt",
+            "source.txt",
+            &source,
+            dir,
+            false,
+        );
+
+        assert!(matches!(result, FileOpResult::Error(_)));
+        assert_eq!(std::fs::read_to_string(&source).unwrap(), "source");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "target");
     }
 
     #[test]

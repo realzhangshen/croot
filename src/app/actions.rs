@@ -30,7 +30,12 @@ impl App {
             | Action::ScrollDown(_)
             | Action::GotoTop
             | Action::GotoBottom => {
+                let before_path = self.tree.selected().map(|n| n.path.clone());
                 self.handle_tree_action(action);
+                let after_path = self.tree.selected().map(|n| n.path.clone());
+                if self.preview_visible && before_path != after_path {
+                    self.trigger_preview_load(preview_tx);
+                }
             }
             Action::Refresh => {
                 self.full_refresh_sync(preview_tx);
