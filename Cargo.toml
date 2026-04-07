@@ -14,7 +14,7 @@ authors = ["Zhang Shen"]
 
 [dependencies]
 ratatui = { version = "0.30", features = ["crossterm"] }
-crossterm = { version = "0.28", features = ["event-stream"] }
+crossterm = { version = "0.29", features = ["event-stream"] }
 clap = { version = "4", features = ["derive"] }
 ignore = "0.4"
 tokio = { version = "1", features = ["rt", "macros", "process", "sync", "time", "io-util"] }
@@ -29,7 +29,7 @@ anyhow = "1"
 content_inspector = "0.2"
 unicode-width = "0.2"
 arboard = "3"
-pulldown-cmark = { version = "0.12", default-features = false }
+pulldown-cmark = { version = "0.13", default-features = false }
 globset = "0.4"
 regex = "1"
 similar = "2"
@@ -45,7 +45,7 @@ default = ["image-preview"]
 image-preview = ["dep:ratatui-image", "dep:image"]
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 proptest = "1"
 tempfile = "3"
 
