@@ -53,10 +53,12 @@ mod file_ops_bridge;
 mod mouse;
 mod preview_controller;
 mod preview_ops;
+mod refresh;
 mod search_ops;
 mod tree_ops;
 
 pub(super) use preview_controller::PreviewController;
+pub(super) use refresh::RefreshCoordinator;
 
 /// Result of an async branch switch operation.
 pub(super) struct BranchSwitchResult {
@@ -149,17 +151,10 @@ pub struct App {
     pub(super) status_bar_branch_region: Option<(u16, u16)>,
     // Channel for receiving branch switch results
     pub(super) branch_switch_rx: Option<mpsc::Receiver<BranchSwitchResult>>,
-    /// Generation counter for background refresh. Stale results are discarded.
-    pub(super) refresh_generation: u64,
-    /// True while a background refresh task is executing. Used to coalesce
-    /// concurrent refresh requests: additional triggers while a task is in
-    /// flight only set `refresh_pending = true` instead of spawning a new task.
-    pub(super) refresh_in_flight: bool,
-    /// Set when a refresh is requested while another is already in flight.
-    /// Consumed after the in-flight result is applied to spawn one follow-up
-    /// refresh that captures any filesystem changes that arrived during the
-    /// previous run.
-    pub(super) refresh_pending: bool,
+    /// State machine for background/synchronous tree refreshes: generation
+    /// tracking, in-flight guard, and coalesced follow-up. See
+    /// [`RefreshCoordinator`] for the semantics.
+    pub(super) refresh: RefreshCoordinator,
     // Cached terminal area from last draw, used by mouse handlers
     pub(super) last_terminal_area: ratatui::layout::Rect,
 }
@@ -217,9 +212,7 @@ impl App {
             search_bar_y: None,
             status_bar_branch_region: None,
             branch_switch_rx: None,
-            refresh_generation: 0,
-            refresh_in_flight: false,
-            refresh_pending: false,
+            refresh: RefreshCoordinator::new(),
             last_terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24),
         })
     }
@@ -425,17 +418,17 @@ mod tests {
     async fn background_refresh_first_call_sets_in_flight() {
         let (mut app, _tmp) = test_app();
         let (refresh_tx, _refresh_rx) = mpsc::channel::<RefreshResult>(2);
-        let before = app.refresh_generation;
+        let before = app.refresh.generation();
 
-        assert!(!app.refresh_in_flight);
-        assert!(!app.refresh_pending);
+        assert!(!app.refresh.in_flight());
+        assert!(!app.refresh.pending());
 
         app.background_refresh(&refresh_tx);
 
         // First call must spawn a task and bump the generation.
-        assert!(app.refresh_in_flight);
-        assert!(!app.refresh_pending);
-        assert_eq!(app.refresh_generation, before.wrapping_add(1));
+        assert!(app.refresh.in_flight());
+        assert!(!app.refresh.pending());
+        assert_eq!(app.refresh.generation(), before.wrapping_add(1));
     }
 
     #[tokio::test]
@@ -443,76 +436,78 @@ mod tests {
         let (mut app, _tmp) = test_app();
         let (refresh_tx, _refresh_rx) = mpsc::channel::<RefreshResult>(2);
 
-        // Simulate an already-in-flight refresh.
-        app.refresh_in_flight = true;
-        let gen_before = app.refresh_generation;
+        // Put the coordinator into the in-flight state via the normal API.
+        app.background_refresh(&refresh_tx);
+        let gen_before = app.refresh.generation();
 
         // Second trigger should only set pending, not bump generation and
         // not spawn a new task.
         app.background_refresh(&refresh_tx);
-        assert!(app.refresh_in_flight, "in-flight flag must stay set");
-        assert!(app.refresh_pending, "second trigger must set pending");
+        assert!(app.refresh.in_flight(), "in-flight flag must stay set");
+        assert!(app.refresh.pending(), "second trigger must set pending");
         assert_eq!(
-            app.refresh_generation, gen_before,
+            app.refresh.generation(),
+            gen_before,
             "coalesced trigger must not bump generation"
         );
 
         // Third trigger while in flight and pending already set: still a no-op.
         app.background_refresh(&refresh_tx);
-        assert!(app.refresh_pending);
-        assert_eq!(app.refresh_generation, gen_before);
+        assert!(app.refresh.pending());
+        assert_eq!(app.refresh.generation(), gen_before);
     }
 
     #[tokio::test]
     async fn full_refresh_sync_invalidates_in_flight_background_refresh() {
-        // Regression: without bumping refresh_generation in full_refresh_sync,
+        // Regression: without bumping the generation in full_refresh_sync,
         // a stale in-flight background result can land after the sync refresh
         // and clobber the freshly-loaded tree/git state. The event loop's
-        // generation check in refresh_rx.recv() is the guard that must fire.
+        // `is_current` check is the guard that must fire.
         let (mut app, _tmp) = test_app();
         let (preview_tx, _preview_rx) = mpsc::channel(1);
         let (refresh_tx, _refresh_rx) = mpsc::channel::<RefreshResult>(2);
 
         // Kick off a background refresh. This captures gen=1.
         app.background_refresh(&refresh_tx);
-        let in_flight_gen = app.refresh_generation;
-        assert!(app.refresh_in_flight);
+        let in_flight_gen = app.refresh.generation();
+        assert!(app.refresh.in_flight());
 
         // Now a synchronous refresh runs (e.g. post-editor). It should bump
         // the generation so that when the background result finally arrives
-        // it fails the `refresh.generation == self.refresh_generation` check.
+        // `is_current` returns false.
         app.full_refresh_sync(&preview_tx);
 
         assert_ne!(
-            app.refresh_generation, in_flight_gen,
-            "full_refresh_sync must bump refresh_generation to invalidate the \
+            app.refresh.generation(),
+            in_flight_gen,
+            "full_refresh_sync must bump the generation to invalidate the \
              in-flight background refresh"
         );
         assert!(
-            !app.refresh_pending,
-            "full_refresh_sync should clear refresh_pending too; a pending \
+            !app.refresh.pending(),
+            "full_refresh_sync should clear pending too; a pending \
              follow-up would also overwrite the sync result with a stale snapshot"
         );
     }
 
     #[tokio::test]
     async fn background_refresh_resets_flag_after_completion() {
-        // Exercise the fact that clearing refresh_in_flight from outside
-        // (mimicking the event loop's refresh_rx handler) re-enables spawning.
+        // Exercise the fact that clearing in_flight via finish_background
+        // re-enables spawning of a fresh task.
         let (mut app, _tmp) = test_app();
         let (refresh_tx, _refresh_rx) = mpsc::channel::<RefreshResult>(2);
 
         app.background_refresh(&refresh_tx);
-        assert!(app.refresh_in_flight);
-        let gen_after_first = app.refresh_generation;
+        assert!(app.refresh.in_flight());
+        let gen_after_first = app.refresh.generation();
 
-        // Event loop clears in-flight after applying the result.
-        app.refresh_in_flight = false;
+        // Simulate the event loop clearing in-flight after applying the result.
+        let _ = app.refresh.finish_background();
 
         app.background_refresh(&refresh_tx);
-        assert!(app.refresh_in_flight);
+        assert!(app.refresh.in_flight());
         assert_eq!(
-            app.refresh_generation,
+            app.refresh.generation(),
             gen_after_first.wrapping_add(1),
             "follow-up spawn must bump generation again"
         );

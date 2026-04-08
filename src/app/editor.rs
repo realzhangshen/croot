@@ -139,21 +139,13 @@ impl App {
     /// Used when the result must be available immediately (e.g. after editor suspend,
     /// manual refresh, file operations).
     ///
-    /// Also bumps `refresh_generation` so that any background refresh task
-    /// currently in flight will have its result discarded when it lands on
-    /// `refresh_rx` — otherwise the older snapshot could overwrite the tree
-    /// and git state we just loaded synchronously. The in-flight flag is
-    /// left untouched: the event-loop handler still clears it when the
-    /// stale result arrives.
+    /// Delegates to [`RefreshCoordinator::start_sync`] so any in-flight
+    /// background task becomes stale and a queued follow-up is dropped.
     pub(super) fn full_refresh_sync(
         &mut self,
         preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) {
-        self.refresh_generation = self.refresh_generation.wrapping_add(1);
-        // A follow-up coalesced refresh would overwrite the sync result with
-        // an older snapshot just as badly as a stale in-flight one, so drop
-        // the pending bit too.
-        self.refresh_pending = false;
+        self.refresh.start_sync();
 
         self.tree.refresh();
         if let Some(ref mut git) = self.git {
@@ -169,25 +161,13 @@ impl App {
     /// Background refresh: spawns a blocking task to rebuild tree + git state.
     /// The result is sent via `refresh_tx` and applied on the next event loop iteration.
     ///
-    /// Coalescing: if another refresh is already in flight, this call just sets
-    /// `refresh_pending = true` and returns without spawning. The event loop
-    /// will spawn one follow-up refresh after the in-flight result is applied,
-    /// guaranteeing at most "current + one pending" concurrent work regardless
-    /// of how many triggers arrive. Combined with generation tracking, stale
-    /// results that do make it through are still discarded on recv.
+    /// Coalescing is handled by [`RefreshCoordinator::try_start_background`]:
+    /// if another refresh is already running, the call is a no-op that only
+    /// records the need for a follow-up.
     pub(super) fn background_refresh(&mut self, refresh_tx: &mpsc::Sender<RefreshResult>) {
-        if self.refresh_in_flight {
-            // Another refresh is already running — just mark that we want a
-            // follow-up and return. This collapses bursts of filesystem events
-            // (e.g. `cargo build` writing dozens of files) into at most two
-            // refreshes: the one currently running plus one coalesced catch-up.
-            self.refresh_pending = true;
+        let Some(generation) = self.refresh.try_start_background() else {
             return;
-        }
-
-        self.refresh_in_flight = true;
-        self.refresh_generation = self.refresh_generation.wrapping_add(1);
-        let generation = self.refresh_generation;
+        };
 
         let root = self.root.clone();
         let config = self.tree.config.clone();

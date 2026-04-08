@@ -293,10 +293,11 @@ impl App {
                 }
                 result = refresh_rx.recv() => {
                     if let Some(refresh) = result {
-                        // Clear in-flight regardless of staleness — the task finished.
-                        self.refresh_in_flight = false;
+                        // Clear in-flight regardless of staleness and learn
+                        // whether a coalesced follow-up was queued.
+                        let should_follow_up = self.refresh.finish_background();
 
-                        if refresh.generation == self.refresh_generation {
+                        if self.refresh.is_current(refresh.generation) {
                             // Capture cursor path at APPLY time (not request time)
                             let cursor_path = self.tree.selected().map(|n| n.path.clone());
 
@@ -318,11 +319,10 @@ impl App {
                             }
                         }
 
-                        // If events arrived while the previous refresh was
-                        // running, coalesce them into one follow-up refresh
-                        // that will see the latest filesystem state.
-                        if self.refresh_pending {
-                            self.refresh_pending = false;
+                        // Spawn the coalesced follow-up so any events that
+                        // arrived while the previous refresh was running are
+                        // captured in a single catch-up snapshot.
+                        if should_follow_up {
                             self.background_refresh(&refresh_tx);
                         }
                     }
