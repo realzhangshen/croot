@@ -57,7 +57,8 @@ impl StatefulWidget for TreeView<'_> {
         // Store for mouse click resolution
         state.rendered_indices.clone_from(&visible_indices);
 
-        // Precompute guides: use filtered guides when in filter mode
+        // In filter mode precompute guides from the filtered subset; this only
+        // reads state.nodes immutably so it's safe to run before the warm-up below.
         let filtered_guides = if is_filtered {
             Some(precompute_filtered_guides(
                 &state.nodes,
@@ -66,17 +67,25 @@ impl StatefulWidget for TreeView<'_> {
         } else {
             Option::None
         };
-        let all_guides: Vec<Vec<bool>> = if filtered_guides.is_none() {
-            state.cached_guides().to_vec()
-        } else {
-            Vec::new()
-        };
 
-        // Precompute chain lengths once (ensures cache is warm, avoids borrow conflicts)
+        // Warm both caches before taking a long-lived immutable borrow of
+        // state.guides_cache for the render loop. cached_chain_len(0) fills
+        // the entire chain_len_cache in a single pass; cached_guides() fills
+        // guides_cache. Both calls take &mut state but the borrow ends here.
         if !is_filtered {
-            // Warm the cache with a single call; subsequent lookups are O(1)
             let _ = state.cached_chain_len(0);
+            let _ = state.cached_guides();
         }
+
+        // Borrow the warmed guides cache directly instead of cloning
+        // Vec<Vec<bool>> every frame. Disjoint-field access lets the loop
+        // body still read state.nodes / state.chain_len_cache / call &self
+        // methods on state without conflicting with this borrow.
+        let all_guides: &[Vec<bool>] = if is_filtered {
+            &[]
+        } else {
+            &state.guides_cache
+        };
 
         for (row, &absolute_idx) in visible_indices.iter().enumerate() {
             let y = area.y + row as u16;
@@ -293,28 +302,45 @@ impl StatefulWidget for TreeView<'_> {
 /// Build a list of node indices to render, skipping intermediate compacted directories.
 /// Also adjusts scroll so the cursor stays on a visible (non-skipped) row.
 /// Uses `cached_displayable_indices()` for O(1) on cache hit instead of O(N) iteration.
+///
+/// Only the viewport range (at most `viewport_height` entries) is cloned —
+/// the full displayable list is read directly from the warmed cache.
 fn build_visible_indices(state: &mut FileTree, viewport_height: usize) -> Vec<usize> {
-    let all_visible = state.cached_displayable_indices().to_vec();
+    // Warm the cache. The &mut borrow ends right after this call, so the
+    // subsequent reads of state.displayable_cache can coexist with writes
+    // to the disjoint state.cursor / state.scroll_offset fields.
+    let cache_len = state.cached_displayable_indices().len();
 
-    if all_visible.is_empty() {
+    if cache_len == 0 {
         return Vec::new();
     }
 
-    // Ensure cursor snaps to a visible index
-    if let Some(pos) = all_visible.iter().position(|&idx| idx >= state.cursor) {
-        if all_visible[pos] != state.cursor {
-            state.cursor = all_visible[pos]; // snap forward to nearest visible
-        }
-    } else if let Some(&last) = all_visible.last() {
-        state.cursor = last;
+    // Snap cursor to a visible index. We copy the current cursor out first
+    // so the closure only borrows state.displayable_cache, leaving state.cursor
+    // free to be written below.
+    let cursor_before = state.cursor;
+    let snapped_cursor = match state
+        .displayable_cache
+        .iter()
+        .position(|&idx| idx >= cursor_before)
+    {
+        Some(pos) => state.displayable_cache[pos],
+        // cache_len > 0 guarantees last() is Some.
+        None => *state.displayable_cache.last().unwrap(),
+    };
+    if snapped_cursor != state.cursor {
+        state.cursor = snapped_cursor;
     }
 
-    // Apply scrolling within the visible-indices list
-    let cursor_vis_pos = all_visible
+    // Locate the cursor's position within the displayable list.
+    let cursor = state.cursor;
+    let cursor_vis_pos = state
+        .displayable_cache
         .iter()
-        .position(|&idx| idx == state.cursor)
+        .position(|&idx| idx == cursor)
         .unwrap_or(0);
 
+    // Adjust scroll offset to keep cursor in viewport.
     if cursor_vis_pos < state.scroll_offset {
         state.scroll_offset = cursor_vis_pos;
     }
@@ -322,9 +348,11 @@ fn build_visible_indices(state: &mut FileTree, viewport_height: usize) -> Vec<us
         state.scroll_offset = cursor_vis_pos - viewport_height + 1;
     }
 
+    // Clone only the viewport slice (typically 30-50 entries) instead of
+    // the full displayable list.
     let start = state.scroll_offset;
-    let end = (start + viewport_height).min(all_visible.len());
-    all_visible[start..end].to_vec()
+    let end = (start + viewport_height).min(cache_len);
+    state.displayable_cache[start..end].to_vec()
 }
 
 /// Build visible indices from a pre-filtered set. Uses the same scroll logic.
@@ -784,6 +812,103 @@ mod tests {
         // 2024-01-18 = 1705536000
         let s = format_epoch_date(1_705_536_000);
         assert!(s.starts_with("Jan"), "got: {s}");
+    }
+
+    fn tree_with_n_files(n: usize) -> FileTree {
+        let config = crate::config::TreeConfig {
+            show_hidden: true,
+            show_ignored: true,
+            dirs_first: true,
+            exclude: vec![],
+            compact_folders: false,
+            show_size: false,
+            show_modified: false,
+        };
+        let nodes = (0..n)
+            .map(|i| TreeNode::new(PathBuf::from(format!("/tmp/f{i}.txt")), NodeKind::File, 0))
+            .collect();
+        FileTree {
+            nodes,
+            cursor: 0,
+            scroll_offset: 0,
+            root: PathBuf::from("/tmp"),
+            config,
+            rendered_indices: vec![],
+            file_count: n,
+            dir_count: 0,
+            chain_len_cache: std::collections::HashMap::new(),
+            chain_cache_valid: false,
+            displayable_cache: Vec::new(),
+            displayable_cache_valid: false,
+            guides_cache: Vec::new(),
+            guides_cache_valid: false,
+        }
+    }
+
+    #[test]
+    fn build_visible_indices_returns_only_viewport_slice() {
+        // 50 files, viewport height 10 — result must be at most 10 entries,
+        // not the full 50-element displayable list.
+        let mut tree = tree_with_n_files(50);
+        let visible = build_visible_indices(&mut tree, 10);
+        assert_eq!(visible.len(), 10);
+        assert_eq!(visible[0], 0);
+        assert_eq!(visible[9], 9);
+    }
+
+    #[test]
+    fn build_visible_indices_scrolls_to_keep_cursor_in_viewport() {
+        let mut tree = tree_with_n_files(50);
+        tree.cursor = 25;
+        let visible = build_visible_indices(&mut tree, 10);
+        assert_eq!(visible.len(), 10);
+        // Cursor must be inside the returned window.
+        assert!(
+            visible.contains(&25),
+            "viewport {visible:?} should contain cursor 25"
+        );
+    }
+
+    #[test]
+    fn build_visible_indices_empty_tree_returns_empty() {
+        let mut tree = tree_with_n_files(0);
+        let visible = build_visible_indices(&mut tree, 10);
+        assert!(visible.is_empty());
+    }
+
+    #[test]
+    fn build_visible_indices_cursor_past_end_snaps_to_last() {
+        let mut tree = tree_with_n_files(5);
+        tree.cursor = 99; // beyond the last node
+        let visible = build_visible_indices(&mut tree, 10);
+        assert_eq!(visible, vec![0, 1, 2, 3, 4]);
+        assert_eq!(tree.cursor, 4);
+    }
+
+    #[test]
+    fn render_uses_warmed_guides_cache_without_extra_clones() {
+        // Smoke test that the render path compiles and runs with the refactor
+        // (full-tree guide slice borrow + chain_len_cache access in the loop).
+        // Any borrow-check regression here will fail to compile; any behavioral
+        // regression will show up in the other render tests.
+        let mut tree = tree_with_n_files(20);
+        tree.cursor = 0;
+        let config = tree.config.clone();
+        let area = ratatui::layout::Rect::new(0, 0, 40, 10);
+        let mut buf = Buffer::empty(area);
+        let empty_positions = HashMap::new();
+        let widget = TreeView {
+            config: &config,
+            hover_row: None,
+            filter_indices: &[],
+            highlight_indices: &[],
+            highlight_char_positions: &empty_positions,
+        };
+        widget.render(area, &mut buf, &mut tree);
+        // Warmed caches should now be valid.
+        assert!(tree.guides_cache_valid);
+        assert!(tree.chain_cache_valid);
+        assert!(tree.displayable_cache_valid);
     }
 
     #[test]
