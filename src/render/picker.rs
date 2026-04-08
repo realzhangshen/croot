@@ -3,7 +3,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::colors;
 use super::input_dialog::draw_border;
-use super::status_bar::truncate_to_display_width;
+use super::text_util::truncate_to_display_width;
 use crate::git::branches::BranchInfo;
 use crate::search::matcher::fuzzy_match;
 
@@ -276,7 +276,7 @@ impl PickerWidget {
         let query_x = input_x + 2;
         let query_width = input_width.saturating_sub(2);
         let display_text =
-            super::status_bar::truncate_start_to_display_width(&state.query, query_width);
+            super::text_util::truncate_start_to_display_width(&state.query, query_width);
         buf.set_string(query_x, input_y, &display_text, input_style);
 
         // Draw cursor (block cursor: swap fg/bg)

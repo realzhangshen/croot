@@ -173,7 +173,7 @@ impl Widget for InputDialogWidget<'_> {
 
             // Draw input text
             let display_text =
-                super::status_bar::truncate_start_to_display_width(&self.state.input, input_width);
+                super::text_util::truncate_start_to_display_width(&self.state.input, input_width);
             buf.set_string(input_x, input_y, &display_text, input_style);
 
             // Draw cursor (block cursor: swap fg/bg)

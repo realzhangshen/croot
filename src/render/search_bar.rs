@@ -73,7 +73,7 @@ impl Widget for SearchBar<'_> {
 
         // Draw query text
         let display_text =
-            super::status_bar::truncate_start_to_display_width(&self.state.query, input_width);
+            super::text_util::truncate_start_to_display_width(&self.state.query, input_width);
         buf.set_string(input_x, area.y, &display_text, colors::status_input());
 
         // Draw cursor

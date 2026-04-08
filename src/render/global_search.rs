@@ -77,7 +77,7 @@ impl Widget for GlobalSearchOverlay<'_> {
         // Available width: dialog.width - left_border(1) - prompt(3) - right_border(1)
         let input_width = dialog.width.saturating_sub(1 + prompt.len() as u16 + 1) as usize;
         let query_display =
-            super::status_bar::truncate_start_to_display_width(&self.state.query, input_width);
+            super::text_util::truncate_start_to_display_width(&self.state.query, input_width);
         buf.set_string(input_x, input_y, &query_display, input_style);
 
         // Cursor (block cursor: swap fg/bg)
@@ -116,7 +116,7 @@ impl Widget for GlobalSearchOverlay<'_> {
                 colors::popup_warning(),
             );
         } else if let Some(ref err) = self.state.global_error {
-            let display = truncate_str(err, content_width);
+            let display = super::text_util::truncate_with_ellipsis(err, content_width);
             buf.set_string(dialog.x + 2, results_y, display, colors::popup_error());
         } else if self.state.global_search_type == GlobalSearchType::Content {
             // ── Grouped content search results ──
@@ -155,7 +155,8 @@ impl Widget for GlobalSearchOverlay<'_> {
                     }
                 }
 
-                let display = truncate_str(&result.display, content_width);
+                let display =
+                    super::text_util::truncate_with_ellipsis(&result.display, content_width);
                 buf.set_string(dialog.x + 2, row_y, &display, style);
             }
         }
@@ -263,7 +264,7 @@ impl GlobalSearchOverlay<'_> {
                     format!(" ({} matches)", group.matches.len())
                 };
                 let header = format!("{}{}{}", indicator, group.display, match_label);
-                let display = truncate_str(&header, content_width);
+                let display = super::text_util::truncate_with_ellipsis(&header, content_width);
                 buf.set_string(
                     dialog.x + 2,
                     row_y,
@@ -304,7 +305,8 @@ impl GlobalSearchOverlay<'_> {
                             (None, Some(ctx)) => format!("   {}", ctx.trim()),
                             (None, None) => "   ...".to_string(),
                         };
-                        let display = truncate_str(&line_text, content_width);
+                        let display =
+                            super::text_util::truncate_with_ellipsis(&line_text, content_width);
                         buf.set_string(dialog.x + 2, row_y, &display, style);
 
                         rendered += 1;
@@ -313,25 +315,6 @@ impl GlobalSearchOverlay<'_> {
                 }
             }
         }
-    }
-}
-
-fn truncate_str(s: &str, max_width: usize) -> String {
-    if s.width() <= max_width {
-        s.to_string()
-    } else {
-        let mut result = String::new();
-        let mut width = 0;
-        for ch in s.chars() {
-            let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
-            if width + cw > max_width.saturating_sub(1) {
-                result.push('…');
-                break;
-            }
-            result.push(ch);
-            width += cw;
-        }
-        result
     }
 }
 

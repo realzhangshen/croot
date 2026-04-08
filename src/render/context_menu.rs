@@ -384,7 +384,7 @@ impl Widget for ContextMenuWidget<'_> {
             } else {
                 let text = format!(" {} ", item.label);
                 let content_width = menu_rect.width.saturating_sub(2) as usize;
-                let display = super::status_bar::truncate_to_display_width(&text, content_width);
+                let display = super::text_util::truncate_to_display_width(&text, content_width);
                 buf.set_string(menu_rect.x + 1, y, &display, style);
             }
         }

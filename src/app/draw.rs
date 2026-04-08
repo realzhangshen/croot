@@ -214,7 +214,7 @@ impl App {
                     .fg(ratatui::style::Color::White)
                     .bg(ratatui::style::Color::Red)
                     .add_modifier(ratatui::style::Modifier::BOLD);
-                let display = crate::render::status_bar::truncate_to_display_width(
+                let display = crate::render::text_util::truncate_to_display_width(
                     msg,
                     status_area.width as usize,
                 );
