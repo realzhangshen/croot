@@ -912,6 +912,27 @@ mod tests {
     }
 
     #[test]
+    fn render_empty_tree_does_not_panic() {
+        let mut tree = tree_with_n_files(0);
+        let config = tree.config.clone();
+        let area = ratatui::layout::Rect::new(0, 0, 40, 10);
+        let mut buf = Buffer::empty(area);
+        let empty_positions = HashMap::new();
+        let widget = TreeView {
+            config: &config,
+            hover_row: None,
+            filter_indices: &[],
+            highlight_indices: &[],
+            highlight_char_positions: &empty_positions,
+        };
+
+        widget.render(area, &mut buf, &mut tree);
+
+        assert!(tree.rendered_indices.is_empty());
+        assert!(tree.chain_cache_valid);
+    }
+
+    #[test]
     fn is_last_visible_sibling_basic() {
         let nodes = vec![
             TreeNode::new(PathBuf::from("a"), NodeKind::File, 0),

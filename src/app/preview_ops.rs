@@ -69,6 +69,12 @@ impl App {
         preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) {
         let Some(node) = self.tree.selected() else {
+            if let Some(handle) = self.preview.debounce_handle.take() {
+                handle.abort();
+            }
+            self.preview.generation = self.preview.generation.wrapping_add(1);
+            self.preview.pending_line = None;
+            self.preview.state.clear();
             return;
         };
 

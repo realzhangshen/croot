@@ -1503,4 +1503,38 @@ mod tests {
         let current_gen = app.preview.generation;
         assert_eq!(current_gen, app.preview.generation);
     }
+
+    #[tokio::test]
+    async fn trigger_preview_load_clears_preview_when_selection_disappears() {
+        let (mut app, tmp) = test_app();
+        let path = tmp.path().join("gone.txt");
+        std::fs::write(&path, "preview me").unwrap();
+        app.tree.refresh();
+
+        app.preview.visible = true;
+        app.preview.state.apply(
+            path.clone(),
+            PreviewKind::Text,
+            vec![vec![(
+                "preview me".to_string(),
+                ratatui::style::Style::default(),
+            )]],
+            "10 B".to_string(),
+            None,
+            crate::git::diff::GitDiffHint::Skip,
+        );
+
+        std::fs::remove_file(&path).unwrap();
+        app.tree.refresh();
+        assert!(app.tree.selected().is_none());
+
+        let (preview_tx, _rx) = mpsc::channel(1);
+        let gen_before = app.preview.generation;
+        app.trigger_preview_load(&preview_tx);
+
+        assert_eq!(app.preview.state.kind, PreviewKind::Empty);
+        assert!(app.preview.state.current_path.is_none());
+        assert!(app.preview.debounce_handle.is_none());
+        assert_eq!(app.preview.generation, gen_before.wrapping_add(1));
+    }
 }

@@ -85,6 +85,12 @@ impl FileTree {
     /// appear in `rendered_indices`). Mid-chain indices are not cached and will
     /// return 0 with a debug assertion failure.
     pub fn cached_chain_len(&mut self, index: usize) -> usize {
+        if self.nodes.is_empty() {
+            self.chain_len_cache.clear();
+            self.chain_cache_valid = true;
+            return 0;
+        }
+
         if !self.chain_cache_valid {
             self.chain_len_cache.clear();
             let mut i = 0;
