@@ -16,9 +16,18 @@ use super::scope_map::token_for_scope;
 use super::semantic::SemanticToken;
 use super::theme::active_theme;
 
+/// The active syntax set.
+///
+/// We use [`two_face::syntax::extra_newlines`] instead of syntect's bundled
+/// `load_defaults_newlines` because the default bundle is missing many common
+/// languages — Swift, TOML, Kotlin, Dockerfile, INI, Nix, Dart, Zig,
+/// TypeScript, SCSS, GraphQL, Terraform, etc. The two-face crate (maintained
+/// alongside `bat`) ships a combined `SyntaxSet` containing the syntect
+/// defaults plus those extras, compatible with the same fancy-regex backend
+/// we already use.
 fn syntax_set() -> &'static SyntaxSet {
     static SS: OnceLock<SyntaxSet> = OnceLock::new();
-    SS.get_or_init(SyntaxSet::load_defaults_newlines)
+    SS.get_or_init(two_face::syntax::extra_newlines)
 }
 
 /// Map language tokens/extensions not present in syntect's default bundle to
@@ -170,6 +179,93 @@ fn highlight_with_syntax(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Helper: assert that the given (lang token, sample code) gets at least
+    /// one styled span — i.e. the syntax is recognised and produces colours.
+    fn assert_highlighted(lang: &str, code: &str) {
+        let lines = highlight_code(lang, code, 100);
+        assert!(!lines.is_empty(), "{lang}: produced no lines");
+        assert!(
+            lines.iter().flatten().any(|(_, style)| style.fg.is_some()),
+            "{lang}: expected styled spans, got plain text — syntax not recognised"
+        );
+    }
+
+    #[test]
+    fn highlights_swift() {
+        assert_highlighted(
+            "swift",
+            "import Foundation\nfunc greet(name: String) -> String { return \"hi \\(name)\" }",
+        );
+    }
+
+    #[test]
+    fn highlights_toml() {
+        assert_highlighted("toml", "[package]\nname = \"croot\"\nversion = \"0.5.5\"\n");
+    }
+
+    #[test]
+    fn highlights_kotlin() {
+        assert_highlighted("kt", "fun main() { println(\"hello\") }");
+    }
+
+    #[test]
+    fn highlights_dockerfile() {
+        let path = std::path::PathBuf::from("Dockerfile");
+        let lines = highlight_file(&path, "FROM rust:1.90\nRUN cargo build\n", 100);
+        assert!(
+            lines.iter().flatten().any(|(_, style)| style.fg.is_some()),
+            "Dockerfile should be highlighted by filename"
+        );
+    }
+
+    #[test]
+    fn highlights_ini() {
+        assert_highlighted("ini", "[section]\nkey = value\n");
+    }
+
+    #[test]
+    fn highlights_nix() {
+        assert_highlighted("nix", "{ pkgs ? import <nixpkgs> {} }: pkgs.hello");
+    }
+
+    #[test]
+    fn highlights_dart() {
+        assert_highlighted("dart", "void main() { print('hi'); }");
+    }
+
+    #[test]
+    fn highlights_zig() {
+        assert_highlighted(
+            "zig",
+            "const std = @import(\"std\");\npub fn main() void {}",
+        );
+    }
+
+    #[test]
+    fn highlights_typescript_natively() {
+        // With two-face, .ts has a real TypeScript syntax (not the JS fallback).
+        let path = std::path::PathBuf::from("foo.ts");
+        let lines = highlight_file(&path, "type User = { name: string };", 100);
+        assert!(
+            lines.iter().flatten().any(|(_, style)| style.fg.is_some()),
+            ".ts file should be highlighted"
+        );
+    }
+
+    #[test]
+    fn highlight_file_detects_cargo_toml() {
+        let path = std::path::PathBuf::from("Cargo.toml");
+        let lines = highlight_file(
+            &path,
+            "[package]\nname = \"croot\"\nversion = \"0.5.5\"\n",
+            100,
+        );
+        assert!(
+            lines.iter().flatten().any(|(_, style)| style.fg.is_some()),
+            "Cargo.toml should be highlighted"
+        );
+    }
 
     #[test]
     fn highlights_rust_with_ansi_styles() {

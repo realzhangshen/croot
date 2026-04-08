@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Bundle the `two-face` extended syntax set so file preview now highlights Swift, TOML (incl. `Cargo.toml`), Kotlin, Dockerfile, INI, Nix, Dart, Zig, native TypeScript, and many other languages missing from syntect's default bundle
+
 ### Fixed
 - Remove stale demo GIF release workflow after the website migration
 
