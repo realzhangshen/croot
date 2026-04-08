@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-04-08
+
+### Added
+- Streaming `fd`/`rg` search jobs with proper cancellation for long-running searches
+- Richer syntax token palette covering escapes, constants, constructors, macros, and lifetimes
+- Async integration coverage for search cancellation, background refresh, and cache consistency
+
+### Changed
+- Move syntax highlighting back to syntect for broader language coverage while keeping configurable ANSI token colors
+- Move full tree refresh to a background thread with generation tracking
+- Cache displayable tree indices and guides for faster large-tree rendering
+- Split app and search internals into focused modules
+- Bump Rust dependencies, GitHub Actions, and web tooling
+
+### Fixed
+- Prevent stale preview and background refresh results from overwriting newer state
+- Prevent new file, new directory, and rename operations from clobbering existing paths
+- Add missing semantic scope mappings and repair search imports after module extraction
+
 ## [0.5.4] - 2026-04-02
 
 ### Added
@@ -258,7 +277,8 @@ _Release-only commit (CI/packaging fix). No user-facing changes._
 - Git ignored file display: removed redundant status marker, fixed directory lookup
 - macOS x86_64 CI build using correct runner (macos-14)
 
-[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/realzhangshen/croot/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/realzhangshen/croot/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/realzhangshen/croot/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/realzhangshen/croot/compare/v0.5.1...v0.5.2
