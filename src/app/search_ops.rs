@@ -283,7 +283,7 @@ impl App {
                 self.abort_global_search_task(true);
                 self.ui.input_mode = InputMode::Normal;
                 if let Some(rg_line) = line {
-                    self.pending_preview_line = Some((path.clone(), rg_line));
+                    self.preview.pending_line = Some((path.clone(), rg_line));
                 }
                 self.search_state.clear();
                 self.tree.navigate_to_path(&path);

@@ -148,7 +148,7 @@ impl App {
         }
         self.reapply_git();
         self.refresh_search_state();
-        if self.preview_visible {
+        if self.preview.visible {
             self.trigger_preview_load(preview_tx);
         }
     }

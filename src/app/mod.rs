@@ -13,7 +13,6 @@ use ratatui::{
     Terminal,
 };
 use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 use unicode_width::UnicodeWidthStr;
 
 use crate::cmux::bridge::CmuxBridge;
@@ -27,7 +26,7 @@ use crate::input::handler::{
 use crate::input::mouse::{handle_mouse, ClickTracker};
 use crate::layout::{self, FocusPane, PreviewLayout};
 use crate::preview::loader::{load_preview, LoadedPreview};
-use crate::preview::state::{PreviewKind, PreviewState};
+use crate::preview::state::PreviewKind;
 use crate::render::colors;
 use crate::render::context_menu::{ContextMenuState, ContextMenuWidget, MenuAction};
 use crate::render::global_search::GlobalSearchOverlay;
@@ -53,9 +52,12 @@ mod editor;
 mod event_loop;
 mod file_ops_bridge;
 mod mouse;
+mod preview_controller;
 mod preview_ops;
 mod search_ops;
 mod tree_ops;
+
+pub(super) use preview_controller::PreviewController;
 
 /// Result of an async branch switch operation.
 pub(super) struct BranchSwitchResult {
@@ -117,14 +119,11 @@ pub struct App {
     pub should_quit: bool,
     pub(super) tree_area_y: u16,
     pub(super) tree_area_height: u16,
-    // Preview panel state
-    pub preview_state: PreviewState,
-    pub preview_visible: bool,
+    /// Preview pane state: visibility, loaded content, scroll, debounce handle,
+    /// image resize channels, etc. Grouped here so preview-specific state lives
+    /// in one place instead of eleven loose App fields.
+    pub preview: PreviewController,
     pub focus: FocusPane,
-    pub(super) preview_debounce_handle: Option<JoinHandle<()>>,
-    pub(super) preview_area_x: Option<u16>,
-    pub(super) preview_layout: Option<PreviewLayout>,
-    pub(super) preview_content_width: u16,
     pub(super) dragging_separator: bool,
     pub(super) main_area_width: u16,
     pub(super) hover_row: Option<usize>,
@@ -134,8 +133,6 @@ pub struct App {
     pub(super) search_state: SearchState,
     /// Handle for the current async global search task.
     pub(super) global_search_job: Option<crate::search::SearchJob>,
-    /// Path-keyed pending line for preview scroll after content search confirm.
-    pub(super) pending_preview_line: Option<(PathBuf, usize)>,
     // Hyperlink regions for post-render OSC 8 emission
     pub(super) hyperlink_regions: Vec<HyperlinkRegion>,
     // Whether Kitty keyboard enhancement protocol is active
@@ -166,19 +163,6 @@ pub struct App {
     pub(super) refresh_pending: bool,
     // Cached terminal area from last draw, used by mouse handlers
     pub(super) last_terminal_area: ratatui::layout::Rect,
-    /// Monotonic counter for preview requests. Stale results are discarded.
-    pub(super) preview_generation: u64,
-    // Image preview support
-    #[cfg(feature = "image-preview")]
-    pub(super) image_picker: Option<ratatui_image::picker::Picker>,
-    #[cfg(feature = "image-preview")]
-    pub(super) resize_tx: Option<std::sync::mpsc::Sender<ratatui_image::thread::ResizeRequest>>,
-    #[cfg(feature = "image-preview")]
-    pub(super) resize_response_rx: Option<
-        std::sync::mpsc::Receiver<
-            Result<ratatui_image::thread::ResizeResponse, ratatui_image::errors::Errors>,
-        >,
-    >,
 }
 
 impl App {
@@ -201,6 +185,13 @@ impl App {
         let mouse_enabled = config.mouse.enabled;
         let keybinding_map = build_keybinding_map(&config.keybindings);
 
+        #[allow(unused_mut)]
+        let mut preview = PreviewController::new(preview_visible, render_markdown);
+        #[cfg(feature = "image-preview")]
+        {
+            preview.image_picker = image_picker;
+        }
+
         Ok(Self {
             tree,
             git,
@@ -210,24 +201,14 @@ impl App {
             should_quit: false,
             tree_area_y: 0,
             tree_area_height: 0,
-            preview_state: {
-                let mut ps = PreviewState::new();
-                ps.render_markdown = render_markdown;
-                ps
-            },
-            preview_visible,
+            preview,
             focus: FocusPane::Tree,
-            preview_debounce_handle: None,
-            preview_area_x: None,
-            preview_layout: None,
-            preview_content_width: 80,
             dragging_separator: false,
             main_area_width: 0,
             hover_row: None,
             ui: UiOverlayState::default(),
             search_state: SearchState::new(SearchMode::Find),
             global_search_job: None,
-            pending_preview_line: None,
             hyperlink_regions: Vec::new(),
             enhanced_keyboard,
             click_tracker: ClickTracker::new(),
@@ -241,13 +222,6 @@ impl App {
             refresh_in_flight: false,
             refresh_pending: false,
             last_terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24),
-            preview_generation: 0,
-            #[cfg(feature = "image-preview")]
-            image_picker,
-            #[cfg(feature = "image-preview")]
-            resize_tx: None,
-            #[cfg(feature = "image-preview")]
-            resize_response_rx: None,
         })
     }
 
@@ -635,7 +609,7 @@ mod tests {
         let test_file = app.root.join("goto_test.txt");
         std::fs::write(&test_file, "content").unwrap();
         app.tree.refresh();
-        app.preview_visible = true;
+        app.preview.visible = true;
 
         // Set up global search state with a filename result
         app.ui.input_mode = InputMode::GlobalSearch;
@@ -656,7 +630,7 @@ mod tests {
         assert_eq!(app.ui.input_mode, InputMode::Normal);
         assert!(matches!(post, PostAction::None));
         assert!(
-            app.preview_debounce_handle.is_some(),
+            app.preview.debounce_handle.is_some(),
             "Preview debounce handle should be set after goto"
         );
 
@@ -766,7 +740,7 @@ mod tests {
         let test_file = app.root.join("goto_match.rs");
         std::fs::write(&test_file, "hello\nworld\n").unwrap();
         app.tree.refresh();
-        app.preview_visible = true;
+        app.preview.visible = true;
 
         app.ui.input_mode = InputMode::GlobalSearch;
         app.search_state = SearchState::new(SearchMode::Global);
@@ -790,8 +764,8 @@ mod tests {
         assert!(matches!(post, PostAction::None));
         // Should have set pending_preview_line for scroll
         assert!(
-            app.pending_preview_line.is_none()
-                || app.pending_preview_line == Some((test_file.clone(), 2))
+            app.preview.pending_line.is_none()
+                || app.preview.pending_line == Some((test_file.clone(), 2))
         );
     }
 
@@ -827,7 +801,7 @@ mod tests {
         let file = tmp.path().join("keep.txt");
         std::fs::write(&file, "content").unwrap();
         app.tree.refresh();
-        app.preview_visible = true;
+        app.preview.visible = true;
 
         app.ui.input_dialog = Some(InputDialogState::new(
             DialogKind::Rename,
@@ -844,7 +818,7 @@ mod tests {
         app.confirm_dialog(&preview_tx);
 
         assert!(
-            app.preview_debounce_handle.is_some(),
+            app.preview.debounce_handle.is_some(),
             "successful file operations should reload the preview"
         );
     }
@@ -897,14 +871,14 @@ mod tests {
     async fn action_cursor_down_refreshes_preview_when_visible() {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
-        app.preview_visible = true;
-        let initial_generation = app.preview_generation;
+        app.preview.visible = true;
+        let initial_generation = app.preview.generation;
 
         app.handle_action(&Action::CursorDown, &ptx, &stx);
 
         assert_eq!(app.tree.cursor, 1);
-        assert!(app.preview_generation > initial_generation);
-        assert!(app.preview_debounce_handle.is_some());
+        assert!(app.preview.generation > initial_generation);
+        assert!(app.preview.debounce_handle.is_some());
     }
 
     #[test]
@@ -933,18 +907,18 @@ mod tests {
     async fn action_toggle_preview_flips_visibility() {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
-        assert!(!app.preview_visible);
+        assert!(!app.preview.visible);
         app.handle_action(&Action::TogglePreview, &ptx, &stx);
-        assert!(app.preview_visible);
+        assert!(app.preview.visible);
         app.handle_action(&Action::TogglePreview, &ptx, &stx);
-        assert!(!app.preview_visible);
+        assert!(!app.preview.visible);
     }
 
     #[test]
     fn action_toggle_preview_off_resets_focus_to_tree() {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
-        app.preview_visible = true;
+        app.preview.visible = true;
         app.focus = FocusPane::Preview;
         app.handle_action(&Action::TogglePreview, &ptx, &stx);
         assert_eq!(app.focus, FocusPane::Tree);
@@ -1154,7 +1128,7 @@ mod tests {
     fn action_switch_focus_toggles() {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
-        app.preview_visible = true;
+        app.preview.visible = true;
         assert_eq!(app.focus, FocusPane::Tree);
         app.handle_action(&Action::SwitchFocus, &ptx, &stx);
         assert_eq!(app.focus, FocusPane::Preview);
@@ -1342,13 +1316,13 @@ mod tests {
 
         // Ensure cursor is NOT on that file and preview is hidden.
         app.tree.cursor = usize::from(file_idx == 0);
-        app.preview_visible = false;
+        app.preview.visible = false;
 
         // Click the file row.
         app.handle_click_row(file_idx as u16, &preview_tx);
 
         assert!(
-            app.preview_visible,
+            app.preview.visible,
             "clicking a non-selected file should open the preview panel"
         );
         assert_eq!(app.tree.cursor, file_idx);
@@ -1363,12 +1337,12 @@ mod tests {
         let dir_idx = (0..app.tree.len())
             .find(|&i| app.tree.nodes[i].is_dir())
             .expect("should have a directory node");
-        app.preview_visible = true;
+        app.preview.visible = true;
 
         app.handle_click_row(dir_idx as u16, &preview_tx);
 
         assert!(
-            app.preview_debounce_handle.is_some(),
+            app.preview.debounce_handle.is_some(),
             "clicking a directory with preview visible should schedule a directory preview"
         );
     }
@@ -1391,25 +1365,25 @@ mod tests {
         assert_eq!(selected_path, file_a);
 
         // preview_state should have no content initially
-        assert!(app.preview_state.current_path.is_none());
+        assert!(app.preview.state.current_path.is_none());
 
         // Simulate receiving a preview result for file_b (stale -- user moved away)
         // The staleness check should prevent apply
         let still_selected = app.tree.selected().is_some_and(|n| n.path == file_b);
         assert!(!still_selected);
         // So preview_state remains unchanged
-        assert!(app.preview_state.current_path.is_none());
+        assert!(app.preview.state.current_path.is_none());
     }
 
     #[tokio::test]
     async fn preview_generation_increments_on_trigger() {
         let (mut app, _tmp) = test_app_with_files();
         let (preview_tx, _rx) = mpsc::channel(4);
-        app.preview_visible = true;
-        let initial = app.preview_generation;
+        app.preview.visible = true;
+        let initial = app.preview.generation;
         app.trigger_preview_load(&preview_tx);
         assert!(
-            app.preview_generation > initial,
+            app.preview.generation > initial,
             "preview_generation should increment after trigger_preview_load"
         );
     }
@@ -1418,7 +1392,7 @@ mod tests {
     async fn preview_generation_stable_when_cached() {
         let (mut app, _tmp) = test_app_with_files();
         let (preview_tx, _rx) = mpsc::channel(4);
-        app.preview_visible = true;
+        app.preview.visible = true;
 
         // Simulate that the preview for the selected file was already loaded and applied.
         // This means current_path is set, kind is not Loading, and mtime matches.
@@ -1426,15 +1400,15 @@ mod tests {
         let mtime = std::fs::metadata(&selected_path)
             .ok()
             .and_then(|m| m.modified().ok());
-        app.preview_state.current_path = Some(selected_path);
-        app.preview_state.kind = PreviewKind::Text;
-        app.preview_state.cached_mtime = mtime;
+        app.preview.state.current_path = Some(selected_path);
+        app.preview.state.kind = PreviewKind::Text;
+        app.preview.state.cached_mtime = mtime;
 
-        let gen_before = app.preview_generation;
+        let gen_before = app.preview.generation;
         // This call should hit the mtime cache and return early -- generation should NOT increment
         app.trigger_preview_load(&preview_tx);
         assert_eq!(
-            app.preview_generation, gen_before,
+            app.preview.generation, gen_before,
             "preview_generation should not increment when preview is cached"
         );
     }
@@ -1443,17 +1417,17 @@ mod tests {
     async fn stale_preview_generation_discarded() {
         let (mut app, _tmp) = test_app_with_files();
         let (_preview_tx, _rx) = mpsc::channel::<(u64, PathBuf, LoadedPreview)>(4);
-        app.preview_visible = true;
+        app.preview.visible = true;
 
         // Simulate: generation is at 5, but a stale result arrives with gen=3
-        app.preview_generation = 5;
+        app.preview.generation = 5;
         let stale_gen: u64 = 3;
 
-        // The generation check: stale_gen != app.preview_generation
-        assert_ne!(stale_gen, app.preview_generation);
+        // The generation check: stale_gen != app.preview.generation
+        assert_ne!(stale_gen, app.preview.generation);
 
         // A result with matching generation should be accepted
-        let current_gen = app.preview_generation;
-        assert_eq!(current_gen, app.preview_generation);
+        let current_gen = app.preview.generation;
+        assert_eq!(current_gen, app.preview.generation);
     }
 }

@@ -33,7 +33,7 @@ impl App {
                 let before_path = self.tree.selected().map(|n| n.path.clone());
                 self.handle_tree_action(action);
                 let after_path = self.tree.selected().map(|n| n.path.clone());
-                if self.preview_visible && before_path != after_path {
+                if self.preview.visible && before_path != after_path {
                     self.trigger_preview_load(preview_tx);
                 }
             }
@@ -46,17 +46,17 @@ impl App {
                 self.handle_preview_action(action);
             }
             Action::TogglePreview => {
-                self.preview_visible = !self.preview_visible;
-                if self.preview_visible {
+                self.preview.visible = !self.preview.visible;
+                if self.preview.visible {
                     self.trigger_preview_load(preview_tx);
                 } else {
                     self.focus = FocusPane::Tree;
                 }
             }
             Action::ToggleRender => {
-                self.preview_state.render_markdown = !self.preview_state.render_markdown;
-                self.preview_state.cached_mtime = None;
-                if self.preview_visible {
+                self.preview.state.render_markdown = !self.preview.state.render_markdown;
+                self.preview.state.cached_mtime = None;
+                if self.preview.visible {
                     self.trigger_preview_load(preview_tx);
                 }
             }
@@ -71,7 +71,7 @@ impl App {
                         let ratio = 1.0 - (f32::from(col) / f32::from(self.main_area_width));
                         self.config.preview.split_ratio = ratio.clamp(0.2, 0.8);
                     }
-                } else if self.preview_area_x.is_some_and(|px| col >= px) {
+                } else if self.preview.area_x.is_some_and(|px| col >= px) {
                     self.handle_selection_action(&Action::SelectionUpdate(col, row));
                 }
             }
@@ -339,7 +339,7 @@ impl App {
                 self.tree.collapse_all();
                 self.reapply_git();
                 self.refresh_search_state();
-                if self.preview_visible {
+                if self.preview.visible {
                     self.trigger_preview_load(preview_tx);
                 }
             }

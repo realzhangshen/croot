@@ -27,8 +27,8 @@ impl App {
                 }
             });
 
-            self.resize_tx = Some(resize_tx);
-            self.resize_response_rx = Some(response_rx);
+            self.preview.resize_tx = Some(resize_tx);
+            self.preview.resize_response_rx = Some(response_rx);
         }
 
         let mut reader = EventStream::new();
@@ -55,7 +55,7 @@ impl App {
         let (search_tx, mut search_rx) = mpsc::channel::<SearchBatch>(16);
 
         // Trigger initial preview load if auto_preview is on
-        if self.preview_visible {
+        if self.preview.visible {
             self.trigger_preview_load(&preview_tx);
         }
 
@@ -64,10 +64,10 @@ impl App {
         loop {
             // Poll for completed image resize results (non-blocking)
             #[cfg(feature = "image-preview")]
-            if let Some(ref rx) = self.resize_response_rx {
+            if let Some(ref rx) = self.preview.resize_response_rx {
                 while let Ok(result) = rx.try_recv() {
                     if let Ok(response) = result {
-                        if let Some(ref mut thread_proto) = self.preview_state.image_state {
+                        if let Some(ref mut thread_proto) = self.preview.state.image_state {
                             thread_proto.update_resized_protocol(response);
                         }
                     }
@@ -93,8 +93,8 @@ impl App {
                         Some(Ok(Event::Key(key))) => {
                             let action = match self.ui.input_mode {
                                 InputMode::Normal => {
-                                    let has_selection = self.preview_state.selection.is_active();
-                                    let action = handle_key(key, self.preview_visible, has_selection, &self.keybinding_map);
+                                    let has_selection = self.preview.state.selection.is_active();
+                                    let action = handle_key(key, self.preview.visible, has_selection, &self.keybinding_map);
                                     if self.focus == FocusPane::Preview {
                                         match action {
                                             Action::ScrollUp(n) => Action::PreviewScrollUp(n),
@@ -143,7 +143,7 @@ impl App {
                                 } else if self.search_bar_y.is_some_and(|y| mouse.row == y) && is_left_down {
                                     post_action = self.handle_search_bar_click(mouse.column, &preview_tx);
                                 } else {
-                                    let action = handle_mouse(mouse, self.tree_area_y, self.tree_area_height, self.preview_area_x, &mut self.click_tracker);
+                                    let action = handle_mouse(mouse, self.tree_area_y, self.tree_area_height, self.preview.area_x, &mut self.click_tracker);
                                     post_action = self.handle_action(&action, &preview_tx, &search_tx);
                                 }
                             }
@@ -152,7 +152,7 @@ impl App {
                             self.ui.context_menu = None;
                             self.ui.picker_state = None;
                             self.ui.input_mode = InputMode::Normal;
-                            if self.preview_visible {
+                            if self.preview.visible {
                                 self.trigger_preview_load(&preview_tx);
                             }
                         }
@@ -196,7 +196,7 @@ impl App {
                 result = preview_rx.recv() => {
                     if let Some((gen, path, loaded)) = result {
                         // Discard stale preview results from older generations
-                        if gen != self.preview_generation {
+                        if gen != self.preview.generation {
                             continue;
                         }
                         #[allow(unused_mut)]
@@ -206,7 +206,7 @@ impl App {
                             handled = true;
                             // Decode image and create ThreadProtocol in background
                             if let (Some(picker), Some(resize_tx)) =
-                                (self.image_picker.clone(), self.resize_tx.clone())
+                                (self.preview.image_picker.clone(), self.preview.resize_tx.clone())
                             {
                                 let file_info = loaded.file_info.clone();
                                 let tx = image_tx.clone();
@@ -244,14 +244,14 @@ impl App {
                             let still_selected = self.tree.selected()
                                 .is_some_and(|n| n.path == path);
                             if still_selected {
-                                self.preview_state.apply(path, loaded.kind, loaded.content, loaded.file_info, loaded.line_diffs);
+                                self.preview.state.apply(path, loaded.kind, loaded.content, loaded.file_info, loaded.line_diffs);
                                 // Apply pending line scroll from content search confirm
-                                if let Some((ref target_path, line)) = self.pending_preview_line {
-                                    if self.preview_state.current_path.as_ref() == Some(target_path) {
-                                        self.preview_state.scroll_to_line(line);
+                                if let Some((ref target_path, line)) = self.preview.pending_line {
+                                    if self.preview.state.current_path.as_ref() == Some(target_path) {
+                                        self.preview.state.scroll_to_line(line);
                                     }
                                 }
-                                self.pending_preview_line = None;
+                                self.preview.pending_line = None;
                             }
                         }
                     }
@@ -263,7 +263,7 @@ impl App {
                         let still_selected = self.tree.selected()
                             .is_some_and(|n| n.path == path);
                         if still_selected {
-                            self.preview_state.apply_image(path, file_info, thread_proto);
+                            self.preview.state.apply_image(path, file_info, thread_proto);
                         }
                     }
                     #[cfg(not(feature = "image-preview"))]
@@ -310,7 +310,7 @@ impl App {
 
                             self.reapply_git();
                             self.refresh_search_state();
-                            if self.preview_visible {
+                            if self.preview.visible {
                                 self.trigger_preview_load(&preview_tx);
                             }
                         }

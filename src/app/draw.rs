@@ -36,7 +36,7 @@ impl App {
         self.tree_area_y = content_area.y;
         self.main_area_width = main_area.width;
 
-        if self.preview_visible && content_area.width > 20 {
+        if self.preview.visible && content_area.width > 20 {
             // Split horizontally: tree | separator | preview
             let ratio = self.config.preview.split_ratio.clamp(0.2, 0.8);
             let tree_width = (f32::from(content_area.width) * (1.0 - ratio)) as u16;
@@ -94,19 +94,19 @@ impl App {
                     .set_string(separator_area.x, y, "\u{2502}", sep_style);
             }
 
-            self.preview_content_width = preview_width;
-            self.preview_area_x = Some(preview_area.x);
+            self.preview.content_width = preview_width;
+            self.preview.area_x = Some(preview_area.x);
 
             let content_area_y = preview_area.y + 1;
             let content_area_height = preview_area.height.saturating_sub(1);
             let gutter_width = crate::render::preview_view::compute_gutter_width(
                 self.config.preview.show_line_numbers,
                 self.config.preview.show_git_diff,
-                &self.preview_state.kind,
-                self.preview_state.total_lines,
-                self.preview_state.line_diffs.is_some(),
+                &self.preview.state.kind,
+                self.preview.state.total_lines,
+                self.preview.state.line_diffs.is_some(),
             );
-            self.preview_layout = Some(PreviewLayout {
+            self.preview.layout = Some(PreviewLayout {
                 x: preview_area.x + gutter_width,
                 y: content_area_y,
                 height: content_area_height,
@@ -116,10 +116,10 @@ impl App {
                 config: &self.config.preview,
                 focused: self.focus == FocusPane::Preview,
             }
-            .render(preview_area, frame.buffer_mut(), &mut self.preview_state);
+            .render(preview_area, frame.buffer_mut(), &mut self.preview.state);
         } else {
-            self.preview_area_x = None;
-            self.preview_layout = None;
+            self.preview.area_x = None;
+            self.preview.layout = None;
             self.tree_area_height = content_area.height;
 
             TreeView {

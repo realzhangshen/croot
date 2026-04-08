@@ -111,8 +111,8 @@ impl App {
             MenuAction::Rename => self.start_rename_at(node_idx),
             MenuAction::Delete => self.start_delete_at(node_idx),
             MenuAction::TogglePreview => {
-                self.preview_visible = !self.preview_visible;
-                if self.preview_visible {
+                self.preview.visible = !self.preview.visible;
+                if self.preview.visible {
                     self.trigger_preview_load(preview_tx);
                 } else {
                     self.focus = FocusPane::Tree;
@@ -141,7 +141,7 @@ impl App {
             MenuAction::NewFile | MenuAction::NewDir | MenuAction::Rename | MenuAction::Delete
         ) {
             // Refresh handled in confirm_dialog
-        } else if self.preview_visible {
+        } else if self.preview.visible {
             self.trigger_preview_load(preview_tx);
         }
         PostAction::None
@@ -239,7 +239,8 @@ impl App {
     pub(super) fn open_context_menu(&mut self, col: u16, row: u16) {
         // Exclude preview pane and separator
         if self
-            .preview_area_x
+            .preview
+            .area_x
             .is_some_and(|px| col >= px.saturating_sub(1))
         {
             return;

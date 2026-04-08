@@ -5,14 +5,14 @@ impl App {
         match action {
             Action::CursorUp => {
                 if self.focus == FocusPane::Preview {
-                    self.preview_state.scroll_up(1);
+                    self.preview.state.scroll_up(1);
                 } else {
                     self.tree.cursor_up();
                 }
             }
             Action::CursorDown => {
                 if self.focus == FocusPane::Preview {
-                    self.preview_state.scroll_down(1);
+                    self.preview.state.scroll_down(1);
                 } else {
                     self.tree.cursor_down();
                 }
@@ -47,15 +47,15 @@ impl App {
             }
             Action::GotoTop => {
                 if self.focus == FocusPane::Preview {
-                    self.preview_state.scroll_offset = 0;
+                    self.preview.state.scroll_offset = 0;
                 } else {
                     self.tree.cursor = 0;
                 }
             }
             Action::GotoBottom => {
                 if self.focus == FocusPane::Preview {
-                    self.preview_state.scroll_offset =
-                        self.preview_state.total_lines.saturating_sub(1);
+                    self.preview.state.scroll_offset =
+                        self.preview.state.total_lines.saturating_sub(1);
                 } else if !self.tree.is_empty() {
                     // Use rendered_indices (visible nodes) when available;
                     // fall back to the full displayable indices list.
@@ -81,7 +81,7 @@ impl App {
         preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) {
         self.focus = FocusPane::Tree;
-        self.preview_state.selection.clear();
+        self.preview.state.selection.clear();
         let row_idx = row as usize;
         let idx = if row_idx < self.tree.rendered_indices.len() {
             self.tree.rendered_indices[row_idx]
@@ -95,21 +95,21 @@ impl App {
                 self.tree.toggle(idx);
                 self.reapply_git();
                 self.refresh_search_state();
-                if self.preview_visible {
+                if self.preview.visible {
                     self.trigger_preview_load(preview_tx);
                 }
-            } else if already_selected && self.preview_visible {
-                self.preview_visible = false;
+            } else if already_selected && self.preview.visible {
+                self.preview.visible = false;
                 self.focus = FocusPane::Tree;
             } else {
-                self.preview_visible = true;
+                self.preview.visible = true;
                 self.trigger_preview_load(preview_tx);
             }
         }
     }
 
     pub(super) fn update_hover(&mut self, col: u16, row: u16) {
-        if self.preview_area_x.is_some_and(|px| col >= px) {
+        if self.preview.area_x.is_some_and(|px| col >= px) {
             self.hover_row = None;
             return;
         }
