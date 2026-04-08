@@ -44,146 +44,86 @@ pub struct Config {
     pub syntax: SyntaxConfig,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct ColorConfig {
-    pub git_modified: Option<String>,
-    pub git_added: Option<String>,
-    pub git_deleted: Option<String>,
-    pub git_ignored: Option<String>,
-    pub git_conflicted: Option<String>,
-    pub git_staged_modified: Option<String>,
-    pub git_staged_added: Option<String>,
-    pub git_staged_deleted: Option<String>,
-    pub unfocused_header_bg: Option<String>,
-    pub unfocused_header_fg: Option<String>,
-    pub hex_values: Option<String>,
-    pub hex_ascii: Option<String>,
-    pub preview_dir_name: Option<String>,
-    pub inline_code: Option<String>,
-    pub tree_line: Option<String>,
-    pub status_bar_bg: Option<String>,
-    pub status_bar_fg: Option<String>,
-    pub dir_color: Option<String>,
-    pub default_fg: Option<String>,
-    pub find_match: Option<String>,
-    pub popup_fg: Option<String>,
-    pub popup_bg: Option<String>,
-    pub popup_accent: Option<String>,
-    pub popup_border_fg: Option<String>,
-    pub popup_dim_fg: Option<String>,
-    pub popup_input_bg: Option<String>,
-    pub popup_input_fg: Option<String>,
-    pub popup_selected_danger_bg: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct ColorDefaults {
-    pub git_modified: &'static str,
-    pub git_added: &'static str,
-    pub git_deleted: &'static str,
-    pub git_ignored: &'static str,
-    pub git_conflicted: &'static str,
-    pub git_staged_modified: &'static str,
-    pub git_staged_added: &'static str,
-    pub git_staged_deleted: &'static str,
-    pub unfocused_header_bg: &'static str,
-    pub unfocused_header_fg: &'static str,
-    pub hex_values: &'static str,
-    pub hex_ascii: &'static str,
-    pub preview_dir_name: &'static str,
-    pub inline_code: &'static str,
-    pub tree_line: &'static str,
-    pub status_bar_bg: &'static str,
-    pub status_bar_fg: &'static str,
-    pub dir_color: &'static str,
-    pub default_fg: &'static str,
-    pub find_match: &'static str,
-    pub popup_fg: &'static str,
-    pub popup_bg: &'static str,
-    pub popup_accent: &'static str,
-    pub popup_border_fg: &'static str,
-    pub popup_dim_fg: &'static str,
-    pub popup_input_bg: &'static str,
-    pub popup_input_fg: &'static str,
-    pub popup_selected_danger_bg: &'static str,
-}
-
-pub const DEFAULT_COLORS: ColorDefaults = ColorDefaults {
-    git_modified: "yellow",
-    git_added: "green",
-    git_deleted: "red",
-    git_ignored: "dark_gray",
-    git_conflicted: "light_red",
-    git_staged_modified: "yellow",
-    git_staged_added: "green",
-    git_staged_deleted: "red",
-    unfocused_header_bg: "dark_gray",
-    unfocused_header_fg: "black",
-    hex_values: "blue",
-    hex_ascii: "gray",
-    preview_dir_name: "blue",
-    inline_code: "green",
-    tree_line: "dark_gray",
-    status_bar_bg: "black",
-    status_bar_fg: "white",
-    dir_color: "blue",
-    default_fg: "reset",
-    find_match: "cyan",
-    popup_fg: "white",
-    popup_bg: "black",
-    popup_accent: "light_blue",
-    popup_border_fg: "reset",
-    popup_dim_fg: "reset",
-    popup_input_bg: "white",
-    popup_input_fg: "black",
-    popup_selected_danger_bg: "red",
-};
-
 /// Resolve a user color override, falling back to the default if unset.
 fn resolve_color(user: Option<&String>, default: &str) -> Option<String> {
     user.cloned().or_else(|| Some(default.to_string()))
 }
 
-impl ColorConfig {
-    /// Return a copy with `None` fields filled in with built-in defaults.
-    #[must_use]
-    pub fn resolved(&self) -> Self {
-        macro_rules! r {
-            ($field:ident) => {
-                resolve_color(self.$field.as_ref(), DEFAULT_COLORS.$field)
-            };
+/// Declarative schema for the color palette.
+///
+/// A single invocation produces:
+/// - `ColorConfig` (serde-deserialized, user overrides)
+/// - `ColorDefaults` + `DEFAULT_COLORS` const (built-in defaults)
+/// - `ColorConfig::resolved()` (fill `None` slots with defaults)
+///
+/// Adding a new color means editing exactly one line here, plus mirroring the
+/// field in `render::colors` (which is validated at compile time by the
+/// `DEFAULT_COLORS.xxx` access in that module).
+macro_rules! define_color_schema {
+    ( $( $name:ident = $default:expr ),* $(,)? ) => {
+        #[derive(Debug, Clone, Default, Deserialize, Serialize)]
+        pub struct ColorConfig {
+            $(
+                pub $name: Option<String>,
+            )*
         }
-        Self {
-            git_modified: r!(git_modified),
-            git_added: r!(git_added),
-            git_deleted: r!(git_deleted),
-            git_ignored: r!(git_ignored),
-            git_conflicted: r!(git_conflicted),
-            git_staged_modified: r!(git_staged_modified),
-            git_staged_added: r!(git_staged_added),
-            git_staged_deleted: r!(git_staged_deleted),
-            unfocused_header_bg: r!(unfocused_header_bg),
-            unfocused_header_fg: r!(unfocused_header_fg),
-            hex_values: r!(hex_values),
-            hex_ascii: r!(hex_ascii),
-            preview_dir_name: r!(preview_dir_name),
-            inline_code: r!(inline_code),
-            tree_line: r!(tree_line),
-            status_bar_bg: r!(status_bar_bg),
-            status_bar_fg: r!(status_bar_fg),
-            dir_color: r!(dir_color),
-            default_fg: r!(default_fg),
-            find_match: r!(find_match),
-            popup_fg: r!(popup_fg),
-            popup_bg: r!(popup_bg),
-            popup_accent: r!(popup_accent),
-            popup_border_fg: r!(popup_border_fg),
-            popup_dim_fg: r!(popup_dim_fg),
-            popup_input_bg: r!(popup_input_bg),
-            popup_input_fg: r!(popup_input_fg),
-            popup_selected_danger_bg: r!(popup_selected_danger_bg),
+
+        #[derive(Debug, Clone, Copy)]
+        pub struct ColorDefaults {
+            $(
+                pub $name: &'static str,
+            )*
         }
-    }
+
+        pub const DEFAULT_COLORS: ColorDefaults = ColorDefaults {
+            $(
+                $name: $default,
+            )*
+        };
+
+        impl ColorConfig {
+            /// Return a copy with `None` fields filled in with built-in defaults.
+            #[must_use]
+            pub fn resolved(&self) -> Self {
+                Self {
+                    $(
+                        $name: resolve_color(self.$name.as_ref(), DEFAULT_COLORS.$name),
+                    )*
+                }
+            }
+        }
+    };
+}
+
+define_color_schema! {
+    git_modified = "yellow",
+    git_added = "green",
+    git_deleted = "red",
+    git_ignored = "dark_gray",
+    git_conflicted = "light_red",
+    git_staged_modified = "yellow",
+    git_staged_added = "green",
+    git_staged_deleted = "red",
+    unfocused_header_bg = "dark_gray",
+    unfocused_header_fg = "black",
+    hex_values = "blue",
+    hex_ascii = "gray",
+    preview_dir_name = "blue",
+    inline_code = "green",
+    tree_line = "dark_gray",
+    status_bar_bg = "black",
+    status_bar_fg = "white",
+    dir_color = "blue",
+    default_fg = "reset",
+    find_match = "cyan",
+    popup_fg = "white",
+    popup_bg = "black",
+    popup_accent = "light_blue",
+    popup_border_fg = "reset",
+    popup_dim_fg = "reset",
+    popup_input_bg = "white",
+    popup_input_fg = "black",
+    popup_selected_danger_bg = "red",
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -246,94 +186,89 @@ impl Default for SearchConfig {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct KeybindingsConfig {
-    pub quit: Option<String>,
-    pub cursor_up: Option<String>,
-    pub cursor_down: Option<String>,
-    pub cursor_left: Option<String>,
-    pub cursor_right: Option<String>,
-    pub toggle: Option<String>,
-    pub refresh: Option<String>,
-    pub new_file: Option<String>,
-    pub new_dir: Option<String>,
-    pub rename: Option<String>,
-    pub delete: Option<String>,
-    pub toggle_preview: Option<String>,
-    pub toggle_render: Option<String>,
-    pub open_in_editor: Option<String>,
-    pub open_externally: Option<String>,
-    pub collapse_all: Option<String>,
-    pub search: Option<String>,
-    pub filter: Option<String>,
-    pub global_search: Option<String>,
-    pub global_search_content: Option<String>,
-    pub goto_top: Option<String>,
-    pub goto_bottom: Option<String>,
-    pub branch_picker: Option<String>,
-    pub enter: Option<String>,
-}
+/// Declarative schema for the keybinding map.
+///
+/// Generates:
+/// - `KeybindingsConfig` struct (serde-deserialized, user overrides)
+/// - `default_key_for` lookup function (name → built-in default)
+/// - `KeybindingsConfig::resolved()` (fill defaulted slots, preserve opt-ins)
+///
+/// The schema distinguishes two kinds of fields:
+///
+/// - `defaults { name = "key", ... }`: shortcuts with a built-in default key.
+///   A user may override the key or disable it with `""`.
+/// - `opt_in { name, ... }`: shortcuts that are only active when the user
+///   opts in (e.g. `q = "quit"`). Defaults stay `None`.
+macro_rules! define_keybinding_schema {
+    (
+        defaults { $( $def_name:ident = $def_key:expr ),* $(,)? }
+        opt_in { $( $opt_name:ident ),* $(,)? }
+    ) => {
+        #[derive(Debug, Clone, Default, Deserialize, Serialize)]
+        pub struct KeybindingsConfig {
+            $( pub $def_name: Option<String>, )*
+            $( pub $opt_name: Option<String>, )*
+        }
 
-/// Built-in default key for a keybinding field. Returns `None` for opt-in-only fields.
-pub fn default_key_for(field: &str) -> Option<&'static str> {
-    match field {
-        "cursor_up" => Some("Up"),
-        "cursor_down" => Some("Down"),
-        "cursor_left" => Some("Left"),
-        "cursor_right" => Some("Right"),
-        "goto_top" => Some("Home"),
-        "goto_bottom" => Some("End"),
-        "search" => Some("/"),
-        "filter" => Some("f"),
-        "global_search" => Some("s"),
-        "global_search_content" => Some("S"),
-        "toggle_render" => Some("m"),
-        _ => None,
-    }
-}
-
-impl KeybindingsConfig {
-    /// Return a copy with `None` fields filled in with built-in defaults.
-    /// Fields the user explicitly set (including `""` to disable) are kept as-is.
-    #[must_use]
-    pub fn resolved(&self) -> Self {
-        fn resolve(field: Option<&String>, name: &str) -> Option<String> {
+        /// Built-in default key for a keybinding field. Returns `None` for
+        /// opt-in-only fields.
+        #[must_use]
+        pub fn default_key_for(field: &str) -> Option<&'static str> {
             match field {
-                Some(s) => Some(s.clone()),
-                None => default_key_for(name).map(String::from),
+                $( stringify!($def_name) => Some($def_key), )*
+                _ => None,
             }
         }
 
-        Self {
-            cursor_up: resolve(self.cursor_up.as_ref(), "cursor_up"),
-            cursor_down: resolve(self.cursor_down.as_ref(), "cursor_down"),
-            cursor_left: resolve(self.cursor_left.as_ref(), "cursor_left"),
-            cursor_right: resolve(self.cursor_right.as_ref(), "cursor_right"),
-            goto_top: resolve(self.goto_top.as_ref(), "goto_top"),
-            goto_bottom: resolve(self.goto_bottom.as_ref(), "goto_bottom"),
-            search: resolve(self.search.as_ref(), "search"),
-            filter: resolve(self.filter.as_ref(), "filter"),
-            global_search: resolve(self.global_search.as_ref(), "global_search"),
-            global_search_content: resolve(
-                self.global_search_content.as_ref(),
-                "global_search_content",
-            ),
-            toggle_render: resolve(self.toggle_render.as_ref(), "toggle_render"),
-            // Opt-in fields: no defaults, keep as-is
-            quit: self.quit.clone(),
-            toggle: self.toggle.clone(),
-            refresh: self.refresh.clone(),
-            new_file: self.new_file.clone(),
-            new_dir: self.new_dir.clone(),
-            rename: self.rename.clone(),
-            delete: self.delete.clone(),
-            toggle_preview: self.toggle_preview.clone(),
-            open_in_editor: self.open_in_editor.clone(),
-            open_externally: self.open_externally.clone(),
-            collapse_all: self.collapse_all.clone(),
-            branch_picker: self.branch_picker.clone(),
-            enter: self.enter.clone(),
+        impl KeybindingsConfig {
+            /// Return a copy with defaulted fields filled in with built-in
+            /// defaults. User-set fields (including `""` to disable) are kept
+            /// as-is; opt-in fields stay as the user left them.
+            #[must_use]
+            pub fn resolved(&self) -> Self {
+                fn fill(field: Option<&String>, default: &'static str) -> Option<String> {
+                    match field {
+                        Some(s) => Some(s.clone()),
+                        None => Some(default.to_string()),
+                    }
+                }
+                Self {
+                    $( $def_name: fill(self.$def_name.as_ref(), $def_key), )*
+                    $( $opt_name: self.$opt_name.clone(), )*
+                }
+            }
         }
+    };
+}
+
+define_keybinding_schema! {
+    defaults {
+        cursor_up = "Up",
+        cursor_down = "Down",
+        cursor_left = "Left",
+        cursor_right = "Right",
+        goto_top = "Home",
+        goto_bottom = "End",
+        search = "/",
+        filter = "f",
+        global_search = "s",
+        global_search_content = "S",
+        toggle_render = "m",
+    }
+    opt_in {
+        quit,
+        toggle,
+        refresh,
+        new_file,
+        new_dir,
+        rename,
+        delete,
+        toggle_preview,
+        open_in_editor,
+        open_externally,
+        collapse_all,
+        branch_picker,
+        enter,
     }
 }
 

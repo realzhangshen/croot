@@ -8,150 +8,55 @@ use ratatui::{
 
 use crate::config::{parse_color, ColorConfig, DEFAULT_COLORS};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ResolvedColors {
-    git_modified: Color,
-    git_added: Color,
-    git_deleted: Color,
-    git_ignored: Color,
-    git_conflicted: Color,
-    git_staged_modified: Color,
-    git_staged_added: Color,
-    git_staged_deleted: Color,
-    unfocused_header_bg: Color,
-    unfocused_header_fg: Color,
-    hex_values: Color,
-    hex_ascii: Color,
-    preview_dir_name: Color,
-    inline_code: Color,
-    tree_line: Color,
-    status_bar_bg: Color,
-    status_bar_fg: Color,
-    dir_color: Color,
-    default_fg: Color,
-    find_match: Color,
-    popup_fg: Color,
-    popup_bg: Color,
-    popup_accent: Color,
-    popup_border_fg: Color,
-    popup_dim_fg: Color,
-    popup_input_bg: Color,
-    popup_input_fg: Color,
-    popup_selected_danger_bg: Color,
+/// Resolve a single color override, falling back to parsing the built-in
+/// default string. The default must be a valid color spec (enforced by a
+/// debug panic).
+fn resolve_color_field(value: Option<&String>, default: &'static str) -> Color {
+    value
+        .map(String::as_str)
+        .and_then(parse_color)
+        .unwrap_or_else(|| parse_color(default).expect("default color should parse"))
 }
 
-impl Default for ResolvedColors {
-    fn default() -> Self {
-        Self::from_config(&ColorConfig::default())
-    }
-}
-
-impl ResolvedColors {
-    fn from_config(config: &ColorConfig) -> Self {
-        fn resolve(value: Option<&String>, default: &'static str) -> Color {
-            value
-                .map(String::as_str)
-                .and_then(parse_color)
-                .unwrap_or_else(|| parse_color(default).expect("default color should parse"))
+/// Declarative palette: one line per field, generates the `ResolvedColors`
+/// struct, its `from_config` constructor, and the public `fn name() -> Color`
+/// accessors. The field list must stay in sync with the color schema in
+/// [`crate::config`] — a mismatch surfaces as a missing-field compile error
+/// on `DEFAULT_COLORS.xxx`, so drift is not silent.
+macro_rules! define_color_palette {
+    ( $( $name:ident ),* $(,)? ) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        struct ResolvedColors {
+            $(
+                $name: Color,
+            )*
         }
 
-        Self {
-            git_modified: resolve(config.git_modified.as_ref(), DEFAULT_COLORS.git_modified),
-            git_added: resolve(config.git_added.as_ref(), DEFAULT_COLORS.git_added),
-            git_deleted: resolve(config.git_deleted.as_ref(), DEFAULT_COLORS.git_deleted),
-            git_ignored: resolve(config.git_ignored.as_ref(), DEFAULT_COLORS.git_ignored),
-            git_conflicted: resolve(
-                config.git_conflicted.as_ref(),
-                DEFAULT_COLORS.git_conflicted,
-            ),
-            git_staged_modified: resolve(
-                config.git_staged_modified.as_ref(),
-                DEFAULT_COLORS.git_staged_modified,
-            ),
-            git_staged_added: resolve(
-                config.git_staged_added.as_ref(),
-                DEFAULT_COLORS.git_staged_added,
-            ),
-            git_staged_deleted: resolve(
-                config.git_staged_deleted.as_ref(),
-                DEFAULT_COLORS.git_staged_deleted,
-            ),
-            unfocused_header_bg: resolve(
-                config.unfocused_header_bg.as_ref(),
-                DEFAULT_COLORS.unfocused_header_bg,
-            ),
-            unfocused_header_fg: resolve(
-                config.unfocused_header_fg.as_ref(),
-                DEFAULT_COLORS.unfocused_header_fg,
-            ),
-            hex_values: resolve(config.hex_values.as_ref(), DEFAULT_COLORS.hex_values),
-            hex_ascii: resolve(config.hex_ascii.as_ref(), DEFAULT_COLORS.hex_ascii),
-            preview_dir_name: resolve(
-                config.preview_dir_name.as_ref(),
-                DEFAULT_COLORS.preview_dir_name,
-            ),
-            inline_code: resolve(config.inline_code.as_ref(), DEFAULT_COLORS.inline_code),
-            tree_line: resolve(config.tree_line.as_ref(), DEFAULT_COLORS.tree_line),
-            status_bar_bg: resolve(config.status_bar_bg.as_ref(), DEFAULT_COLORS.status_bar_bg),
-            status_bar_fg: resolve(config.status_bar_fg.as_ref(), DEFAULT_COLORS.status_bar_fg),
-            dir_color: resolve(config.dir_color.as_ref(), DEFAULT_COLORS.dir_color),
-            default_fg: resolve(config.default_fg.as_ref(), DEFAULT_COLORS.default_fg),
-            find_match: resolve(config.find_match.as_ref(), DEFAULT_COLORS.find_match),
-            popup_fg: resolve(config.popup_fg.as_ref(), DEFAULT_COLORS.popup_fg),
-            popup_bg: resolve(config.popup_bg.as_ref(), DEFAULT_COLORS.popup_bg),
-            popup_accent: resolve(config.popup_accent.as_ref(), DEFAULT_COLORS.popup_accent),
-            popup_border_fg: resolve(
-                config.popup_border_fg.as_ref(),
-                DEFAULT_COLORS.popup_border_fg,
-            ),
-            popup_dim_fg: resolve(config.popup_dim_fg.as_ref(), DEFAULT_COLORS.popup_dim_fg),
-            popup_input_bg: resolve(
-                config.popup_input_bg.as_ref(),
-                DEFAULT_COLORS.popup_input_bg,
-            ),
-            popup_input_fg: resolve(
-                config.popup_input_fg.as_ref(),
-                DEFAULT_COLORS.popup_input_fg,
-            ),
-            popup_selected_danger_bg: resolve(
-                config.popup_selected_danger_bg.as_ref(),
-                DEFAULT_COLORS.popup_selected_danger_bg,
-            ),
+        impl Default for ResolvedColors {
+            fn default() -> Self {
+                Self::from_config(&ColorConfig::default())
+            }
         }
-    }
-}
 
-/// Global color palette. Must be initialized exactly once via `init()` before
-/// any `palette()` call. Subsequent `init()` calls are silently ignored by
-/// `OnceLock` — this is fine for production (single init at startup) but means
-/// tests that need custom colors should construct `ResolvedColors::from_config()`
-/// directly rather than going through the global.
-static COLORS: OnceLock<ResolvedColors> = OnceLock::new();
+        impl ResolvedColors {
+            fn from_config(config: &ColorConfig) -> Self {
+                Self {
+                    $(
+                        $name: resolve_color_field(config.$name.as_ref(), DEFAULT_COLORS.$name),
+                    )*
+                }
+            }
+        }
 
-fn palette() -> &'static ResolvedColors {
-    COLORS.get_or_init(ResolvedColors::default)
-}
-
-pub fn init(config: &ColorConfig) {
-    let _ = COLORS.set(ResolvedColors::from_config(config));
-}
-
-#[cfg(test)]
-pub fn init_default_for_tests() {
-    let _ = palette();
-}
-
-macro_rules! color_getters {
-    ($($name:ident),+ $(,)?) => {
         $(
             pub fn $name() -> Color {
                 palette().$name
             }
-        )+
+        )*
     };
 }
 
-color_getters!(
+define_color_palette!(
     git_modified,
     git_added,
     git_deleted,
@@ -181,6 +86,26 @@ color_getters!(
     popup_input_fg,
     popup_selected_danger_bg,
 );
+
+/// Global color palette. Must be initialized exactly once via `init()` before
+/// any `palette()` call. Subsequent `init()` calls are silently ignored by
+/// `OnceLock` — this is fine for production (single init at startup) but means
+/// tests that need custom colors should construct `ResolvedColors::from_config()`
+/// directly rather than going through the global.
+static COLORS: OnceLock<ResolvedColors> = OnceLock::new();
+
+fn palette() -> &'static ResolvedColors {
+    COLORS.get_or_init(ResolvedColors::default)
+}
+
+pub fn init(config: &ColorConfig) {
+    let _ = COLORS.set(ResolvedColors::from_config(config));
+}
+
+#[cfg(test)]
+pub fn init_default_for_tests() {
+    let _ = palette();
+}
 
 /// Tree connectors (│, ├─, └─, preview separator): dim for visual hierarchy.
 pub fn tree_connector() -> Style {
