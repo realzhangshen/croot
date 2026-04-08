@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use ratatui::style::Style;
 use unicode_width::UnicodeWidthChar;
 
-use crate::git::diff::LineDiffStatus;
+use crate::git::diff::{GitDiffHint, LineDiffStatus};
 
 /// A position in content space (line index + display column).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +96,12 @@ pub struct PreviewState {
     pub selection: Selection,
     /// Cached mtime of the currently displayed file (to skip redundant reloads).
     pub cached_mtime: Option<std::time::SystemTime>,
+    /// Cached diff hint used when the current preview was generated. This
+    /// is part of the cache key: if the same path+mtime is requested again
+    /// but the derived hint has changed (e.g. git status went
+    /// Clean → Modified after a background refresh), the cached preview
+    /// must be invalidated because its diff gutter is now stale.
+    pub cached_diff_hint: Option<GitDiffHint>,
     /// Per-line git diff status for gutter indicators (only for Text previews).
     pub line_diffs: Option<Vec<LineDiffStatus>>,
     /// Whether to render Markdown files (user preference, not reset on clear).
@@ -122,6 +128,7 @@ impl PreviewState {
             file_info: String::new(),
             selection: Selection::new(),
             cached_mtime: None,
+            cached_diff_hint: None,
             line_diffs: None,
             render_markdown: true,
             #[cfg(feature = "image-preview")]
@@ -156,6 +163,7 @@ impl PreviewState {
         self.file_info.clear();
         self.selection.clear();
         self.cached_mtime = None;
+        self.cached_diff_hint = None;
         self.line_diffs = None;
         #[cfg(feature = "image-preview")]
         {
@@ -171,10 +179,12 @@ impl PreviewState {
         content: Vec<Vec<StyledSpan>>,
         file_info: String,
         line_diffs: Option<Vec<LineDiffStatus>>,
+        git_diff_hint: GitDiffHint,
     ) {
         self.cached_mtime = std::fs::metadata(&path)
             .ok()
             .and_then(|m| m.modified().ok());
+        self.cached_diff_hint = Some(git_diff_hint);
         self.total_lines = content.len();
         self.content = content;
         self.kind = kind;
@@ -196,6 +206,8 @@ impl PreviewState {
         self.cached_mtime = std::fs::metadata(&path)
             .ok()
             .and_then(|m| m.modified().ok());
+        // Image previews never show a diff gutter, so lock the hint to Skip.
+        self.cached_diff_hint = Some(GitDiffHint::Skip);
         self.content.clear();
         self.total_lines = 0;
         self.kind = PreviewKind::Image;

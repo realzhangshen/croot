@@ -232,6 +232,9 @@ impl App {
                                                     content: Vec::new(),
                                                     file_info,
                                                     line_diffs: None,
+                                                    // Image decode errors have no diff gutter.
+                                                    git_diff_hint:
+                                                        crate::git::diff::GitDiffHint::Skip,
                                                 },
                                             ));
                                         }
@@ -244,7 +247,7 @@ impl App {
                             let still_selected = self.tree.selected()
                                 .is_some_and(|n| n.path == path);
                             if still_selected {
-                                self.preview.state.apply(path, loaded.kind, loaded.content, loaded.file_info, loaded.line_diffs);
+                                self.preview.state.apply(path, loaded.kind, loaded.content, loaded.file_info, loaded.line_diffs, loaded.git_diff_hint);
                                 // Apply pending line scroll from content search confirm
                                 if let Some((ref target_path, line)) = self.preview.pending_line {
                                     if self.preview.state.current_path.as_ref() == Some(target_path) {

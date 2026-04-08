@@ -1395,7 +1395,9 @@ mod tests {
         app.preview.visible = true;
 
         // Simulate that the preview for the selected file was already loaded and applied.
-        // This means current_path is set, kind is not Loading, and mtime matches.
+        // This means current_path is set, kind is not Loading, mtime matches,
+        // and the cached_diff_hint matches the hint that will be re-derived
+        // from the node's git status (Clean → Skip by default).
         let selected_path = app.tree.selected().unwrap().path.clone();
         let mtime = std::fs::metadata(&selected_path)
             .ok()
@@ -1403,13 +1405,57 @@ mod tests {
         app.preview.state.current_path = Some(selected_path);
         app.preview.state.kind = PreviewKind::Text;
         app.preview.state.cached_mtime = mtime;
+        app.preview.state.cached_diff_hint = Some(crate::git::diff::GitDiffHint::Skip);
 
         let gen_before = app.preview.generation;
-        // This call should hit the mtime cache and return early -- generation should NOT increment
+        // This call should hit the cache (path+mtime+hint all match) and
+        // return early -- generation should NOT increment.
         app.trigger_preview_load(&preview_tx);
         assert_eq!(
             app.preview.generation, gen_before,
             "preview_generation should not increment when preview is cached"
+        );
+    }
+
+    #[tokio::test]
+    async fn preview_cache_invalidated_when_git_status_changes() {
+        // Regression test for a race condition: if the preview was loaded while
+        // git_status was still stale (Clean), then a background refresh landed
+        // the file as Modified, the preview cache must be invalidated on the
+        // next trigger even though path+mtime haven't changed. Otherwise the
+        // diff gutter would be permanently stuck showing no changes.
+        use crate::git::diff::GitDiffHint;
+
+        let (mut app, _tmp) = test_app_with_files();
+        let (preview_tx, _rx) = mpsc::channel(4);
+        app.preview.visible = true;
+
+        let selected_path = app.tree.selected().unwrap().path.clone();
+        let mtime = std::fs::metadata(&selected_path)
+            .ok()
+            .and_then(|m| m.modified().ok());
+
+        // Pretend a prior preview ran when git status was Clean (hint=Skip)
+        // and cached the result.
+        app.preview.state.current_path = Some(selected_path);
+        app.preview.state.kind = PreviewKind::Text;
+        app.preview.state.cached_mtime = mtime;
+        app.preview.state.cached_diff_hint = Some(GitDiffHint::Skip);
+
+        // Now simulate a background refresh landing Modified status on the
+        // selected node (file is the same, mtime is the same, only git state
+        // changed).
+        let cursor_idx = app.tree.cursor;
+        app.tree.nodes[cursor_idx].git_status = crate::tree::node::GitStatus::Modified;
+
+        let gen_before = app.preview.generation;
+        app.trigger_preview_load(&preview_tx);
+
+        // The cache must have been busted: generation must have incremented
+        // because Modified → Compute, which disagrees with the cached Skip.
+        assert!(
+            app.preview.generation > gen_before,
+            "preview must reload when git_status changes from Clean to Modified"
         );
     }
 

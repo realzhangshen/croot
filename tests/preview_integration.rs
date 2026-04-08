@@ -114,6 +114,7 @@ fn preview_state_scroll_stays_in_bounds_after_apply() {
         loaded.content,
         loaded.file_info,
         loaded.line_diffs,
+        loaded.git_diff_hint,
     );
 
     state.scroll_down(10);
@@ -133,6 +134,7 @@ fn preview_state_scroll_stays_in_bounds_after_apply() {
         ],
         "3 lines".to_string(),
         None,
+        GitDiffHint::Skip,
     );
     manual.scroll_down(99);
     assert_eq!(manual.scroll_offset, 2);

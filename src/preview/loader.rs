@@ -19,6 +19,11 @@ pub struct LoadedPreview {
     pub content: Vec<Vec<StyledSpan>>,
     pub file_info: String,
     pub line_diffs: Option<Vec<LineDiffStatus>>,
+    /// The diff hint used to generate this preview. Stored so the
+    /// preview cache (path+mtime → skip reload) can detect a hint
+    /// change (e.g. Clean → Modified after git status refresh) and
+    /// invalidate the cached entry even if mtime hasn't moved.
+    pub git_diff_hint: GitDiffHint,
 }
 
 /// Load a file for preview display.
@@ -53,6 +58,7 @@ pub fn load_preview(
                 content: Vec::new(),
                 file_info: String::new(),
                 line_diffs: None,
+                git_diff_hint,
             };
         }
     };
@@ -71,6 +77,7 @@ pub fn load_preview(
             )]],
             file_info,
             line_diffs: None,
+            git_diff_hint,
         };
     }
 
@@ -82,6 +89,7 @@ pub fn load_preview(
             content: Vec::new(),
             file_info,
             line_diffs: None,
+            git_diff_hint,
         };
     }
     #[cfg(not(feature = "image-preview"))]
@@ -96,12 +104,13 @@ pub fn load_preview(
                 content: Vec::new(),
                 file_info,
                 line_diffs: None,
+                git_diff_hint,
             };
         }
     };
 
     if content_inspector::inspect(&probe).is_binary() {
-        return load_binary_preview(path, &file_info);
+        return load_binary_preview(path, &file_info, git_diff_hint);
     }
 
     // Text file — bounded read to avoid unbounded memory usage
@@ -149,6 +158,7 @@ fn load_text_preview(
                 content: Vec::new(),
                 file_info: file_info.to_string(),
                 line_diffs: None,
+                git_diff_hint,
             };
         }
     };
@@ -164,6 +174,7 @@ fn load_text_preview(
             content: lines,
             file_info: file_info.to_string(),
             line_diffs: None,
+            git_diff_hint,
         };
     }
 
@@ -184,27 +195,32 @@ fn load_text_preview(
         content: lines,
         file_info: file_info.to_string(),
         line_diffs,
+        git_diff_hint,
     }
 }
 
-fn load_binary_preview(path: &Path, file_info: &str) -> LoadedPreview {
+fn load_binary_preview(path: &Path, file_info: &str, git_diff_hint: GitDiffHint) -> LoadedPreview {
     match read_prefix(path, 512) {
         Ok(data) => LoadedPreview {
             kind: PreviewKind::Binary,
             content: generate_hex_dump(&data),
             file_info: file_info.to_string(),
             line_diffs: None,
+            git_diff_hint,
         },
         Err(e) => LoadedPreview {
             kind: PreviewKind::Error(format!("Read error: {e}")),
             content: Vec::new(),
             file_info: file_info.to_string(),
             line_diffs: None,
+            git_diff_hint,
         },
     }
 }
 
 fn load_directory_preview(path: &Path) -> LoadedPreview {
+    // Directories never have a git diff gutter, so use Skip.
+    let git_diff_hint = GitDiffHint::Skip;
     let entries = match fs::read_dir(path) {
         Ok(rd) => rd,
         Err(e) => {
@@ -213,6 +229,7 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
                 content: Vec::new(),
                 file_info: String::new(),
                 line_diffs: None,
+                git_diff_hint,
             };
         }
     };
@@ -286,6 +303,7 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
         content: lines,
         file_info: format!("{dir_name}/"),
         line_diffs: None,
+        git_diff_hint,
     }
 }
 
