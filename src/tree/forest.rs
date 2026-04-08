@@ -127,15 +127,6 @@ impl FileTree {
         &self.guides_cache
     }
 
-    /// Get the node indices visible in the current viewport, using cached display list.
-    /// Does NOT modify scroll/cursor — use `build_visible_indices` in tree_view for that.
-    pub fn viewport_indices(&mut self, viewport_height: usize) -> Vec<usize> {
-        let all = self.cached_displayable_indices().to_vec();
-        let start = self.scroll_offset.min(all.len());
-        let end = (start + viewport_height).min(all.len());
-        all[start..end].to_vec()
-    }
-
     /// Expand a directory node: load its children and insert them after it.
     pub fn expand(&mut self, index: usize) {
         if index >= self.nodes.len() {
@@ -282,30 +273,6 @@ impl FileTree {
                 self.cursor = cursor + 1;
             }
         }
-    }
-
-    /// Ensure the cursor is visible within the given viewport height.
-    /// Note: when `compact_folders` is on, the renderer handles scroll adjustment
-    /// via `build_visible_indices`. This method is used as fallback and by tests.
-    #[allow(dead_code)]
-    pub fn adjust_scroll(&mut self, viewport_height: usize) {
-        if viewport_height == 0 {
-            return;
-        }
-        if self.cursor < self.scroll_offset {
-            self.scroll_offset = self.cursor;
-        }
-        if self.cursor >= self.scroll_offset + viewport_height {
-            self.scroll_offset = self.cursor - viewport_height + 1;
-        }
-    }
-
-    /// Return the visible slice of nodes for the current viewport.
-    #[allow(dead_code)]
-    pub fn visible_range(&self, viewport_height: usize) -> &[TreeNode] {
-        let start = self.scroll_offset;
-        let end = (start + viewport_height).min(self.nodes.len());
-        &self.nodes[start..end]
     }
 
     /// Recompute cached file/directory counts from the current nodes.
@@ -741,20 +708,6 @@ mod tests {
     }
 
     #[test]
-    fn adjust_scroll_keeps_cursor_visible() {
-        let mut tree = tree_from(&[
-            ("a", NodeKind::File, 0),
-            ("b", NodeKind::File, 0),
-            ("c", NodeKind::File, 0),
-            ("d", NodeKind::File, 0),
-            ("e", NodeKind::File, 0),
-        ]);
-        tree.cursor = 4;
-        tree.adjust_scroll(3); // viewport of 3 lines
-        assert!(tree.scroll_offset <= 2); // cursor 4 visible in window of 3
-    }
-
-    #[test]
     fn cursor_left_at_depth_0_stays_put() {
         let mut tree = tree_from(&[
             ("dir_a", NodeKind::Directory, 0),
@@ -1007,35 +960,5 @@ mod tests {
 
         // Same node count
         assert_eq!(original.nodes.len(), snapshot.nodes.len());
-    }
-
-    // ── viewport_indices tests ────────────────────────────────────────
-
-    #[test]
-    fn viewport_indices_respects_scroll() {
-        let tmp = tempfile::tempdir().unwrap();
-        for i in 0..20 {
-            std::fs::write(tmp.path().join(format!("file_{i:02}.txt")), "x").unwrap();
-        }
-        let mut tree = FileTree::new(tmp.path().to_path_buf(), TreeConfig::default());
-        tree.scroll_offset = 5;
-
-        let slice = tree.viewport_indices(10);
-        assert_eq!(slice.len(), 10);
-        // First visible should be the 6th file (index 5)
-        assert_eq!(slice[0], 5);
-    }
-
-    #[test]
-    fn viewport_indices_clamps_to_end() {
-        let tmp = tempfile::tempdir().unwrap();
-        for i in 0..5 {
-            std::fs::write(tmp.path().join(format!("file_{i}.txt")), "x").unwrap();
-        }
-        let mut tree = FileTree::new(tmp.path().to_path_buf(), TreeConfig::default());
-        tree.scroll_offset = 3;
-
-        let slice = tree.viewport_indices(10);
-        assert_eq!(slice.len(), 2); // only 2 items left from offset 3
     }
 }

@@ -130,20 +130,3 @@ fn cache_stays_consistent_through_rapid_mutations() {
     }
     assert_eq!(cached, fresh);
 }
-
-// ── Viewport indices consistency ──────────────────────────────────────
-
-#[test]
-fn viewport_indices_consistent_with_displayable_cache() {
-    let tmp = tempfile::tempdir().unwrap();
-    for i in 0..30 {
-        std::fs::write(tmp.path().join(format!("file_{i:02}.txt")), "x").unwrap();
-    }
-    let mut tree = FileTree::new(tmp.path().to_path_buf(), TreeConfig::default());
-    tree.scroll_offset = 10;
-
-    let viewport = tree.viewport_indices(5);
-    let all = tree.cached_displayable_indices().to_vec();
-
-    assert_eq!(viewport, &all[10..15]);
-}
