@@ -464,6 +464,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn full_refresh_sync_invalidates_in_flight_background_refresh() {
+        // Regression: without bumping refresh_generation in full_refresh_sync,
+        // a stale in-flight background result can land after the sync refresh
+        // and clobber the freshly-loaded tree/git state. The event loop's
+        // generation check in refresh_rx.recv() is the guard that must fire.
+        let (mut app, _tmp) = test_app();
+        let (preview_tx, _preview_rx) = mpsc::channel(1);
+        let (refresh_tx, _refresh_rx) = mpsc::channel::<RefreshResult>(2);
+
+        // Kick off a background refresh. This captures gen=1.
+        app.background_refresh(&refresh_tx);
+        let in_flight_gen = app.refresh_generation;
+        assert!(app.refresh_in_flight);
+
+        // Now a synchronous refresh runs (e.g. post-editor). It should bump
+        // the generation so that when the background result finally arrives
+        // it fails the `refresh.generation == self.refresh_generation` check.
+        app.full_refresh_sync(&preview_tx);
+
+        assert_ne!(
+            app.refresh_generation, in_flight_gen,
+            "full_refresh_sync must bump refresh_generation to invalidate the \
+             in-flight background refresh"
+        );
+        assert!(
+            !app.refresh_pending,
+            "full_refresh_sync should clear refresh_pending too; a pending \
+             follow-up would also overwrite the sync result with a stale snapshot"
+        );
+    }
+
+    #[tokio::test]
     async fn background_refresh_resets_flag_after_completion() {
         // Exercise the fact that clearing refresh_in_flight from outside
         // (mimicking the event loop's refresh_rx handler) re-enables spawning.

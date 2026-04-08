@@ -138,10 +138,23 @@ impl App {
     /// Full synchronous refresh: tree -> git -> search -> preview.
     /// Used when the result must be available immediately (e.g. after editor suspend,
     /// manual refresh, file operations).
+    ///
+    /// Also bumps `refresh_generation` so that any background refresh task
+    /// currently in flight will have its result discarded when it lands on
+    /// `refresh_rx` — otherwise the older snapshot could overwrite the tree
+    /// and git state we just loaded synchronously. The in-flight flag is
+    /// left untouched: the event-loop handler still clears it when the
+    /// stale result arrives.
     pub(super) fn full_refresh_sync(
         &mut self,
         preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) {
+        self.refresh_generation = self.refresh_generation.wrapping_add(1);
+        // A follow-up coalesced refresh would overwrite the sync result with
+        // an older snapshot just as badly as a stale in-flight one, so drop
+        // the pending bit too.
+        self.refresh_pending = false;
+
         self.tree.refresh();
         if let Some(ref mut git) = self.git {
             git.refresh();
