@@ -94,7 +94,7 @@ export function Navbar() {
           </div>
         </div>
       </nav>
-      <SearchDialog open={searchOpen} onClose={handleClose} />
+      {searchOpen && <SearchDialog open={searchOpen} onClose={handleClose} />}
     </>
   );
 }

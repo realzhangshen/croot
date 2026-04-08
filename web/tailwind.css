@@ -46,7 +46,7 @@
 }
 
 @theme {
-  --font-sans: var(--font-instrument-sans);
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --color-bg: var(--bg);
   --color-bg-surface: var(--bg-surface);
@@ -76,7 +76,7 @@ body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0, transparent 180px),
     var(--bg);
   color: var(--text);
-  font-family: var(--font-instrument-sans), sans-serif;
+  font-family: var(--font-geist-sans), sans-serif;
   font-feature-settings: "ss01" 1, "rlig" 1, "calt" 1;
   text-rendering: optimizeLegibility;
 }

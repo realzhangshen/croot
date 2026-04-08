@@ -1,17 +1,11 @@
 import type { Metadata } from "next";
-import { Instrument_Sans } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { ThemeProvider } from "@/components/shared/ThemeProvider";
 import { Navbar } from "@/components/shared/Navbar";
 import { Footer } from "@/components/shared/Footer";
 import { AntiFlashScript } from "@/components/shared/AntiFlashScript";
 import "@/tailwind.css";
-
-const instrumentSans = Instrument_Sans({
-  subsets: ["latin"],
-  variable: "--font-instrument-sans",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "croot — Terminal File Explorer",
@@ -31,7 +25,7 @@ export default function RootLayout({
         <AntiFlashScript />
       </head>
       <body
-        className={`${instrumentSans.variable} ${GeistMono.variable} font-sans antialiased`}
+        className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}
       >
         <ThemeProvider>
           <div className="min-h-screen flex flex-col">

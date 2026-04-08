@@ -41,9 +41,6 @@ export function SearchDialog({
 
   useEffect(() => {
     if (open) {
-      setQuery("");
-      setResults([]);
-      setSelected(0);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [open]);
