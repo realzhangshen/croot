@@ -29,7 +29,11 @@ const sections = [
   },
   {
     label: "Advanced",
-    files: ["advanced/cmux-workflow", "advanced/development"],
+    files: [
+      "advanced/cmux-workflow",
+      "advanced/development",
+      "advanced/review-execution-plan",
+    ],
   },
 ];
 

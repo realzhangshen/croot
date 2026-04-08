@@ -34,6 +34,7 @@ export const sidebarSections: SidebarSection[] = [
     links: [
       { title: "cmux Workflow", slug: "advanced/cmux-workflow" },
       { title: "Development", slug: "advanced/development" },
+      { title: "Review Execution Plan", slug: "advanced/review-execution-plan" },
     ],
   },
 ];
