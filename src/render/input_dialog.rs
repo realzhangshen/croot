@@ -1,13 +1,9 @@
-use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    style::{Modifier, Style},
-    widgets::Widget,
-};
+use ratatui::{buffer::Buffer, layout::Rect, style::Modifier, widgets::Widget};
 
 use unicode_width::UnicodeWidthStr;
 
 use super::colors;
+use super::popup::draw_border;
 pub use crate::file_ops::DialogKind;
 
 /// State for the input dialog overlay.
@@ -198,54 +194,6 @@ impl Widget for InputDialogWidget<'_> {
             buf.set_string(confirm_x, btn_y, "[Confirm]", colors::popup_selected());
             let cancel_x = confirm_x + 9 + 2;
             buf.set_string(cancel_x, btn_y, "[Cancel]", colors::popup_dim());
-        }
-    }
-}
-
-pub(crate) fn draw_border(buf: &mut Buffer, rect: Rect, style: Style) {
-    if rect.width < 2 || rect.height < 2 {
-        return;
-    }
-
-    // Corners
-    if let Some(cell) = buf.cell_mut((rect.x, rect.y)) {
-        cell.set_symbol("╭");
-        cell.set_style(style);
-    }
-    if let Some(cell) = buf.cell_mut((rect.x + rect.width - 1, rect.y)) {
-        cell.set_symbol("╮");
-        cell.set_style(style);
-    }
-    if let Some(cell) = buf.cell_mut((rect.x, rect.y + rect.height - 1)) {
-        cell.set_symbol("╰");
-        cell.set_style(style);
-    }
-    if let Some(cell) = buf.cell_mut((rect.x + rect.width - 1, rect.y + rect.height - 1)) {
-        cell.set_symbol("╯");
-        cell.set_style(style);
-    }
-
-    // Horizontal edges
-    for x in (rect.x + 1)..(rect.x + rect.width - 1) {
-        if let Some(cell) = buf.cell_mut((x, rect.y)) {
-            cell.set_symbol("─");
-            cell.set_style(style);
-        }
-        if let Some(cell) = buf.cell_mut((x, rect.y + rect.height - 1)) {
-            cell.set_symbol("─");
-            cell.set_style(style);
-        }
-    }
-
-    // Vertical edges
-    for y in (rect.y + 1)..(rect.y + rect.height - 1) {
-        if let Some(cell) = buf.cell_mut((rect.x, y)) {
-            cell.set_symbol("│");
-            cell.set_style(style);
-        }
-        if let Some(cell) = buf.cell_mut((rect.x + rect.width - 1, y)) {
-            cell.set_symbol("│");
-            cell.set_style(style);
         }
     }
 }

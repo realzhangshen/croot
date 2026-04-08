@@ -2,6 +2,7 @@ use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 use unicode_width::UnicodeWidthStr;
 
 use super::colors;
+use super::popup::draw_border;
 
 /// An item in the context menu.
 #[derive(Debug, Clone)]
@@ -295,62 +296,15 @@ impl Widget for ContextMenuWidget<'_> {
         let selected_danger_style = colors::popup_selected_danger();
         let separator_style = colors::popup_border();
 
-        // Fill background with REVERSED base
+        // Fill background with REVERSED base, then draw rounded border.
         colors::clear_region(buf, menu_rect, base);
+        draw_border(buf, menu_rect, border_style);
 
-        // Top border
-        if let Some(cell) = buf.cell_mut((menu_rect.x, menu_rect.y)) {
-            cell.set_symbol("┌");
-            cell.set_style(border_style);
-        }
-        for x in (menu_rect.x + 1)..(menu_rect.x + menu_rect.width - 1) {
-            if let Some(cell) = buf.cell_mut((x, menu_rect.y)) {
-                cell.set_symbol("─");
-                cell.set_style(border_style);
-            }
-        }
-        if menu_rect.width > 1 {
-            if let Some(cell) = buf.cell_mut((menu_rect.x + menu_rect.width - 1, menu_rect.y)) {
-                cell.set_symbol("┐");
-                cell.set_style(border_style);
-            }
-        }
-
-        // Bottom border
-        let bottom_y = menu_rect.y + menu_rect.height - 1;
-        if let Some(cell) = buf.cell_mut((menu_rect.x, bottom_y)) {
-            cell.set_symbol("└");
-            cell.set_style(border_style);
-        }
-        for x in (menu_rect.x + 1)..(menu_rect.x + menu_rect.width - 1) {
-            if let Some(cell) = buf.cell_mut((x, bottom_y)) {
-                cell.set_symbol("─");
-                cell.set_style(border_style);
-            }
-        }
-        if menu_rect.width > 1 {
-            if let Some(cell) = buf.cell_mut((menu_rect.x + menu_rect.width - 1, bottom_y)) {
-                cell.set_symbol("┘");
-                cell.set_style(border_style);
-            }
-        }
-
-        // Side borders and menu items
+        // Menu items
         for (i, item) in self.state.items.iter().enumerate() {
             let y = menu_rect.y + 1 + i as u16;
             if y >= menu_rect.y + menu_rect.height - 1 {
                 break;
-            }
-
-            // Left border
-            if let Some(cell) = buf.cell_mut((menu_rect.x, y)) {
-                cell.set_symbol("│");
-                cell.set_style(border_style);
-            }
-            // Right border
-            if let Some(cell) = buf.cell_mut((menu_rect.x + menu_rect.width - 1, y)) {
-                cell.set_symbol("│");
-                cell.set_style(border_style);
             }
 
             let is_separator = item.action == MenuAction::Separator;

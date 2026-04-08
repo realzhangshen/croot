@@ -2,7 +2,7 @@ use ratatui::{buffer::Buffer, layout::Rect, style::Modifier, widgets::Widget};
 use unicode_width::UnicodeWidthStr;
 
 use super::colors;
-use super::input_dialog::draw_border;
+use super::popup::draw_border;
 use crate::search::{GlobalSearchType, SearchState};
 
 /// Compute the centered overlay rect for the global search dialog.

@@ -2,7 +2,7 @@ use ratatui::{buffer::Buffer, layout::Rect, style::Modifier};
 use unicode_width::UnicodeWidthStr;
 
 use super::colors;
-use super::input_dialog::draw_border;
+use super::popup::draw_border;
 use super::text_util::truncate_to_display_width;
 use crate::git::branches::BranchInfo;
 use crate::search::matcher::fuzzy_match;

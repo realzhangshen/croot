@@ -4,6 +4,7 @@ pub mod global_search;
 pub mod icons;
 pub mod input_dialog;
 pub mod picker;
+pub mod popup;
 pub mod preview_view;
 pub mod search_bar;
 pub mod status_bar;
