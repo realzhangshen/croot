@@ -655,122 +655,19 @@ impl Config {
         toml::to_string_pretty(&resolved).unwrap_or_default()
     }
 
-    /// Return a hand-written default config template with comments.
+    /// Return the hand-written default config template with comments.
+    ///
+    /// The source of truth lives in `docs/default_config.toml` so readers
+    /// (and CI) can inspect it without opening Rust source. This function
+    /// just re-exports it through `include_str!`.
     pub fn default_toml_with_comments() -> String {
-        r##"# croot configuration
-# Full reference: croot config (shows all resolved values)
-
-# ── Layer 1: Zero-config (works out of box) ──────────────
-# Mouse enabled, basic keyboard shortcuts work.
-# Arrow keys, /, f, s, S, m, Home/End, Esc, Ctrl+C all work.
-
-[general]
-# use_trash = true   # Move to OS trash instead of permanent delete
-
-[tree]
-show_hidden = true
-dirs_first = true
-# show_ignored = true
-# compact_folders = true
-# show_size = false
-# show_modified = false
-# exclude = [".git", ".svn", ".hg", "CVS", ".DS_Store", "Thumbs.db"]
-
-[preview]
-auto_preview = false
-# preview_delay_ms = 150
-# show_line_numbers = true
-# max_file_size_kb = 1024
-# syntax_highlight = true
-# split_ratio = 0.5
-# render_markdown = true
-# image_preview = true         # No-op unless built with --features image-preview
-# show_git_diff = true
-
-[syntax]
-# enabled = true
-#
-# [syntax.tokens.keyword]
-# fg = "magenta"
-# bold = true
-#
-# [syntax.tokens.type]
-# fg = "cyan"
-#
-# [syntax.tokens.comment]
-# fg = "dark_gray"
-# italic = true
-
-[editor]
-# command = "vim"    # Falls back to $VISUAL, $EDITOR, vi
-# external = "code -g"  # External/GUI editor for search results (file:line syntax)
-
-[open]
-# default = "open"   # macOS: "open", Linux: "xdg-open"
-# [[open.rules]]
-# pattern = "*.pdf"
-# command = "zathura"
-
-[search]
-# fd_command = "fd"
-# rg_command = "rg"
-# max_results = 500
-# open_mode = "external"  # "external" (GUI editor) or "editor" (terminal editor)
-
-# ── Layer 2: Simple toggles ──────────────────────────────
-
-[mouse]
-# enabled = true          # Set false to disable mouse capture
-
-[keybindings]
-# Built-in defaults (override or disable with ""):
-# cursor_up = "Up"        # default
-# cursor_down = "Down"    # default
-# cursor_left = "Left"    # default
-# cursor_right = "Right"  # default
-# goto_top = "Home"       # default
-# goto_bottom = "End"     # default
-# search = "/"            # default — find/jump to match
-# filter = "f"            # default — filter tree to matches
-# global_search = "s"     # default — fd file name search
-# global_search_content = "S"  # default — rg content search
-# toggle_render = "m"     # default — toggle markdown rendered/raw
-#
-# Opt-in (no default, uncomment to enable):
-# quit = "q"
-# toggle = "o"
-# refresh = "r"
-# new_file = "a"
-# new_dir = "A"
-# rename = "R"
-# delete = "D"
-# toggle_preview = "p"
-# open_in_editor = "e"
-# open_externally = "x"
-# collapse_all = "W"
-# branch_picker = "b"
-# enter = "Enter"
-
-[colors]
-# Format: ANSI name ("red"), indexed ("indexed:240" or "240"), or hex ("#ff0000")
-# Built-in defaults are ANSI-only and already tuned for stronger popup/input contrast.
-# Add entries here only when you want to override them.
-# Run `croot config` to see the full resolved palette.
-# popup_bg = "black"
-# popup_fg = "white"
-# popup_accent = "light_blue"
-# popup_border_fg = "blue"
-# popup_input_bg = "white"
-# popup_input_fg = "black"
-# popup_selected_danger_bg = "red"
-# status_bar_bg = "black"
-# dir_color = "blue"
-# default_fg = "reset"
-# find_match = "cyan"
-"##
-        .to_string()
+        DEFAULT_CONFIG_TEMPLATE.to_string()
     }
 }
+
+/// Embedded copy of `docs/default_config.toml` — the canonical template
+/// emitted by `croot config init` and friends.
+const DEFAULT_CONFIG_TEMPLATE: &str = include_str!("../docs/default_config.toml");
 
 pub fn config_path() -> PathBuf {
     dirs_fallback().join("croot").join("config.toml")
@@ -1112,6 +1009,16 @@ use_trash = false
 
         assert!(template.contains("[syntax]"));
         assert!(template.contains("[syntax.tokens.keyword]"));
+    }
+
+    #[test]
+    fn default_template_parses_as_config() {
+        // Guard against drift: the embedded docs/default_config.toml must
+        // always be a valid Config. If someone adds a new commented-out
+        // example that happens to have a syntax error, this test catches it.
+        let template = Config::default_toml_with_comments();
+        toml::from_str::<Config>(&template)
+            .expect("embedded default_config.toml should deserialize into Config");
     }
 
     #[test]
