@@ -540,10 +540,18 @@ pub struct PreviewConfig {
     pub split_ratio: f32,
     #[serde(default = "default_true")]
     pub render_markdown: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_image_preview")]
     pub image_preview: bool,
     #[serde(default = "default_true")]
     pub show_git_diff: bool,
+}
+
+/// Default value for `image_preview` follows the `image-preview` Cargo feature:
+/// if the feature is compiled in, the default is `true`; otherwise the flag is
+/// a no-op anyway, so defaulting to `false` makes `croot config` output match
+/// reality instead of misleadingly claiming the feature is enabled.
+fn default_image_preview() -> bool {
+    cfg!(feature = "image-preview")
 }
 
 fn default_true() -> bool {
@@ -591,7 +599,7 @@ impl Default for PreviewConfig {
             syntax_highlight: true,
             split_ratio: 0.5,
             render_markdown: true,
-            image_preview: true,
+            image_preview: default_image_preview(),
             show_git_diff: true,
         }
     }
@@ -676,7 +684,7 @@ auto_preview = false
 # syntax_highlight = true
 # split_ratio = 0.5
 # render_markdown = true
-# image_preview = true         # Requires the `image-preview` Cargo feature
+# image_preview = true         # No-op unless built with --features image-preview
 # show_git_diff = true
 
 [syntax]
@@ -962,6 +970,45 @@ mod tests {
     fn general_config_defaults_to_use_trash_true() {
         let config = Config::default();
         assert!(config.general.use_trash, "use_trash should default to true");
+    }
+
+    #[test]
+    fn image_preview_default_tracks_cargo_feature() {
+        // The default for preview.image_preview should match whether the
+        // image-preview Cargo feature is enabled. This keeps `croot config`
+        // output honest instead of claiming image preview is on in a build
+        // that can't actually render images.
+        let config = Config::default();
+        assert_eq!(
+            config.preview.image_preview,
+            cfg!(feature = "image-preview")
+        );
+
+        // Parsing an empty [preview] section should produce the same value:
+        // this exercises the serde default, not just Default::default().
+        let content = r"
+[preview]
+";
+        let cfg: Config = toml::from_str(content).unwrap();
+        assert_eq!(cfg.preview.image_preview, cfg!(feature = "image-preview"));
+    }
+
+    #[test]
+    fn image_preview_explicit_config_overrides_default() {
+        // User override still wins regardless of build feature.
+        let content = r"
+[preview]
+image_preview = true
+";
+        let cfg: Config = toml::from_str(content).unwrap();
+        assert!(cfg.preview.image_preview);
+
+        let content = r"
+[preview]
+image_preview = false
+";
+        let cfg: Config = toml::from_str(content).unwrap();
+        assert!(!cfg.preview.image_preview);
     }
 
     #[test]
