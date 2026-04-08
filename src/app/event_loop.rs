@@ -290,6 +290,9 @@ impl App {
                 }
                 result = refresh_rx.recv() => {
                     if let Some(refresh) = result {
+                        // Clear in-flight regardless of staleness — the task finished.
+                        self.refresh_in_flight = false;
+
                         if refresh.generation == self.refresh_generation {
                             // Capture cursor path at APPLY time (not request time)
                             let cursor_path = self.tree.selected().map(|n| n.path.clone());
@@ -310,6 +313,14 @@ impl App {
                             if self.preview_visible {
                                 self.trigger_preview_load(&preview_tx);
                             }
+                        }
+
+                        // If events arrived while the previous refresh was
+                        // running, coalesce them into one follow-up refresh
+                        // that will see the latest filesystem state.
+                        if self.refresh_pending {
+                            self.refresh_pending = false;
+                            self.background_refresh(&refresh_tx);
                         }
                     }
                 }

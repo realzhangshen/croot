@@ -155,8 +155,24 @@ impl App {
 
     /// Background refresh: spawns a blocking task to rebuild tree + git state.
     /// The result is sent via `refresh_tx` and applied on the next event loop iteration.
-    /// Uses generation tracking to discard stale results.
+    ///
+    /// Coalescing: if another refresh is already in flight, this call just sets
+    /// `refresh_pending = true` and returns without spawning. The event loop
+    /// will spawn one follow-up refresh after the in-flight result is applied,
+    /// guaranteeing at most "current + one pending" concurrent work regardless
+    /// of how many triggers arrive. Combined with generation tracking, stale
+    /// results that do make it through are still discarded on recv.
     pub(super) fn background_refresh(&mut self, refresh_tx: &mpsc::Sender<RefreshResult>) {
+        if self.refresh_in_flight {
+            // Another refresh is already running — just mark that we want a
+            // follow-up and return. This collapses bursts of filesystem events
+            // (e.g. `cargo build` writing dozens of files) into at most two
+            // refreshes: the one currently running plus one coalesced catch-up.
+            self.refresh_pending = true;
+            return;
+        }
+
+        self.refresh_in_flight = true;
         self.refresh_generation = self.refresh_generation.wrapping_add(1);
         let generation = self.refresh_generation;
 

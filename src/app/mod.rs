@@ -155,6 +155,15 @@ pub struct App {
     pub(super) branch_switch_rx: Option<mpsc::Receiver<BranchSwitchResult>>,
     /// Generation counter for background refresh. Stale results are discarded.
     pub(super) refresh_generation: u64,
+    /// True while a background refresh task is executing. Used to coalesce
+    /// concurrent refresh requests: additional triggers while a task is in
+    /// flight only set `refresh_pending = true` instead of spawning a new task.
+    pub(super) refresh_in_flight: bool,
+    /// Set when a refresh is requested while another is already in flight.
+    /// Consumed after the in-flight result is applied to spawn one follow-up
+    /// refresh that captures any filesystem changes that arrived during the
+    /// previous run.
+    pub(super) refresh_pending: bool,
     // Cached terminal area from last draw, used by mouse handlers
     pub(super) last_terminal_area: ratatui::layout::Rect,
     /// Monotonic counter for preview requests. Stale results are discarded.
@@ -229,6 +238,8 @@ impl App {
             status_bar_branch_region: None,
             branch_switch_rx: None,
             refresh_generation: 0,
+            refresh_in_flight: false,
+            refresh_pending: false,
             last_terminal_area: ratatui::layout::Rect::new(0, 0, 80, 24),
             preview_generation: 0,
             #[cfg(feature = "image-preview")]
@@ -431,6 +442,73 @@ mod tests {
         assert!(
             app.ui.error_message.is_some(),
             "Delete of nonexistent file should show error"
+        );
+    }
+
+    // ── Background refresh coalescing ──────────────────────────
+
+    #[tokio::test]
+    async fn background_refresh_first_call_sets_in_flight() {
+        let (mut app, _tmp) = test_app();
+        let (refresh_tx, _refresh_rx) = mpsc::channel::<RefreshResult>(2);
+        let before = app.refresh_generation;
+
+        assert!(!app.refresh_in_flight);
+        assert!(!app.refresh_pending);
+
+        app.background_refresh(&refresh_tx);
+
+        // First call must spawn a task and bump the generation.
+        assert!(app.refresh_in_flight);
+        assert!(!app.refresh_pending);
+        assert_eq!(app.refresh_generation, before.wrapping_add(1));
+    }
+
+    #[tokio::test]
+    async fn background_refresh_coalesces_while_in_flight() {
+        let (mut app, _tmp) = test_app();
+        let (refresh_tx, _refresh_rx) = mpsc::channel::<RefreshResult>(2);
+
+        // Simulate an already-in-flight refresh.
+        app.refresh_in_flight = true;
+        let gen_before = app.refresh_generation;
+
+        // Second trigger should only set pending, not bump generation and
+        // not spawn a new task.
+        app.background_refresh(&refresh_tx);
+        assert!(app.refresh_in_flight, "in-flight flag must stay set");
+        assert!(app.refresh_pending, "second trigger must set pending");
+        assert_eq!(
+            app.refresh_generation, gen_before,
+            "coalesced trigger must not bump generation"
+        );
+
+        // Third trigger while in flight and pending already set: still a no-op.
+        app.background_refresh(&refresh_tx);
+        assert!(app.refresh_pending);
+        assert_eq!(app.refresh_generation, gen_before);
+    }
+
+    #[tokio::test]
+    async fn background_refresh_resets_flag_after_completion() {
+        // Exercise the fact that clearing refresh_in_flight from outside
+        // (mimicking the event loop's refresh_rx handler) re-enables spawning.
+        let (mut app, _tmp) = test_app();
+        let (refresh_tx, _refresh_rx) = mpsc::channel::<RefreshResult>(2);
+
+        app.background_refresh(&refresh_tx);
+        assert!(app.refresh_in_flight);
+        let gen_after_first = app.refresh_generation;
+
+        // Event loop clears in-flight after applying the result.
+        app.refresh_in_flight = false;
+
+        app.background_refresh(&refresh_tx);
+        assert!(app.refresh_in_flight);
+        assert_eq!(
+            app.refresh_generation,
+            gen_after_first.wrapping_add(1),
+            "follow-up spawn must bump generation again"
         );
     }
 
