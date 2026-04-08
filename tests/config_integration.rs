@@ -1,6 +1,7 @@
 mod common;
 
 use croot::config::Config;
+use croot::git::diff::GitDiffHint;
 use croot::preview::loader::load_preview;
 use croot::preview::state::PreviewKind;
 use croot::tree::forest::FileTree;
@@ -103,7 +104,7 @@ image_preview = false
         config.preview.render_markdown,
         80,
         config.preview.image_preview,
-        config.preview.show_git_diff,
+        GitDiffHint::Skip,
     );
     let large_preview = load_preview(
         &large,
@@ -112,7 +113,7 @@ image_preview = false
         config.preview.render_markdown,
         80,
         config.preview.image_preview,
-        config.preview.show_git_diff,
+        GitDiffHint::Skip,
     );
 
     assert_eq!(markdown_preview.kind, PreviewKind::Text);

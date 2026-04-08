@@ -4,7 +4,7 @@ use std::path::Path;
 
 use ratatui::style::{Color, Modifier, Style};
 
-use crate::git::diff::LineDiffStatus;
+use crate::git::diff::{GitDiffHint, LineDiffStatus};
 use crate::render::colors;
 
 use super::highlight;
@@ -26,6 +26,9 @@ pub struct LoadedPreview {
 /// Classifies the file type, reads content, and produces pre-styled lines.
 /// `max_file_size_kb`: skip text preview for files larger than this (in KB).
 /// `syntax_highlight`: whether to apply syntax highlighting.
+/// `git_diff_hint`: short-circuit info for the diff gutter, derived from the
+/// cached node `GitStatus` at trigger time. Callers can pass
+/// [`GitDiffHint::Skip`] to disable the gutter entirely.
 #[allow(clippy::fn_params_excessive_bools)]
 pub fn load_preview(
     path: &Path,
@@ -34,7 +37,7 @@ pub fn load_preview(
     render_markdown: bool,
     preview_width: usize,
     image_preview: bool,
-    show_git_diff: bool,
+    git_diff_hint: GitDiffHint,
 ) -> LoadedPreview {
     // Directories
     if path.is_dir() {
@@ -109,7 +112,7 @@ pub fn load_preview(
         render_markdown,
         preview_width,
         max_bytes,
-        show_git_diff,
+        git_diff_hint,
     )
 }
 
@@ -135,7 +138,7 @@ fn load_text_preview(
     render_markdown: bool,
     preview_width: usize,
     max_bytes: u64,
-    show_git_diff: bool,
+    git_diff_hint: GitDiffHint,
 ) -> LoadedPreview {
     // Bounded read to avoid unbounded memory usage (TOCTOU: file can grow after size check)
     let content = match read_text_bounded(path, max_bytes) {
@@ -164,12 +167,11 @@ fn load_text_preview(
         };
     }
 
-    // Compute git diff before truncation (needs full content for accurate line mapping)
-    let line_diffs = if show_git_diff {
-        crate::git::diff::compute_line_diff(path, path, &content)
-    } else {
-        None
-    };
+    // Compute git diff before truncation (needs full content for accurate line mapping).
+    // The hint short-circuits clean/ignored (Skip) and untracked/staged-added (AllAdded)
+    // so we don't pay Repository::discover + canonicalize on every preview.
+    let line_diffs =
+        crate::git::diff::compute_line_diff_with_hint(path, path, &content, git_diff_hint);
 
     let lines = if syntax_highlight {
         highlight::highlight_file(path, &content, max_lines)
@@ -431,7 +433,7 @@ mod tests {
         // Write minimal valid PNG header
         std::fs::write(&png_path, b"\x89PNG\r\n\x1a\n").unwrap();
 
-        let result = load_preview(&png_path, 1024, true, true, 80, true, false);
+        let result = load_preview(&png_path, 1024, true, true, 80, true, GitDiffHint::Skip);
         assert_eq!(result.kind, PreviewKind::Image);
         assert!(result.content.is_empty());
     }
@@ -443,7 +445,7 @@ mod tests {
         let png_path = dir.path().join("test.png");
         std::fs::write(&png_path, b"\x89PNG\r\n\x1a\n").unwrap();
 
-        let result = load_preview(&png_path, 1024, true, true, 80, false, false);
+        let result = load_preview(&png_path, 1024, true, true, 80, false, GitDiffHint::Skip);
         assert_eq!(result.kind, PreviewKind::Binary);
     }
 

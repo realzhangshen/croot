@@ -2,6 +2,8 @@ use std::path::Path;
 
 use similar::{ChangeTag, TextDiff};
 
+use crate::git::GitStatus;
+
 /// Per-line diff status for the preview gutter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LineDiffStatus {
@@ -9,6 +11,73 @@ pub enum LineDiffStatus {
     Added,
     Modified,
     DeletedAbove,
+}
+
+/// Hint derived from the cached `GitStatus` of a node, passed to preview loader
+/// so it can skip `Repository::discover` / `canonicalize` / `similar::TextDiff`
+/// for files whose diff outcome is already determined by their status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GitDiffHint {
+    /// Short-circuit: no diff gutter needed at all. Returns `None`.
+    /// Used for clean files, ignored files, and when `show_git_diff` is disabled.
+    Skip,
+    /// Short-circuit: every line should be marked `Added`.
+    /// Used for untracked/staged-added files (not in HEAD).
+    AllAdded,
+    /// No short-circuit: fall through to the real `compute_line_diff`.
+    /// Used for modified/conflicted/deleted variants where the content diff
+    /// has to be computed from HEAD.
+    Compute,
+}
+
+impl GitDiffHint {
+    /// Derive a hint from a node's `GitStatus`. Only valid when the user has
+    /// `show_git_diff = true`; callers must check that separately and short-circuit
+    /// to `Skip` themselves when it's off.
+    #[must_use]
+    pub fn from_status(status: GitStatus) -> Self {
+        match status {
+            // Clean and Ignored: no gutter annotations are interesting.
+            // We explicitly Skip (return None) rather than "all Unchanged",
+            // because the preview gutter treats None as "no git info" and
+            // renders without the diff column — which matches the behavior
+            // users get in non-repo directories.
+            GitStatus::Clean | GitStatus::Ignored => Self::Skip,
+            // Files not in HEAD → all lines are Added.
+            GitStatus::Untracked | GitStatus::StagedAdded => Self::AllAdded,
+            // Everything else needs the real textual diff.
+            GitStatus::StagedModified
+            | GitStatus::StagedDeleted
+            | GitStatus::Modified
+            | GitStatus::Deleted
+            | GitStatus::Conflicted => Self::Compute,
+        }
+    }
+}
+
+/// Compute line diff using a `GitDiffHint` to short-circuit expensive cases.
+///
+/// Returns `None` for `Skip`, `Some(vec![Added; n])` for `AllAdded`, and falls
+/// through to [`compute_line_diff`] for `Compute`.
+///
+/// This is the preferred entry point for the preview loader — it avoids the
+/// `Repository::discover + canonicalize + head.peel_to_tree` cost on every
+/// clean-file preview.
+#[must_use]
+pub fn compute_line_diff_with_hint(
+    repo_path: &Path,
+    file_path: &Path,
+    current_content: &str,
+    hint: GitDiffHint,
+) -> Option<Vec<LineDiffStatus>> {
+    match hint {
+        GitDiffHint::Skip => None,
+        GitDiffHint::AllAdded => {
+            let line_count = current_content.lines().count().max(1);
+            Some(vec![LineDiffStatus::Added; line_count])
+        }
+        GitDiffHint::Compute => compute_line_diff(repo_path, file_path, current_content),
+    }
 }
 
 /// Compute per-line diff status by comparing the HEAD version of a file
@@ -340,6 +409,133 @@ mod tests {
         std::fs::write(&file_path, "content").unwrap();
 
         assert!(compute_line_diff(dir.path(), &file_path, "content").is_none());
+    }
+
+    // --- GitDiffHint tests ---
+
+    #[test]
+    fn hint_from_clean_status_is_skip() {
+        assert_eq!(
+            GitDiffHint::from_status(GitStatus::Clean),
+            GitDiffHint::Skip
+        );
+    }
+
+    #[test]
+    fn hint_from_ignored_status_is_skip() {
+        assert_eq!(
+            GitDiffHint::from_status(GitStatus::Ignored),
+            GitDiffHint::Skip
+        );
+    }
+
+    #[test]
+    fn hint_from_untracked_status_is_all_added() {
+        assert_eq!(
+            GitDiffHint::from_status(GitStatus::Untracked),
+            GitDiffHint::AllAdded
+        );
+    }
+
+    #[test]
+    fn hint_from_staged_added_status_is_all_added() {
+        assert_eq!(
+            GitDiffHint::from_status(GitStatus::StagedAdded),
+            GitDiffHint::AllAdded
+        );
+    }
+
+    #[test]
+    fn hint_from_modified_status_is_compute() {
+        assert_eq!(
+            GitDiffHint::from_status(GitStatus::Modified),
+            GitDiffHint::Compute
+        );
+        assert_eq!(
+            GitDiffHint::from_status(GitStatus::StagedModified),
+            GitDiffHint::Compute
+        );
+        assert_eq!(
+            GitDiffHint::from_status(GitStatus::Conflicted),
+            GitDiffHint::Compute
+        );
+    }
+
+    #[test]
+    fn hint_skip_returns_none_without_touching_git() {
+        // Use a path that has no repo — if Skip fast-paths correctly, this
+        // still returns None without triggering Repository::discover.
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("file.txt");
+        std::fs::write(&file_path, "line1\nline2\n").unwrap();
+
+        let result = compute_line_diff_with_hint(
+            dir.path(),
+            &file_path,
+            "line1\nline2\n",
+            GitDiffHint::Skip,
+        );
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn hint_all_added_returns_all_added_without_touching_git() {
+        // No git repo here either — AllAdded must not call into git2.
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("file.txt");
+        let content = "a\nb\nc\n";
+        std::fs::write(&file_path, content).unwrap();
+
+        let result =
+            compute_line_diff_with_hint(dir.path(), &file_path, content, GitDiffHint::AllAdded);
+        let statuses = result.unwrap();
+        assert_eq!(statuses.len(), 3);
+        assert!(statuses.iter().all(|s| *s == LineDiffStatus::Added));
+    }
+
+    #[test]
+    fn hint_all_added_on_empty_content_still_has_one_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("empty.txt");
+        std::fs::write(&file_path, "").unwrap();
+
+        let result = compute_line_diff_with_hint(dir.path(), &file_path, "", GitDiffHint::AllAdded);
+        let statuses = result.unwrap();
+        // Empty content → line_count = 0.max(1) = 1, so one Added marker.
+        assert_eq!(statuses, vec![LineDiffStatus::Added]);
+    }
+
+    #[test]
+    fn hint_compute_falls_through_to_real_diff() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = git2::Repository::init(dir.path()).unwrap();
+
+        let file_path = dir.path().join("test.txt");
+        std::fs::write(&file_path, "a\nb\nc\n").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("test.txt")).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let sig = git2::Signature::now("test", "test@test.com").unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[])
+            .unwrap();
+
+        let new_content = "a\nB\nc\n";
+        std::fs::write(&file_path, new_content).unwrap();
+
+        let result =
+            compute_line_diff_with_hint(dir.path(), &file_path, new_content, GitDiffHint::Compute);
+        let statuses = result.unwrap();
+        assert_eq!(
+            statuses,
+            vec![
+                LineDiffStatus::Unchanged,
+                LineDiffStatus::Modified,
+                LineDiffStatus::Unchanged,
+            ]
+        );
     }
 
     #[test]

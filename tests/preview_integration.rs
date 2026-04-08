@@ -2,6 +2,7 @@ mod common;
 
 use std::fs;
 
+use croot::git::diff::GitDiffHint;
 use croot::preview::loader::load_preview;
 use croot::preview::state::{PreviewKind, PreviewState, StyledSpan};
 use ratatui::style::Style;
@@ -20,14 +21,14 @@ fn markdown_rendering_respects_preview_mode() {
     let dir = tempdir().expect("create temp dir");
     let markdown = create_file(dir.path(), "README.md", "# Title\n\nHello preview\n");
 
-    let rendered = load_preview(&markdown, 1024, false, true, 80, false, false);
+    let rendered = load_preview(&markdown, 1024, false, true, 80, false, GitDiffHint::Skip);
     assert_eq!(rendered.kind, PreviewKind::Rendered);
     assert!(rendered
         .content
         .iter()
         .any(|line| line_text(line).contains("Title")));
 
-    let raw = load_preview(&markdown, 1024, false, false, 80, false, false);
+    let raw = load_preview(&markdown, 1024, false, false, 80, false, GitDiffHint::Skip);
     assert_eq!(raw.kind, PreviewKind::Text);
     assert_eq!(line_text(&raw.content[0]), "# Title");
 }
@@ -40,8 +41,8 @@ fn preview_loader_handles_text_and_empty_files() {
     let text_path = create_file(dir.path(), "notes.txt", "line one\nline two\nline three\n");
     let empty_path = create_file(dir.path(), "empty.txt", "");
 
-    let text = load_preview(&text_path, 1024, false, true, 80, false, false);
-    let empty = load_preview(&empty_path, 1024, false, true, 80, false, false);
+    let text = load_preview(&text_path, 1024, false, true, 80, false, GitDiffHint::Skip);
+    let empty = load_preview(&empty_path, 1024, false, true, 80, false, GitDiffHint::Skip);
 
     assert_eq!(text.kind, PreviewKind::Text);
     assert!(!text.content.is_empty());
@@ -58,7 +59,15 @@ fn preview_loader_handles_binary_and_directory_inputs() {
     fs::create_dir(dir.path().join("docs")).expect("create docs dir");
     create_file(dir.path(), "docs/guide.md", "# guide\n");
 
-    let binary = load_preview(&binary_path, 1024, false, true, 80, false, false);
+    let binary = load_preview(
+        &binary_path,
+        1024,
+        false,
+        true,
+        80,
+        false,
+        GitDiffHint::Skip,
+    );
     let directory = load_preview(
         &dir.path().join("docs"),
         1024,
@@ -66,7 +75,7 @@ fn preview_loader_handles_binary_and_directory_inputs() {
         true,
         80,
         false,
-        false,
+        GitDiffHint::Skip,
     );
 
     assert_eq!(binary.kind, PreviewKind::Binary);
@@ -85,7 +94,7 @@ fn preview_loader_honors_max_file_size_limit() {
     let dir = tempdir().expect("create temp dir");
     let large = create_file(dir.path(), "large.txt", &"a".repeat(2_048));
 
-    let preview = load_preview(&large, 1, false, true, 80, false, false);
+    let preview = load_preview(&large, 1, false, true, 80, false, GitDiffHint::Skip);
 
     assert_eq!(preview.kind, PreviewKind::TooLarge);
 }
@@ -96,7 +105,7 @@ fn preview_state_scroll_stays_in_bounds_after_apply() {
 
     let dir = tempdir().expect("create temp dir");
     let path = create_file(dir.path(), "scroll.txt", "a\nb\nc\n");
-    let loaded = load_preview(&path, 1024, false, true, 80, false, false);
+    let loaded = load_preview(&path, 1024, false, true, 80, false, GitDiffHint::Skip);
 
     let mut state = PreviewState::new();
     state.apply(

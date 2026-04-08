@@ -73,6 +73,7 @@ impl App {
         };
 
         let path = node.path.clone();
+        let node_git_status = node.git_status;
 
         if self.preview_state.current_path.as_ref() == Some(&path)
             && self.preview_state.kind != PreviewKind::Loading
@@ -100,7 +101,16 @@ impl App {
         let render_markdown = self.preview_state.render_markdown;
         let preview_width = self.preview_content_width as usize;
         let image_preview = self.config.preview.image_preview;
-        let show_git_diff = self.config.preview.show_git_diff;
+
+        // Derive the diff hint from the cached git status: when show_git_diff is
+        // off we always skip; otherwise the status decides between Skip / AllAdded
+        // / Compute. This lets us bypass Repository::discover + canonicalize for
+        // clean, ignored, untracked, and staged-added files.
+        let git_diff_hint = if self.config.preview.show_git_diff {
+            crate::git::diff::GitDiffHint::from_status(node_git_status)
+        } else {
+            crate::git::diff::GitDiffHint::Skip
+        };
 
         self.preview_debounce_handle = Some(tokio::spawn(async move {
             tokio::time::sleep(delay).await;
@@ -114,7 +124,7 @@ impl App {
                     render_markdown,
                     preview_width,
                     image_preview,
-                    show_git_diff,
+                    git_diff_hint,
                 )
             })
             .await;
