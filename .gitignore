@@ -1,13 +1,20 @@
+# Rust build output
 /target/
-.worktrees/
-docs-private/
-.claude/
-CLAUDE.md
-agent.md
-examples/
-web/node_modules/
-web/.next/
-web/out/
-.playwright-mcp/
+
+# Local worktrees and private docs
+/.worktrees/
+/docs-private/
+/.claude/
+
+# Website dependencies and build output
+/web/node_modules/
+/web/.next/
+/web/out/
+
+# Local tooling output
+/.playwright-mcp/
+
+# Generated examples, fixtures, and screenshots
+/examples/
+/test_fixtures/
 *.png
-test_fixtures/
