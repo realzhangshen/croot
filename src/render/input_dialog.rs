@@ -52,6 +52,29 @@ impl InputDialogState {
         }
     }
 
+    /// Dialog for creating a new file inside `dir`.
+    pub fn for_new_file(dir: std::path::PathBuf) -> Self {
+        Self::new(DialogKind::NewFile, dir, String::new())
+    }
+
+    /// Dialog for creating a new directory inside `dir`.
+    pub fn for_new_dir(dir: std::path::PathBuf) -> Self {
+        Self::new(DialogKind::NewDir, dir, String::new())
+    }
+
+    /// Dialog for renaming a node (pre-fills the input with the existing name).
+    pub fn for_rename(path: std::path::PathBuf, name: String) -> Self {
+        Self::new(DialogKind::Rename, path, name)
+    }
+
+    /// Confirmation dialog for deleting a node. `use_trash` picks the
+    /// trash-vs-permanent copy in the rendered message.
+    pub fn for_delete(path: std::path::PathBuf, name: String, use_trash: bool) -> Self {
+        let mut dialog = Self::new(DialogKind::ConfirmDelete, path, name);
+        dialog.use_trash = use_trash;
+        dialog
+    }
+
     pub fn insert_char(&mut self, ch: char) {
         self.input.insert(self.cursor_pos, ch);
         self.cursor_pos += ch.len_utf8();

@@ -129,10 +129,35 @@ impl App {
                 }
             }
             // File operations (keyboard shortcuts)
-            Action::NewFile => self.start_new_file(),
-            Action::NewDir => self.start_new_dir(),
-            Action::RenameNode => self.start_rename(),
-            Action::DeleteNode => self.start_delete(),
+            Action::NewFile => {
+                let dir = self.current_dir();
+                self.ui.input_dialog = Some(InputDialogState::for_new_file(dir));
+                self.ui.input_mode = InputMode::Dialog;
+            }
+            Action::NewDir => {
+                let dir = self.current_dir();
+                self.ui.input_dialog = Some(InputDialogState::for_new_dir(dir));
+                self.ui.input_mode = InputMode::Dialog;
+            }
+            Action::RenameNode => {
+                if let Some(node) = self.tree.selected() {
+                    self.ui.input_dialog = Some(InputDialogState::for_rename(
+                        node.path.clone(),
+                        node.name.clone(),
+                    ));
+                    self.ui.input_mode = InputMode::Dialog;
+                }
+            }
+            Action::DeleteNode => {
+                if let Some(node) = self.tree.selected() {
+                    self.ui.input_dialog = Some(InputDialogState::for_delete(
+                        node.path.clone(),
+                        node.name.clone(),
+                        self.config.general.use_trash,
+                    ));
+                    self.ui.input_mode = InputMode::Dialog;
+                }
+            }
 
             // Dialog actions
             Action::DialogChar(ch) => {

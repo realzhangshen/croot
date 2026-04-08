@@ -106,10 +106,35 @@ impl App {
                     }
                 }
             }
-            MenuAction::NewFile => self.start_new_file_at(node_idx),
-            MenuAction::NewDir => self.start_new_dir_at(node_idx),
-            MenuAction::Rename => self.start_rename_at(node_idx),
-            MenuAction::Delete => self.start_delete_at(node_idx),
+            MenuAction::NewFile => {
+                let dir = self.dir_for_node(node_idx);
+                self.ui.input_dialog = Some(InputDialogState::for_new_file(dir));
+                self.ui.input_mode = InputMode::Dialog;
+            }
+            MenuAction::NewDir => {
+                let dir = self.dir_for_node(node_idx);
+                self.ui.input_dialog = Some(InputDialogState::for_new_dir(dir));
+                self.ui.input_mode = InputMode::Dialog;
+            }
+            MenuAction::Rename => {
+                if let Some(node) = self.tree.nodes.get(node_idx) {
+                    self.ui.input_dialog = Some(InputDialogState::for_rename(
+                        node.path.clone(),
+                        node.name.clone(),
+                    ));
+                    self.ui.input_mode = InputMode::Dialog;
+                }
+            }
+            MenuAction::Delete => {
+                if let Some(node) = self.tree.nodes.get(node_idx) {
+                    self.ui.input_dialog = Some(InputDialogState::for_delete(
+                        node.path.clone(),
+                        node.name.clone(),
+                        self.config.general.use_trash,
+                    ));
+                    self.ui.input_mode = InputMode::Dialog;
+                }
+            }
             MenuAction::TogglePreview => {
                 self.preview.visible = !self.preview.visible;
                 if self.preview.visible {
@@ -145,86 +170,6 @@ impl App {
             self.trigger_preview_load(preview_tx);
         }
         PostAction::None
-    }
-
-    pub(super) fn start_new_file(&mut self) {
-        let dir = self.current_dir();
-        self.ui.input_dialog = Some(InputDialogState::new(
-            DialogKind::NewFile,
-            dir,
-            String::new(),
-        ));
-        self.ui.input_mode = InputMode::Dialog;
-    }
-
-    pub(super) fn start_new_dir(&mut self) {
-        let dir = self.current_dir();
-        self.ui.input_dialog = Some(InputDialogState::new(
-            DialogKind::NewDir,
-            dir,
-            String::new(),
-        ));
-        self.ui.input_mode = InputMode::Dialog;
-    }
-
-    pub(super) fn start_rename(&mut self) {
-        if let Some(node) = self.tree.selected() {
-            let name = node.name.clone();
-            let path = node.path.clone();
-            self.ui.input_dialog = Some(InputDialogState::new(DialogKind::Rename, path, name));
-            self.ui.input_mode = InputMode::Dialog;
-        }
-    }
-
-    pub(super) fn start_delete(&mut self) {
-        if let Some(node) = self.tree.selected() {
-            let name = node.name.clone();
-            let path = node.path.clone();
-            let mut dialog = InputDialogState::new(DialogKind::ConfirmDelete, path, name);
-            dialog.use_trash = self.config.general.use_trash;
-            self.ui.input_dialog = Some(dialog);
-            self.ui.input_mode = InputMode::Dialog;
-        }
-    }
-
-    fn start_new_file_at(&mut self, node_idx: usize) {
-        let dir = self.dir_for_node(node_idx);
-        self.ui.input_dialog = Some(InputDialogState::new(
-            DialogKind::NewFile,
-            dir,
-            String::new(),
-        ));
-        self.ui.input_mode = InputMode::Dialog;
-    }
-
-    fn start_new_dir_at(&mut self, node_idx: usize) {
-        let dir = self.dir_for_node(node_idx);
-        self.ui.input_dialog = Some(InputDialogState::new(
-            DialogKind::NewDir,
-            dir,
-            String::new(),
-        ));
-        self.ui.input_mode = InputMode::Dialog;
-    }
-
-    fn start_rename_at(&mut self, node_idx: usize) {
-        if let Some(node) = self.tree.nodes.get(node_idx) {
-            let name = node.name.clone();
-            let path = node.path.clone();
-            self.ui.input_dialog = Some(InputDialogState::new(DialogKind::Rename, path, name));
-            self.ui.input_mode = InputMode::Dialog;
-        }
-    }
-
-    fn start_delete_at(&mut self, node_idx: usize) {
-        if let Some(node) = self.tree.nodes.get(node_idx) {
-            let name = node.name.clone();
-            let path = node.path.clone();
-            let mut dialog = InputDialogState::new(DialogKind::ConfirmDelete, path, name);
-            dialog.use_trash = self.config.general.use_trash;
-            self.ui.input_dialog = Some(dialog);
-            self.ui.input_mode = InputMode::Dialog;
-        }
     }
 
     /// Get the directory for a given node (node itself if dir, or its parent).
