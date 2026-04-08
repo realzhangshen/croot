@@ -78,4 +78,4 @@ make release VERSION=x.y.z
 
 Before `make release`, update `Cargo.toml` and `CHANGELOG.md`, then run `make ci`.
 `make release` validates the version/changelog entry, creates the git tag, and pushes it.
-The tag triggers GitHub Actions to build binaries and generate the demo GIF.
+The tag triggers GitHub Actions to build binaries, create the GitHub Release, and update the Homebrew formula.

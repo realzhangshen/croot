@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Remove stale demo GIF release workflow after the website migration
+
 ## [0.5.5] - 2026-04-08
 
 ### Added
