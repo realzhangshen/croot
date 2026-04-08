@@ -60,12 +60,17 @@ impl GitDiffHint {
 /// Returns `None` for `Skip`, `Some(vec![Added; n])` for `AllAdded`, and falls
 /// through to [`compute_line_diff`] for `Compute`.
 ///
+/// `repo_root` is the already-canonicalized working directory of the repo.
+/// When provided, `compute_line_diff` can `Repository::open` it directly
+/// instead of walking up from `file_path`. Pass `None` when the repo is not
+/// yet known (e.g. in unit tests) and `discover` will be used as a fallback.
+///
 /// This is the preferred entry point for the preview loader — it avoids the
 /// `Repository::discover + canonicalize + head.peel_to_tree` cost on every
 /// clean-file preview.
 #[must_use]
 pub fn compute_line_diff_with_hint(
-    repo_path: &Path,
+    repo_root: Option<&Path>,
     file_path: &Path,
     current_content: &str,
     hint: GitDiffHint,
@@ -76,12 +81,16 @@ pub fn compute_line_diff_with_hint(
             let line_count = current_content.lines().count().max(1);
             Some(vec![LineDiffStatus::Added; line_count])
         }
-        GitDiffHint::Compute => compute_line_diff(repo_path, file_path, current_content),
+        GitDiffHint::Compute => compute_line_diff(repo_root, file_path, current_content),
     }
 }
 
 /// Compute per-line diff status by comparing the HEAD version of a file
 /// against `current_content`.
+///
+/// `repo_root` should be a canonicalized workdir (e.g. `GitState::repo_root()`).
+/// Passing `None` falls back to `Repository::discover` from `file_path`, which
+/// is slower and only used by tests that don't have a `GitState` handy.
 ///
 /// Returns `None` if: no git repo, no HEAD commit, binary/non-UTF-8 HEAD content,
 /// or any git error. Returns `Some(vec![Added; n])` for untracked files.
@@ -89,14 +98,27 @@ pub fn compute_line_diff_with_hint(
 /// Takes `current_content` as a parameter to avoid re-reading the file
 /// (the preview loader already has it).
 pub fn compute_line_diff(
-    repo_path: &Path,
+    repo_root: Option<&Path>,
     file_path: &Path,
     current_content: &str,
 ) -> Option<Vec<LineDiffStatus>> {
-    let repo = git2::Repository::discover(repo_path).ok()?;
-    let workdir = repo.workdir()?.canonicalize().ok()?;
+    // Fast path: caller knows the (canonical) repo root, so we can open it
+    // directly and reuse it as the strip_prefix base. Slow path: fall back to
+    // `Repository::discover` + `canonicalize` for tests that pass `None`.
+    let (repo, workdir): (git2::Repository, std::borrow::Cow<'_, Path>) = match repo_root {
+        Some(root) => {
+            let repo = git2::Repository::open(root).ok()?;
+            (repo, std::borrow::Cow::Borrowed(root))
+        }
+        None => {
+            let repo = git2::Repository::discover(file_path).ok()?;
+            let workdir = repo.workdir()?.canonicalize().ok()?;
+            (repo, std::borrow::Cow::Owned(workdir))
+        }
+    };
+
     let canonical_file = file_path.canonicalize().ok()?;
-    let relative = canonical_file.strip_prefix(&workdir).ok()?;
+    let relative = canonical_file.strip_prefix(workdir.as_ref()).ok()?;
 
     let Some(head_content) = get_head_content(&repo, relative) else {
         // File not in HEAD (untracked/new) → all lines Added
@@ -369,7 +391,7 @@ mod tests {
         let new_content = "line1\nmodified\nline3\nnew_line\n";
         std::fs::write(&file_path, new_content).unwrap();
 
-        let result = compute_line_diff(dir.path(), &file_path, new_content);
+        let result = compute_line_diff(None, &file_path, new_content);
         let statuses = result.unwrap();
         assert_eq!(statuses.len(), 4);
         assert_eq!(statuses[0], LineDiffStatus::Unchanged);
@@ -396,7 +418,7 @@ mod tests {
         let content = "a\nb\nc\n";
         std::fs::write(&file_path, content).unwrap();
 
-        let result = compute_line_diff(dir.path(), &file_path, content);
+        let result = compute_line_diff(None, &file_path, content);
         let statuses = result.unwrap();
         assert_eq!(statuses.len(), 3);
         assert!(statuses.iter().all(|s| *s == LineDiffStatus::Added));
@@ -408,7 +430,7 @@ mod tests {
         let file_path = dir.path().join("file.txt");
         std::fs::write(&file_path, "content").unwrap();
 
-        assert!(compute_line_diff(dir.path(), &file_path, "content").is_none());
+        assert!(compute_line_diff(None, &file_path, "content").is_none());
     }
 
     // --- GitDiffHint tests ---
@@ -469,12 +491,8 @@ mod tests {
         let file_path = dir.path().join("file.txt");
         std::fs::write(&file_path, "line1\nline2\n").unwrap();
 
-        let result = compute_line_diff_with_hint(
-            dir.path(),
-            &file_path,
-            "line1\nline2\n",
-            GitDiffHint::Skip,
-        );
+        let result =
+            compute_line_diff_with_hint(None, &file_path, "line1\nline2\n", GitDiffHint::Skip);
         assert!(result.is_none());
     }
 
@@ -486,8 +504,7 @@ mod tests {
         let content = "a\nb\nc\n";
         std::fs::write(&file_path, content).unwrap();
 
-        let result =
-            compute_line_diff_with_hint(dir.path(), &file_path, content, GitDiffHint::AllAdded);
+        let result = compute_line_diff_with_hint(None, &file_path, content, GitDiffHint::AllAdded);
         let statuses = result.unwrap();
         assert_eq!(statuses.len(), 3);
         assert!(statuses.iter().all(|s| *s == LineDiffStatus::Added));
@@ -499,7 +516,7 @@ mod tests {
         let file_path = dir.path().join("empty.txt");
         std::fs::write(&file_path, "").unwrap();
 
-        let result = compute_line_diff_with_hint(dir.path(), &file_path, "", GitDiffHint::AllAdded);
+        let result = compute_line_diff_with_hint(None, &file_path, "", GitDiffHint::AllAdded);
         let statuses = result.unwrap();
         // Empty content → line_count = 0.max(1) = 1, so one Added marker.
         assert_eq!(statuses, vec![LineDiffStatus::Added]);
@@ -526,7 +543,7 @@ mod tests {
         std::fs::write(&file_path, new_content).unwrap();
 
         let result =
-            compute_line_diff_with_hint(dir.path(), &file_path, new_content, GitDiffHint::Compute);
+            compute_line_diff_with_hint(None, &file_path, new_content, GitDiffHint::Compute);
         let statuses = result.unwrap();
         assert_eq!(
             statuses,
@@ -556,7 +573,7 @@ mod tests {
         repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[])
             .unwrap();
 
-        let result = compute_line_diff(dir.path(), &file_path, content);
+        let result = compute_line_diff(None, &file_path, content);
         let statuses = result.unwrap();
         assert_eq!(statuses.len(), 2);
         assert!(statuses.iter().all(|s| *s == LineDiffStatus::Unchanged));

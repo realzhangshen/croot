@@ -21,7 +21,9 @@ impl GitState {
     /// Attempt to discover a git repo from the given path and load statuses.
     pub fn load(path: &Path) -> Option<Self> {
         let repo = Repository::discover(path).ok()?;
-        let repo_root = repo.workdir()?.to_path_buf();
+        // Store the canonical workdir so downstream consumers (preview diff,
+        // etc.) can reuse it as-is without an extra `canonicalize()` call.
+        let repo_root = repo.workdir()?.canonicalize().ok()?;
 
         let mut state = GitState {
             repo_root: repo_root.clone(),

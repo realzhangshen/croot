@@ -119,6 +119,9 @@ impl App {
         let render_markdown = self.preview.state.render_markdown;
         let preview_width = self.preview.content_width as usize;
         let image_preview = self.config.preview.image_preview;
+        // Share the already-discovered git workdir with the preview loader
+        // so it doesn't re-run `Repository::discover` per preview.
+        let repo_root = self.git.as_ref().map(|g| g.repo_root().to_path_buf());
 
         self.preview.debounce_handle = Some(tokio::spawn(async move {
             tokio::time::sleep(delay).await;
@@ -132,6 +135,7 @@ impl App {
                     render_markdown,
                     preview_width,
                     image_preview,
+                    repo_root.as_deref(),
                     git_diff_hint,
                 )
             })

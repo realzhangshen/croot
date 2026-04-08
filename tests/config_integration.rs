@@ -104,6 +104,7 @@ image_preview = false
         config.preview.render_markdown,
         80,
         config.preview.image_preview,
+        None,
         GitDiffHint::Skip,
     );
     let large_preview = load_preview(
@@ -113,6 +114,7 @@ image_preview = false
         config.preview.render_markdown,
         80,
         config.preview.image_preview,
+        None,
         GitDiffHint::Skip,
     );
 

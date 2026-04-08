@@ -31,6 +31,9 @@ pub struct LoadedPreview {
 /// Classifies the file type, reads content, and produces pre-styled lines.
 /// `max_file_size_kb`: skip text preview for files larger than this (in KB).
 /// `syntax_highlight`: whether to apply syntax highlighting.
+/// `repo_root`: canonical git workdir if the app already knows it
+/// (from `GitState`). When `Some`, the diff helper can reuse it instead of
+/// re-running `Repository::discover` on every dirty-file preview.
 /// `git_diff_hint`: short-circuit info for the diff gutter, derived from the
 /// cached node `GitStatus` at trigger time. Callers can pass
 /// [`GitDiffHint::Skip`] to disable the gutter entirely.
@@ -42,6 +45,7 @@ pub fn load_preview(
     render_markdown: bool,
     preview_width: usize,
     image_preview: bool,
+    repo_root: Option<&Path>,
     git_diff_hint: GitDiffHint,
 ) -> LoadedPreview {
     // Directories
@@ -121,6 +125,7 @@ pub fn load_preview(
         render_markdown,
         preview_width,
         max_bytes,
+        repo_root,
         git_diff_hint,
     )
 }
@@ -147,6 +152,7 @@ fn load_text_preview(
     render_markdown: bool,
     preview_width: usize,
     max_bytes: u64,
+    repo_root: Option<&Path>,
     git_diff_hint: GitDiffHint,
 ) -> LoadedPreview {
     // Bounded read to avoid unbounded memory usage (TOCTOU: file can grow after size check)
@@ -182,7 +188,7 @@ fn load_text_preview(
     // The hint short-circuits clean/ignored (Skip) and untracked/staged-added (AllAdded)
     // so we don't pay Repository::discover + canonicalize on every preview.
     let line_diffs =
-        crate::git::diff::compute_line_diff_with_hint(path, path, &content, git_diff_hint);
+        crate::git::diff::compute_line_diff_with_hint(repo_root, path, &content, git_diff_hint);
 
     let lines = if syntax_highlight {
         highlight::highlight_file(path, &content, max_lines)
@@ -451,7 +457,16 @@ mod tests {
         // Write minimal valid PNG header
         std::fs::write(&png_path, b"\x89PNG\r\n\x1a\n").unwrap();
 
-        let result = load_preview(&png_path, 1024, true, true, 80, true, GitDiffHint::Skip);
+        let result = load_preview(
+            &png_path,
+            1024,
+            true,
+            true,
+            80,
+            true,
+            None,
+            GitDiffHint::Skip,
+        );
         assert_eq!(result.kind, PreviewKind::Image);
         assert!(result.content.is_empty());
     }
@@ -463,7 +478,16 @@ mod tests {
         let png_path = dir.path().join("test.png");
         std::fs::write(&png_path, b"\x89PNG\r\n\x1a\n").unwrap();
 
-        let result = load_preview(&png_path, 1024, true, true, 80, false, GitDiffHint::Skip);
+        let result = load_preview(
+            &png_path,
+            1024,
+            true,
+            true,
+            80,
+            false,
+            None,
+            GitDiffHint::Skip,
+        );
         assert_eq!(result.kind, PreviewKind::Binary);
     }
 

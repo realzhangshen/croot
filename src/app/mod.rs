@@ -17,7 +17,6 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::cmux::bridge::CmuxBridge;
 use crate::config::Config;
-use crate::file_ops::DialogKind;
 use crate::git::status::GitState;
 use crate::input::handler::{
     build_keybinding_map, handle_key, handle_key_dialog, handle_key_global_search, handle_key_menu,
@@ -271,6 +270,7 @@ fn build_external_editor_argv(
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::file_ops::DialogKind;
     use crate::search::{
         ContentMatch, FileGroup, GlobalSearchResult, GlobalSearchType, SearchMode, SearchState,
     };
