@@ -21,14 +21,29 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: cargo check
+      - name: cargo check (default features)
         run: cargo check
 
-      - name: cargo test
+      - name: cargo check (--no-default-features)
+        run: cargo check --no-default-features
+
+      - name: cargo check (--features image-preview)
+        run: cargo check --features image-preview
+
+      - name: cargo test (default features)
         run: cargo test
 
-      - name: cargo clippy
+      - name: cargo test (--no-default-features)
+        run: cargo test --no-default-features
+
+      - name: cargo test (--features image-preview)
+        run: cargo test --features image-preview
+
+      - name: cargo clippy (default features)
         run: cargo clippy -- -D warnings
+
+      - name: cargo clippy (--features image-preview)
+        run: cargo clippy --features image-preview -- -D warnings
 
       - name: cargo fmt
         run: cargo fmt --check

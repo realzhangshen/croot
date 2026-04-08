@@ -33,6 +33,18 @@ cargo build --release
 # Binary is at target/release/croot
 ```
 
+### Optional: image preview
+
+Image preview (PNG/JPG/… rendered inline in the preview pane) is an
+opt-in feature because it pulls in `ratatui-image` and the `image`
+crate. Enable it at install time:
+
+```bash
+cargo install croot --features image-preview
+# or when building from source:
+cargo build --release --features image-preview
+```
+
 ## Usage
 
 ```bash

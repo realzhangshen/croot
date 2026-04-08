@@ -676,7 +676,7 @@ auto_preview = false
 # syntax_highlight = true
 # split_ratio = 0.5
 # render_markdown = true
-# image_preview = true
+# image_preview = true         # Requires the `image-preview` Cargo feature
 # show_git_diff = true
 
 [syntax]

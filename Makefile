@@ -1,4 +1,4 @@
-.PHONY: ci fmt check clippy clippy-pedantic clippy-fix test fix install-hooks release
+.PHONY: ci fmt check clippy clippy-pedantic clippy-fix test test-all-features fix install-hooks release
 
 PEDANTIC_ALLOW = \
 	-A clippy::module_name_repetitions \
@@ -21,7 +21,7 @@ PEDANTIC_ALLOW = \
 	-A clippy::needless_raw_string_hashes
 
 ## Run all CI checks (mirrors pre-push hook)
-ci: fmt check clippy test
+ci: fmt check clippy test test-all-features
 	@echo ""
 	@echo "All checks passed."
 
@@ -45,9 +45,15 @@ clippy-pedantic:
 clippy-fix:
 	cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
 
-## Run tests
+## Run tests (default features)
 test:
 	cargo test --quiet
+
+## Run tests across feature matrix: default, none, image-preview.
+## Use this to catch breakage in feature combinations before pushing.
+test-all-features:
+	cargo test --quiet --no-default-features
+	cargo test --quiet --features image-preview
 
 ## Auto-format code
 fix:

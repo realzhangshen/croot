@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Bundle the `two-face` extended syntax set so file preview now highlights Swift, TOML (incl. `Cargo.toml`), Kotlin, Dockerfile, INI, Nix, Dart, Zig, native TypeScript, and many other languages missing from syntect's default bundle
 
+### Changed
+- **BREAKING**: Image preview is now opt-in via the `image-preview` Cargo feature. Install with `cargo install croot --features image-preview` to keep image previews. This removes `ratatui-image` and the `image` crate from the default build, shrinking the dependency surface for users who don't need image previews. Behaviour inside the app is unchanged when the feature is enabled.
+- Preview git diff now short-circuits on the cached `GitStatus`: clean and ignored files skip `Repository::discover`/`canonicalize`/`similar::TextDiff` entirely, and untracked/staged-added files fill an `Added` vector without calling into git2. Only files with actual modifications hit the real diff path.
+- Tree render no longer clones the full `cached_guides()` / `cached_displayable_indices()` tables every frame. Both caches are warmed once per render, then borrowed as slices; only the viewport slice of displayable indices is cloned.
+- Background refresh now coalesces concurrent triggers. Filesystem event bursts (e.g. `cargo build`) collapse to at most one running refresh plus one pending follow-up instead of spawning N concurrent full-tree rebuilds.
+
 ### Fixed
 - Remove stale demo GIF release workflow after the website migration
 
