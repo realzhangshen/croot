@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use ratatui::style::Style;
 use unicode_width::UnicodeWidthChar;
 
 use crate::git::diff::{GitDiffHint, LineDiffStatus};
+pub use crate::syntax::StyledSpan;
 
 /// A position in content space (line index + display column).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,9 +74,6 @@ pub enum PreviewKind {
     #[cfg(feature = "image-preview")]
     Image,
 }
-
-/// A single styled text segment within a line.
-pub type StyledSpan = (String, Style);
 
 /// Holds the state of the built-in preview panel.
 pub struct PreviewState {
@@ -289,6 +286,7 @@ fn extract_line_range(spans: &[StyledSpan], col_start: usize, col_end: usize) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::style::Style;
 
     #[test]
     fn is_image_extension_recognizes_common_formats() {

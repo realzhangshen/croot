@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 use syntect::easy::ScopeRegionIterator;
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxReference, SyntaxSet};
 
-use crate::preview::state::StyledSpan;
+use super::StyledSpan;
 
 /// Lines longer than this (in bytes) are parsed but not styled, to prevent
 /// pathological highlighting on minified files. The parse state is still
