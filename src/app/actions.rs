@@ -368,11 +368,6 @@ impl App {
                     self.trigger_preview_load(preview_tx);
                 }
             }
-            // Focus search bar without clearing query
-            Action::FocusSearch => {
-                self.ui.input_mode = InputMode::Search;
-            }
-
             Action::DoubleClick(row) => {
                 // Cursor already set by the first ClickRow. For files, open externally.
                 // For directories, do nothing -- the first click already toggled.

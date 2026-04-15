@@ -97,8 +97,6 @@ pub enum Action {
     OpenExternally,
     /// Collapse all expanded directories.
     CollapseAll,
-    /// Focus the search bar without clearing the existing query.
-    FocusSearch,
     /// Double-click on a tree row.
     DoubleClick(u16),
     /// Enter key: open file in editor or toggle directory.

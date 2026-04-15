@@ -9,16 +9,8 @@ use unicode_width::UnicodeWidthStr;
 
 use super::colors;
 
-// Re-export search types and matchers so existing `use crate::render::search_bar::*` still works.
-pub use crate::search::matcher::{
-    do_match, do_match_positions, exact_match, exact_match_positions, fuzzy_match,
-    fuzzy_match_positions, regex_match, regex_match_positions,
-};
 pub(crate) use crate::search::types::cursor_byte_to_column;
-pub use crate::search::types::{
-    ContentMatch, FileGroup, GlobalSearchResult, GlobalSearchType, GroupedItem, MatchMode,
-    SearchMode, SearchState,
-};
+use crate::search::types::{SearchMode, SearchState};
 
 pub struct SearchBar<'a> {
     pub state: &'a SearchState,
