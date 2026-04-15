@@ -175,7 +175,7 @@ fn handle_config(action: Option<ConfigAction>) -> anyhow::Result<()> {
         None => {
             // Print resolved config
             let cfg = config::Config::load();
-            print!("{}", cfg.to_toml_string());
+            print!("{}", cfg.to_toml_string()?);
         }
         Some(ConfigAction::Path) => {
             println!("{}", config::config_path().display());

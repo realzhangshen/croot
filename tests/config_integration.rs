@@ -142,7 +142,7 @@ command = "hx"
         &mut warning,
     );
 
-    let serialized = config.to_toml_string();
+    let serialized = config.to_toml_string().unwrap();
     let mut roundtrip_warning = None;
     let roundtrip = Config::parse_with_warning(&serialized, &mut roundtrip_warning);
 

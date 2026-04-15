@@ -583,11 +583,11 @@ impl Config {
 
     /// Serialize the resolved config to a TOML string.
     /// Keybinding defaults are filled in so the output shows effective bindings.
-    pub fn to_toml_string(&self) -> String {
+    pub fn to_toml_string(&self) -> Result<String, toml::ser::Error> {
         let mut resolved = self.clone();
         resolved.keybindings = resolved.keybindings.resolved();
         resolved.colors = resolved.colors.resolved();
-        toml::to_string_pretty(&resolved).unwrap_or_default()
+        toml::to_string_pretty(&resolved)
     }
 
     /// Return the hand-written default config template with comments.
@@ -922,7 +922,7 @@ use_trash = false
 
     #[test]
     fn resolved_toml_includes_color_defaults() {
-        let toml = Config::default().to_toml_string();
+        let toml = Config::default().to_toml_string().unwrap();
 
         assert!(toml.contains("[colors]"));
         assert!(toml.contains("popup_bg = \"black\""));
