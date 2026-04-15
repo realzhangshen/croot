@@ -184,9 +184,7 @@ impl App {
 
         if !inside {
             // Click outside overlay -> cancel
-            self.abort_global_search_task(true);
-            self.search_state.clear();
-            self.ui.input_mode = InputMode::Normal;
+            self.close_global_search_overlay();
             return PostAction::None;
         }
 
@@ -210,9 +208,7 @@ impl App {
                     .get(self.search_state.global_selected)
                     .cloned()
                 {
-                    self.abort_global_search_task(true);
-                    self.ui.input_mode = InputMode::Normal;
-                    self.search_state.clear();
+                    self.close_global_search_overlay();
                     return self.search_open_action(result.path, None);
                 }
             }

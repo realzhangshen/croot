@@ -314,16 +314,12 @@ impl App {
                     .get(self.search_state.global_selected)
                     .cloned()
                 {
-                    self.abort_global_search_task(true);
-                    self.ui.input_mode = InputMode::Normal;
-                    self.search_state.clear();
+                    self.close_global_search_overlay();
                     post = self.search_open_action(result.path, None);
                 }
             }
             Action::GlobalSearchCancel => {
-                self.abort_global_search_task(true);
-                self.search_state.clear();
-                self.ui.input_mode = InputMode::Normal;
+                self.close_global_search_overlay();
             }
             Action::GlobalSearchGoto => {
                 if self.search_state.global_search_type == GlobalSearchType::Content {
@@ -334,9 +330,7 @@ impl App {
                     .get(self.search_state.global_selected)
                     .cloned()
                 {
-                    self.abort_global_search_task(true);
-                    self.ui.input_mode = InputMode::Normal;
-                    self.search_state.clear();
+                    self.close_global_search_overlay();
                     self.tree.navigate_to_path(&result.path);
                     self.reapply_git();
                     self.trigger_preview_load(preview_tx);

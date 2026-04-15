@@ -210,6 +210,18 @@ impl App {
         }
     }
 
+    /// Close the global search overlay: abort the pending task, clear the
+    /// overlay's search state, and return input mode to `Normal`.
+    ///
+    /// These three steps must happen together whenever the overlay is
+    /// dismissed (cancel, click-outside, result-open, result-goto). Any
+    /// caller that forgets one step leaves the overlay in a half-open state.
+    pub(super) fn close_global_search_overlay(&mut self) {
+        self.abort_global_search_task(true);
+        self.search_state.clear();
+        self.ui.input_mode = InputMode::Normal;
+    }
+
     /// Handle Enter in content search: toggle file header or navigate to match line.
     pub(super) fn handle_content_search_confirm(&mut self) -> PostAction {
         let Some(item) = self
@@ -238,9 +250,7 @@ impl App {
                 let group = &self.search_state.grouped_results[g];
                 let path = group.path.clone();
                 let line = group.matches[m].line;
-                self.abort_global_search_task(true);
-                self.ui.input_mode = InputMode::Normal;
-                self.search_state.clear();
+                self.close_global_search_overlay();
                 self.search_open_action(path, line)
             }
         }
@@ -269,9 +279,7 @@ impl App {
         match item {
             GroupedItem::FileHeader(g) => {
                 let path = self.search_state.grouped_results[g].path.clone();
-                self.abort_global_search_task(true);
-                self.ui.input_mode = InputMode::Normal;
-                self.search_state.clear();
+                self.close_global_search_overlay();
                 self.tree.navigate_to_path(&path);
                 self.reapply_git();
                 self.trigger_preview_load(preview_tx);
@@ -280,12 +288,10 @@ impl App {
                 let group = &self.search_state.grouped_results[g];
                 let path = group.path.clone();
                 let line = group.matches[m].line;
-                self.abort_global_search_task(true);
-                self.ui.input_mode = InputMode::Normal;
                 if let Some(rg_line) = line {
                     self.preview.pending_line = Some((path.clone(), rg_line));
                 }
-                self.search_state.clear();
+                self.close_global_search_overlay();
                 self.tree.navigate_to_path(&path);
                 self.reapply_git();
                 self.trigger_preview_load(preview_tx);
