@@ -160,22 +160,22 @@ impl SearchJob {
                         total_count += 1;
                     }
                     GlobalSearchType::Content => match parse_rg_json_match(&line) {
-                        Ok(Some((file, line_num, context))) => {
-                            let is_new_file = last_file.as_ref().is_none_or(|f| f != &file);
+                        Ok(Some(m)) => {
+                            let is_new_file = last_file.as_ref().is_none_or(|f| f != &m.file);
                             if is_new_file {
                                 unique_file_count += 1;
                                 if unique_file_count > max_results {
                                     capped = true;
                                     break;
                                 }
-                                last_file = Some(file.clone());
+                                last_file = Some(m.file.clone());
                             }
-                            let path = root.join(&file);
+                            let path = root.join(&m.file);
                             batch.push(GlobalSearchResult {
                                 path,
-                                display: file,
-                                line: line_num,
-                                context,
+                                display: m.file,
+                                line: m.line_number,
+                                context: m.context,
                             });
                             total_count += 1;
                         }

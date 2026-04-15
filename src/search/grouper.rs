@@ -35,8 +35,16 @@ impl RgJsonText {
     }
 }
 
-/// Parse a ripgrep `--json` line into `(file, line_num, context)`.
-pub type ParsedRgMatch = (String, Option<usize>, Option<String>);
+/// Parsed fields from a single ripgrep `--json` `match` record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedRgMatch {
+    /// Path as reported by ripgrep (relative to the search root).
+    pub file: String,
+    /// 1-based line number of the match, if present.
+    pub line_number: Option<usize>,
+    /// Text of the matching line (may contain trailing newline), if present.
+    pub context: Option<String>,
+}
 
 pub fn parse_rg_json_match(line: &str) -> Result<Option<ParsedRgMatch>, serde_json::Error> {
     let message: RgJsonMessage = serde_json::from_str(line)?;
@@ -48,11 +56,11 @@ pub fn parse_rg_json_match(line: &str) -> Result<Option<ParsedRgMatch>, serde_js
         return Ok(None);
     };
 
-    Ok(Some((
+    Ok(Some(ParsedRgMatch {
         file,
-        message.data.line_number,
-        message.data.lines.and_then(RgJsonText::into_text),
-    )))
+        line_number: message.data.line_number,
+        context: message.data.lines.and_then(RgJsonText::into_text),
+    }))
 }
 
 /// Group flat search results by file path into `FileGroup`s.
@@ -100,11 +108,11 @@ mod tests {
         let parsed = parse_rg_json_match(line).unwrap();
         assert_eq!(
             parsed,
-            Some((
-                "src/main.rs".to_string(),
-                Some(42),
-                Some("fn main() {\n".to_string())
-            ))
+            Some(ParsedRgMatch {
+                file: "src/main.rs".to_string(),
+                line_number: Some(42),
+                context: Some("fn main() {\n".to_string()),
+            })
         );
     }
 
@@ -114,11 +122,11 @@ mod tests {
         let parsed = parse_rg_json_match(line).unwrap();
         assert_eq!(
             parsed,
-            Some((
-                "foo:123:bar.rs".to_string(),
-                Some(45),
-                Some("prefix:456:suffix\n".to_string())
-            ))
+            Some(ParsedRgMatch {
+                file: "foo:123:bar.rs".to_string(),
+                line_number: Some(45),
+                context: Some("prefix:456:suffix\n".to_string()),
+            })
         );
     }
 
