@@ -930,6 +930,53 @@ mod tests {
         assert!(tree.chain_cache_valid);
     }
 
+    /// Regression: deleting a previewed file panicked at `&state.nodes[idx]`
+    /// because FileTree::refresh() rebuilt `nodes` without invalidating the
+    /// displayable/chain/guides caches. The next render used stale indices
+    /// that pointed past the shrunken `nodes` vec.
+    #[test]
+    fn render_after_refresh_shrinks_nodes_does_not_panic() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("a.txt"), "a").unwrap();
+        std::fs::write(tmp.path().join("b.txt"), "b").unwrap();
+        std::fs::write(tmp.path().join("c.txt"), "c").unwrap();
+
+        let config = crate::config::TreeConfig::default();
+        let mut tree = FileTree::new(tmp.path().to_path_buf(), config.clone());
+
+        let area = ratatui::layout::Rect::new(0, 0, 40, 10);
+        let mut buf = Buffer::empty(area);
+        let empty_positions = HashMap::new();
+
+        // First render warms the caches with 3 displayable indices.
+        let widget = TreeView {
+            config: &config,
+            hover_row: None,
+            filter_indices: &[],
+            highlight_indices: &[],
+            highlight_char_positions: &empty_positions,
+        };
+        widget.render(area, &mut buf, &mut tree);
+        assert_eq!(tree.rendered_indices.len(), 3);
+
+        // Delete one file and refresh — no expanded subdirs means
+        // refresh() takes the path that did not invalidate caches.
+        std::fs::remove_file(tmp.path().join("c.txt")).unwrap();
+        tree.refresh();
+
+        // Second render with stale caches would have panicked on
+        // `&state.nodes[absolute_idx]` for the missing third index.
+        let widget = TreeView {
+            config: &config,
+            hover_row: None,
+            filter_indices: &[],
+            highlight_indices: &[],
+            highlight_char_positions: &empty_positions,
+        };
+        widget.render(area, &mut buf, &mut tree);
+        assert_eq!(tree.rendered_indices.len(), 2);
+    }
+
     #[test]
     fn is_last_visible_sibling_basic() {
         let nodes = vec![

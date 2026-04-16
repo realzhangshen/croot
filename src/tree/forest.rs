@@ -78,6 +78,11 @@ impl FileTree {
         self.guides_cache_valid = false;
     }
 
+    fn set_nodes(&mut self, nodes: Vec<TreeNode>) {
+        self.nodes = nodes;
+        self.invalidate_chain_cache();
+    }
+
     /// Compact chain length for a node, using the cache if available.
     /// If the cache is stale, recomputes all chain lengths in a single O(N) pass.
     ///
@@ -292,9 +297,9 @@ impl FileTree {
     pub fn collapse_all(&mut self) {
         let cursor_path = self.nodes.get(self.cursor).map(|n| n.path.clone());
 
-        self.nodes = load_children_with_meta(&self.root, 0, &self.config);
+        let nodes = load_children_with_meta(&self.root, 0, &self.config);
+        self.set_nodes(nodes);
         self.recount();
-        self.invalidate_chain_cache();
         if let Some(ref target) = cursor_path {
             self.cursor = self
                 .nodes
@@ -316,7 +321,8 @@ impl FileTree {
             .collect();
 
         let cursor_path = self.nodes.get(self.cursor).map(|n| n.path.clone());
-        self.nodes = load_children_with_meta(&self.root, 0, &self.config);
+        let nodes = load_children_with_meta(&self.root, 0, &self.config);
+        self.set_nodes(nodes);
 
         // Forward scan: expanding shifts indices, so increment i linearly
         let mut i = 0;
