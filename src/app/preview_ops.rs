@@ -131,13 +131,15 @@ impl App {
             let loaded = tokio::task::spawn_blocking(move || {
                 load_preview(
                     &path,
-                    max_file_size_kb,
-                    syntax_highlight,
-                    render_markdown,
-                    preview_width,
-                    image_preview,
-                    repo_root.as_deref(),
-                    git_diff_hint,
+                    &PreviewRequest {
+                        max_file_size_kb,
+                        syntax_highlight,
+                        render_markdown,
+                        preview_width,
+                        image_preview,
+                        repo_root: repo_root.as_deref(),
+                        git_diff_hint,
+                    },
                 )
             })
             .await;

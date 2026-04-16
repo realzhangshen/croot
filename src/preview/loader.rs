@@ -26,34 +26,35 @@ pub struct LoadedPreview {
     pub git_diff_hint: GitDiffHint,
 }
 
+/// All inputs to [`load_preview`] other than the target path.
+///
+/// Grouped so callers stamp one request per config/git snapshot and reuse it
+/// across previews, and so each knob is named at the call site instead of
+/// being a positional `true` / `80` / `None`.
+pub struct PreviewRequest<'a> {
+    /// Skip text preview for files larger than this (in KB).
+    pub max_file_size_kb: u64,
+    pub syntax_highlight: bool,
+    pub render_markdown: bool,
+    pub preview_width: usize,
+    pub image_preview: bool,
+    /// Canonical git workdir if the app already knows it (from `GitState`).
+    /// When `Some`, the diff helper can reuse it instead of re-running
+    /// `Repository::discover` on every dirty-file preview.
+    pub repo_root: Option<&'a Path>,
+    /// Short-circuit info for the diff gutter, derived from the cached node
+    /// `GitStatus` at trigger time. [`GitDiffHint::Skip`] disables the gutter.
+    pub git_diff_hint: GitDiffHint,
+}
+
 /// Load a file for preview display.
 ///
 /// Classifies the file type, reads content, and produces pre-styled lines.
-/// `max_file_size_kb`: skip text preview for files larger than this (in KB).
-/// `syntax_highlight`: whether to apply syntax highlighting.
-/// `repo_root`: canonical git workdir if the app already knows it
-/// (from `GitState`). When `Some`, the diff helper can reuse it instead of
-/// re-running `Repository::discover` on every dirty-file preview.
-/// `git_diff_hint`: short-circuit info for the diff gutter, derived from the
-/// cached node `GitStatus` at trigger time. Callers can pass
-/// [`GitDiffHint::Skip`] to disable the gutter entirely.
-#[allow(clippy::fn_params_excessive_bools)]
-pub fn load_preview(
-    path: &Path,
-    max_file_size_kb: u64,
-    syntax_highlight: bool,
-    render_markdown: bool,
-    preview_width: usize,
-    image_preview: bool,
-    repo_root: Option<&Path>,
-    git_diff_hint: GitDiffHint,
-) -> LoadedPreview {
-    // Directories
+pub fn load_preview(path: &Path, req: &PreviewRequest<'_>) -> LoadedPreview {
     if path.is_dir() {
         return load_directory_preview(path);
     }
 
-    // File metadata
     let metadata = match fs::metadata(path) {
         Ok(m) => m,
         Err(e) => {
@@ -62,7 +63,7 @@ pub fn load_preview(
                 content: Vec::new(),
                 file_info: String::new(),
                 line_diffs: None,
-                git_diff_hint,
+                git_diff_hint: req.git_diff_hint,
             };
         }
     };
@@ -70,8 +71,7 @@ pub fn load_preview(
     let size = metadata.len();
     let file_info = format_file_info(path, size);
 
-    // Size check
-    let max_bytes = max_file_size_kb.saturating_mul(1024);
+    let max_bytes = req.max_file_size_kb.saturating_mul(1024);
     if size > max_bytes {
         return LoadedPreview {
             kind: PreviewKind::TooLarge,
@@ -81,25 +81,22 @@ pub fn load_preview(
             )]],
             file_info,
             line_diffs: None,
-            git_diff_hint,
+            git_diff_hint: req.git_diff_hint,
         };
     }
 
-    // Image detection — before binary probe since images are binary
+    // Image detection comes before the binary probe since images are binary.
     #[cfg(feature = "image-preview")]
-    if image_preview && is_image_file(path) {
+    if req.image_preview && is_image_file(path) {
         return LoadedPreview {
             kind: PreviewKind::Image,
             content: Vec::new(),
             file_info,
             line_diffs: None,
-            git_diff_hint,
+            git_diff_hint: req.git_diff_hint,
         };
     }
-    #[cfg(not(feature = "image-preview"))]
-    let _ = image_preview;
 
-    // Read first 8KB to detect content type
     let probe = match read_prefix(path, 8192) {
         Ok(data) => data,
         Err(e) => {
@@ -108,26 +105,16 @@ pub fn load_preview(
                 content: Vec::new(),
                 file_info,
                 line_diffs: None,
-                git_diff_hint,
+                git_diff_hint: req.git_diff_hint,
             };
         }
     };
 
     if content_inspector::inspect(&probe).is_binary() {
-        return load_binary_preview(path, &file_info, git_diff_hint);
+        return load_binary_preview(path, &file_info, req.git_diff_hint);
     }
 
-    // Text file — bounded read to avoid unbounded memory usage
-    load_text_preview(
-        path,
-        &file_info,
-        syntax_highlight,
-        render_markdown,
-        preview_width,
-        max_bytes,
-        repo_root,
-        git_diff_hint,
-    )
+    load_text_preview(path, &file_info, req)
 }
 
 #[cfg(feature = "image-preview")]
@@ -145,17 +132,10 @@ fn is_markdown_file(path: &Path) -> bool {
         .is_some_and(|ext| matches!(ext.as_str(), "md" | "mdx" | "markdown"))
 }
 
-fn load_text_preview(
-    path: &Path,
-    file_info: &str,
-    syntax_highlight: bool,
-    render_markdown: bool,
-    preview_width: usize,
-    max_bytes: u64,
-    repo_root: Option<&Path>,
-    git_diff_hint: GitDiffHint,
-) -> LoadedPreview {
-    // Bounded read to avoid unbounded memory usage (TOCTOU: file can grow after size check)
+fn load_text_preview(path: &Path, file_info: &str, req: &PreviewRequest<'_>) -> LoadedPreview {
+    // TOCTOU: file can grow between the size check above and the read here,
+    // so we cap the read to max_bytes regardless.
+    let max_bytes = req.max_file_size_kb.saturating_mul(1024);
     let content = match read_text_bounded(path, max_bytes) {
         Ok(c) => c,
         Err(e) => {
@@ -164,33 +144,37 @@ fn load_text_preview(
                 content: Vec::new(),
                 file_info: file_info.to_string(),
                 line_diffs: None,
-                git_diff_hint,
+                git_diff_hint: req.git_diff_hint,
             };
         }
     };
 
     let max_lines = 10_000; // Cap for rendering performance
 
-    // Markdown rendering path
-    if render_markdown && is_markdown_file(path) {
-        let mut lines = render_md::render_markdown(&content, preview_width);
+    if req.render_markdown && is_markdown_file(path) {
+        let mut lines = render_md::render_markdown(&content, req.preview_width);
         lines.truncate(max_lines);
         return LoadedPreview {
             kind: PreviewKind::Rendered,
             content: lines,
             file_info: file_info.to_string(),
             line_diffs: None,
-            git_diff_hint,
+            git_diff_hint: req.git_diff_hint,
         };
     }
 
-    // Compute git diff before truncation (needs full content for accurate line mapping).
-    // The hint short-circuits clean/ignored (Skip) and untracked/staged-added (AllAdded)
-    // so we don't pay Repository::discover + canonicalize on every preview.
-    let line_diffs =
-        crate::git::diff::compute_line_diff_with_hint(repo_root, path, &content, git_diff_hint);
+    // Compute diff before truncation — line mapping needs the full content.
+    // The hint short-circuits clean/ignored (Skip) and untracked/staged-added
+    // (AllAdded) so we don't pay Repository::discover + canonicalize on every
+    // preview.
+    let line_diffs = crate::git::diff::compute_line_diff_with_hint(
+        req.repo_root,
+        path,
+        &content,
+        req.git_diff_hint,
+    );
 
-    let lines = if syntax_highlight {
+    let lines = if req.syntax_highlight {
         highlight::highlight_file(path, &content, max_lines)
     } else {
         highlight::plain_lines(&content, max_lines)
@@ -201,7 +185,7 @@ fn load_text_preview(
         content: lines,
         file_info: file_info.to_string(),
         line_diffs,
-        git_diff_hint,
+        git_diff_hint: req.git_diff_hint,
     }
 }
 
@@ -459,13 +443,15 @@ mod tests {
 
         let result = load_preview(
             &png_path,
-            1024,
-            true,
-            true,
-            80,
-            true,
-            None,
-            GitDiffHint::Skip,
+            &PreviewRequest {
+                max_file_size_kb: 1024,
+                syntax_highlight: true,
+                render_markdown: true,
+                preview_width: 80,
+                image_preview: true,
+                repo_root: None,
+                git_diff_hint: GitDiffHint::Skip,
+            },
         );
         assert_eq!(result.kind, PreviewKind::Image);
         assert!(result.content.is_empty());
@@ -480,13 +466,15 @@ mod tests {
 
         let result = load_preview(
             &png_path,
-            1024,
-            true,
-            true,
-            80,
-            false,
-            None,
-            GitDiffHint::Skip,
+            &PreviewRequest {
+                max_file_size_kb: 1024,
+                syntax_highlight: true,
+                render_markdown: true,
+                preview_width: 80,
+                image_preview: false,
+                repo_root: None,
+                git_diff_hint: GitDiffHint::Skip,
+            },
         );
         assert_eq!(result.kind, PreviewKind::Binary);
     }

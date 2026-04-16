@@ -2,7 +2,7 @@ mod common;
 
 use croot::config::Config;
 use croot::git::diff::GitDiffHint;
-use croot::preview::loader::load_preview;
+use croot::preview::loader::{load_preview, PreviewRequest};
 use croot::preview::state::PreviewKind;
 use croot::tree::forest::FileTree;
 use tempfile::tempdir;
@@ -97,26 +97,17 @@ image_preview = false
         &mut warning,
     );
 
-    let markdown_preview = load_preview(
-        &markdown,
-        config.preview.max_file_size_kb,
-        config.preview.syntax_highlight,
-        config.preview.render_markdown,
-        80,
-        config.preview.image_preview,
-        None,
-        GitDiffHint::Skip,
-    );
-    let large_preview = load_preview(
-        &large,
-        config.preview.max_file_size_kb,
-        config.preview.syntax_highlight,
-        config.preview.render_markdown,
-        80,
-        config.preview.image_preview,
-        None,
-        GitDiffHint::Skip,
-    );
+    let req = PreviewRequest {
+        max_file_size_kb: config.preview.max_file_size_kb,
+        syntax_highlight: config.preview.syntax_highlight,
+        render_markdown: config.preview.render_markdown,
+        preview_width: 80,
+        image_preview: config.preview.image_preview,
+        repo_root: None,
+        git_diff_hint: GitDiffHint::Skip,
+    };
+    let markdown_preview = load_preview(&markdown, &req);
+    let large_preview = load_preview(&large, &req);
 
     assert_eq!(markdown_preview.kind, PreviewKind::Text);
     assert_eq!(large_preview.kind, PreviewKind::TooLarge);

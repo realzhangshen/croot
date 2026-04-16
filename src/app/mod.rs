@@ -24,7 +24,7 @@ use crate::input::handler::{
 };
 use crate::input::mouse::{handle_mouse, ClickTracker};
 use crate::layout::{self, FocusPane, PreviewLayout};
-use crate::preview::loader::{load_preview, LoadedPreview};
+use crate::preview::loader::{load_preview, LoadedPreview, PreviewRequest};
 use crate::preview::state::PreviewKind;
 use crate::render::colors;
 use crate::render::context_menu::{ContextMenuState, ContextMenuWidget, MenuAction};
