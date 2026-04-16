@@ -41,7 +41,6 @@ use crate::search::{
 };
 use crate::tree::forest::FileTree;
 
-// Path validation functions are in crate::file_ops
 use crate::file_ops;
 
 mod actions;
@@ -128,34 +127,24 @@ pub struct App {
     pub(super) dragging_separator: bool,
     pub(super) main_area_width: u16,
     pub(super) hover_row: Option<usize>,
-    // UI overlay state (modal overlays, dialogs, errors)
     pub ui: UiOverlayState,
-    // Search state
     pub(super) search_state: SearchState,
-    /// Handle for the current async global search task.
     pub(super) global_search_job: Option<crate::search::SearchJob>,
-    // Hyperlink regions for post-render OSC 8 emission
+    // OSC 8 hyperlink regions emitted after the status bar is drawn
     pub(super) hyperlink_regions: Vec<HyperlinkRegion>,
-    // Whether Kitty keyboard enhancement protocol is active
     pub(super) enhanced_keyboard: bool,
-    // Double-click detection for tree rows
     pub(super) click_tracker: ClickTracker,
-    // User-configured keybindings
     pub(super) keybinding_map: KeybindingMap,
-    // Whether mouse capture is enabled
     pub(super) mouse_enabled: bool,
-    // Status/search bar y-coordinates for mouse routing
     pub(super) status_bar_y: u16,
     pub(super) search_bar_y: Option<u16>,
-    // Status bar branch click region: (x_start, x_end)
     pub(super) status_bar_branch_region: Option<(u16, u16)>,
-    // Channel for receiving branch switch results
     pub(super) branch_switch_rx: Option<mpsc::Receiver<BranchSwitchResult>>,
     /// State machine for background/synchronous tree refreshes: generation
     /// tracking, in-flight guard, and coalesced follow-up. See
     /// [`RefreshCoordinator`] for the semantics.
     pub(super) refresh: RefreshCoordinator,
-    // Cached terminal area from last draw, used by mouse handlers
+    // Cached from last draw so mouse handlers can hit-test without a Frame
     pub(super) last_terminal_area: ratatui::layout::Rect,
 }
 
@@ -241,10 +230,8 @@ impl App {
     }
 }
 
-/// Build argv for an external editor command with optional `file:line` syntax.
-///
-/// Returns a `Vec<String>` ready for `Command::new(argv[0]).args(&argv[1..])`.
-/// Uses `file:line` format (standard for VS Code `-g`, Sublime, etc.).
+/// Build argv for an external editor command, appending `file` or `file:LINE`
+/// (the goto syntax understood by VS Code `-g`, Sublime, etc.).
 fn build_external_editor_argv(
     editor_cmd: &str,
     path: &std::path::Path,
@@ -472,9 +459,8 @@ mod tests {
         let in_flight_gen = app.refresh.generation();
         assert!(app.refresh.in_flight());
 
-        // Now a synchronous refresh runs (e.g. post-editor). It should bump
-        // the generation so that when the background result finally arrives
-        // `is_current` returns false.
+        // A synchronous refresh (e.g. post-editor) must bump the generation so
+        // the in-flight background result fails `is_current` when it arrives.
         app.full_refresh_sync(&preview_tx);
 
         assert_ne!(
@@ -1469,9 +1455,8 @@ mod tests {
         app.preview.state.cached_mtime = mtime;
         app.preview.state.cached_diff_hint = Some(GitDiffHint::Skip);
 
-        // Now simulate a background refresh landing Modified status on the
-        // selected node (file is the same, mtime is the same, only git state
-        // changed).
+        // Simulate a background refresh landing Modified status on the
+        // selected node (same file, same mtime, only git state changed).
         let cursor_idx = app.tree.cursor;
         app.tree.nodes[cursor_idx].git_status = crate::tree::node::GitStatus::Modified;
 

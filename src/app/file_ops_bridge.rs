@@ -96,7 +96,6 @@ impl App {
                     }
                     #[cfg(target_os = "linux")]
                     {
-                        // Open the parent directory in the default file manager
                         let dir = if node.is_dir() {
                             &node.path
                         } else {
@@ -157,22 +156,20 @@ impl App {
                 self.search_state.origin_scroll_offset = self.tree.scroll_offset;
                 self.ui.input_mode = InputMode::Search;
             }
-            MenuAction::Separator => {} // inert -- should not reach here
+            MenuAction::Separator => {} // inert -- separators are not selectable
         }
 
-        // Refresh preview after menu actions that modify files
-        if matches!(
+        // File-modifying actions refresh via confirm_dialog; skip to avoid a double trigger.
+        if !matches!(
             action,
             MenuAction::NewFile | MenuAction::NewDir | MenuAction::Rename | MenuAction::Delete
-        ) {
-            // Refresh handled in confirm_dialog
-        } else if self.preview.visible {
+        ) && self.preview.visible
+        {
             self.trigger_preview_load(preview_tx);
         }
         PostAction::None
     }
 
-    /// Get the directory for a given node (node itself if dir, or its parent).
     pub(super) fn dir_for_node(&self, node_idx: usize) -> PathBuf {
         if let Some(node) = self.tree.nodes.get(node_idx) {
             file_ops::dir_for_path(&node.path, node.is_dir(), &self.root)
@@ -182,7 +179,7 @@ impl App {
     }
 
     pub(super) fn open_context_menu(&mut self, col: u16, row: u16) {
-        // Exclude preview pane and separator
+        // Menu only opens over the tree area (exclude preview + separator).
         if self
             .preview
             .area_x
@@ -195,7 +192,7 @@ impl App {
         }
         let relative_row = (row - self.tree_area_y) as usize;
         let menu = if relative_row >= self.tree.rendered_indices.len() {
-            // Empty space below tree items -> workspace root menu
+            // Clicks below the last item target the workspace root menu.
             ContextMenuState::new_for_workspace(col, row, self.tree.len())
         } else {
             let node_idx = self.tree.rendered_indices[relative_row];

@@ -37,7 +37,6 @@ impl App {
                 }
             }
             _ => {
-                // Any other click closes the menu
                 if matches!(mouse.kind, MouseEventKind::Down(_)) {
                     self.ui.context_menu = None;
                     self.ui.input_mode = InputMode::Normal;
@@ -76,7 +75,6 @@ impl App {
                         }
                     }
                 } else {
-                    // Click outside closes picker
                     self.ui.picker_state = None;
                     self.ui.input_mode = InputMode::Normal;
                 }
@@ -125,7 +123,6 @@ impl App {
             return PostAction::None;
         }
 
-        // Check if click is outside the dialog area
         let area = self.last_terminal_area;
 
         if let Some(ref dialog) = self.ui.input_dialog {
@@ -168,12 +165,11 @@ impl App {
     ) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
 
-        // Only respond to left-click; ignore hover, scroll, drag, etc.
         if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
             return PostAction::None;
         }
 
-        // Compute overlay rect (shared with GlobalSearchOverlay::render)
+        // Must match GlobalSearchOverlay::render geometry.
         let area = self.last_terminal_area;
         let overlay = crate::render::global_search::global_search_rect(area);
 
@@ -183,12 +179,10 @@ impl App {
             && mouse.row < overlay.y + overlay.height;
 
         if !inside {
-            // Click outside overlay -> cancel
             self.close_global_search_overlay();
             return PostAction::None;
         }
 
-        // Click inside the results area -> select + confirm that result
         let results_y = overlay.y + 3;
         let results_end_y = overlay.y + overlay.height.saturating_sub(2);
         if mouse.row >= results_y && mouse.row < results_end_y {
@@ -214,7 +208,7 @@ impl App {
             }
         }
 
-        // Click on input area or border -> no-op
+        // Clicks on the input row or borders fall through as no-op.
         PostAction::None
     }
 
@@ -223,7 +217,6 @@ impl App {
         col: u16,
         _preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) -> PostAction {
-        // Check if click is on the branch name region
         if let Some((start, end)) = self.status_bar_branch_region {
             if col >= start && col < end && self.git.is_some() {
                 self.open_branch_picker();
@@ -239,19 +232,17 @@ impl App {
     ) -> PostAction {
         use crate::render::search_bar::SearchBar;
 
-        // Check if click is on the [x] close button
         if self.search_bar_y.is_some() {
             let area_width = self.main_area_width;
             let close_x = SearchBar::close_button_x(0, area_width);
             if col >= close_x {
-                // Close button clicked -> cancel search
                 self.ui.input_mode = InputMode::Normal;
                 self.search_state.clear();
                 return PostAction::None;
             }
         }
 
-        // Click elsewhere on search bar -> focus search (preserve query)
+        // Anywhere else on the bar refocuses the input without clearing the query.
         self.ui.input_mode = InputMode::Search;
         PostAction::None
     }

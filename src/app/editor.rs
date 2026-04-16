@@ -44,8 +44,8 @@ impl App {
         }
     }
 
-    /// Open a file in a configured external editor (background, no TUI suspend).
-    /// Uses `editor.external` config with `file:line` syntax; falls back to `open_externally()`.
+    /// Open `path` in `editor.external` (no TUI suspend), falling back to
+    /// `open_externally` when the config does not set one.
     pub(super) fn open_in_external_editor(&mut self, path: &std::path::Path, line: Option<usize>) {
         let Some(ext_cmd) = crate::config::resolve_external_editor(&self.config) else {
             self.open_externally(path);
@@ -76,7 +76,6 @@ impl App {
     where
         B::Error: Send + Sync + 'static,
     {
-        // Leave alternate screen
         let mut stdout = std::io::stdout();
         if self.enhanced_keyboard {
             let _ = crossterm::execute!(stdout, PopKeyboardEnhancementFlags);
@@ -88,7 +87,6 @@ impl App {
         }
         let _ = crossterm::terminal::disable_raw_mode();
 
-        // Resolve editor and split into command + args (e.g. "code --wait")
         let editor_str = self.resolve_editor();
         let mut parts =
             shell_words::split(&editor_str).unwrap_or_else(|_| vec![editor_str.clone()]);
@@ -101,7 +99,7 @@ impl App {
             .arg(path)
             .status();
 
-        // Capture error to show after terminal restore (when the TUI is visible again)
+        // Defer reporting until after the TUI is restored and the message is visible.
         let editor_error = match status {
             Err(e) => Some(format!("Failed to open editor '{editor_str}': {e}")),
             Ok(s) if !s.success() => Some(format!(
@@ -111,7 +109,6 @@ impl App {
             _ => None,
         };
 
-        // Restore terminal
         let _ = crossterm::terminal::enable_raw_mode();
         let mut stdout = std::io::stdout();
         if self.mouse_enabled {
@@ -127,7 +124,6 @@ impl App {
         }
         terminal.clear()?;
 
-        // Show editor error after terminal is restored so the message is visible
         if let Some(msg) = editor_error {
             self.show_error(msg);
         }
@@ -135,12 +131,12 @@ impl App {
         Ok(())
     }
 
-    /// Full synchronous refresh: tree -> git -> search -> preview.
-    /// Used when the result must be available immediately (e.g. after editor suspend,
-    /// manual refresh, file operations).
+    /// Fully refresh tree/git/search/preview in the caller's thread.
     ///
     /// Delegates to [`RefreshCoordinator::start_sync`] so any in-flight
-    /// background task becomes stale and a queued follow-up is dropped.
+    /// background refresh becomes stale and any queued follow-up is dropped.
+    /// Used when the result must be available immediately (e.g. after editor
+    /// suspend, manual refresh, file operations).
     pub(super) fn full_refresh_sync(
         &mut self,
         preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
@@ -158,12 +154,12 @@ impl App {
         }
     }
 
-    /// Background refresh: spawns a blocking task to rebuild tree + git state.
-    /// The result is sent via `refresh_tx` and applied on the next event loop iteration.
+    /// Spawn a blocking task to rebuild tree + git state; the event loop
+    /// applies the result from `refresh_tx` next tick.
     ///
     /// Coalescing is handled by [`RefreshCoordinator::try_start_background`]:
-    /// if another refresh is already running, the call is a no-op that only
-    /// records the need for a follow-up.
+    /// if another refresh is already running, the call only records the need
+    /// for a follow-up and returns.
     pub(super) fn background_refresh(&mut self, refresh_tx: &mpsc::Sender<RefreshResult>) {
         let Some(generation) = self.refresh.try_start_background() else {
             return;

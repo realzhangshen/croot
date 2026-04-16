@@ -5,13 +5,8 @@ use tokio::task::JoinHandle;
 use crate::layout::PreviewLayout;
 use crate::preview::state::PreviewState;
 
-/// Groups all preview-pane state so that `App` doesn't need to track
-/// eleven loose fields for the preview subsystem.
-///
-/// This is a "fields-only" grouping — methods that operate on preview
-/// state still live on `App` so they retain access to `Config`, `FileTree`,
-/// and other siblings without plumbing references around. Renaming the
-/// call sites to reach through `self.preview.*` is the entire change.
+/// All preview-pane state grouped in one struct. Methods still live on `App`
+/// so they can reach `Config`, `FileTree`, etc. without extra plumbing.
 pub struct PreviewController {
     /// Rendered content + scroll + selection state for the preview pane.
     pub state: PreviewState,
@@ -48,8 +43,6 @@ pub struct PreviewController {
 }
 
 impl PreviewController {
-    /// Construct a new controller. `visible` and `render_markdown` come from
-    /// user config at App::new time.
     pub fn new(visible: bool, render_markdown: bool) -> Self {
         let mut state = PreviewState::new();
         state.render_markdown = render_markdown;

@@ -12,9 +12,9 @@ pub struct WatcherResult {
     pub error: Option<String>,
 }
 
-/// Set up a file system watcher that sends a signal on changes (100ms debounce).
-/// Returns a `WatcherResult` with an error message suitable for the status bar
-/// instead of printing to stderr (which is invisible in TUI alternate screen mode).
+/// Set up a recursive 100ms-debounced watcher on `root` that pings `tx` on
+/// any change. Errors go in `WatcherResult.error` instead of stderr — the TUI
+/// alternate screen would otherwise swallow them.
 pub fn setup_watcher(root: &Path, tx: mpsc::Sender<()>) -> WatcherResult {
     let debouncer = new_debouncer(
         Duration::from_millis(100),

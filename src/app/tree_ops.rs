@@ -57,8 +57,9 @@ impl App {
                     self.preview.state.scroll_offset =
                         self.preview.state.total_lines.saturating_sub(1);
                 } else if !self.tree.is_empty() {
-                    // Use rendered_indices (visible nodes) when available;
-                    // fall back to the full displayable indices list.
+                    // Prefer the cached rendered list; it already accounts for
+                    // compact chains and filters. Fall back to a fresh walk
+                    // when the cache hasn't been populated yet (e.g. first draw).
                     let last = self
                         .tree
                         .rendered_indices

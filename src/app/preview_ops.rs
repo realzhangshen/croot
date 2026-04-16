@@ -81,23 +81,19 @@ impl App {
         let path = node.path.clone();
         let node_git_status = node.git_status;
 
-        // Derive the diff hint up front so it can participate in the cache
-        // key. When show_git_diff is off we always skip; otherwise the status
-        // decides between Skip / AllAdded / Compute. This lets us bypass
-        // Repository::discover + canonicalize for clean, ignored, untracked,
-        // and staged-added files.
+        // The diff hint participates in the cache key (see below). Deriving
+        // it up front also lets us bypass Repository::discover + canonicalize
+        // for clean / ignored / untracked / staged-added files.
         let git_diff_hint = if self.config.preview.show_git_diff {
             crate::git::diff::GitDiffHint::from_status(node_git_status)
         } else {
             crate::git::diff::GitDiffHint::Skip
         };
 
-        // Short-circuit only when path+mtime+hint all match. Including the
-        // hint in the cache key is load-bearing: without it, a file that was
-        // previewed while git status was stale (e.g. Clean before a background
-        // refresh landed Modified) would be stuck with its outdated diff
-        // gutter for the rest of the session, because mtime alone doesn't
-        // change when only the git state changed.
+        // path+mtime alone is insufficient: a file previewed while git status
+        // was stale (Clean before a background refresh landed Modified) would
+        // keep the stale diff gutter since mtime doesn't change when only git
+        // state changes. Including the hint in the cache key fixes that.
         if self.preview.state.current_path.as_ref() == Some(&path)
             && self.preview.state.kind != PreviewKind::Loading
             && self.preview.state.cached_diff_hint == Some(git_diff_hint)
@@ -125,8 +121,7 @@ impl App {
         let render_markdown = self.preview.state.render_markdown;
         let preview_width = self.preview.content_width as usize;
         let image_preview = self.config.preview.image_preview;
-        // Share the already-discovered git workdir with the preview loader
-        // so it doesn't re-run `Repository::discover` per preview.
+        // Reuse the already-discovered workdir to skip per-preview Repository::discover.
         let repo_root = self.git.as_ref().map(|g| g.repo_root().to_path_buf());
 
         self.preview.debounce_handle = Some(tokio::spawn(async move {

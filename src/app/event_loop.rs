@@ -8,13 +8,14 @@ impl App {
     where
         B::Error: Send + Sync + 'static,
     {
-        // Image result channel type -- always defined so tokio::select! compiles without #[cfg]
+        // A unit alias keeps the `tokio::select!` arm compiling when the
+        // `image-preview` feature is off.
         #[cfg(feature = "image-preview")]
         type ImageResult = (PathBuf, String, ratatui_image::thread::ThreadProtocol);
         #[cfg(not(feature = "image-preview"))]
         type ImageResult = ();
 
-        // Set up image resize worker thread (must happen before EventStream)
+        // The resize worker must be set up before EventStream takes over stdin.
         #[cfg(feature = "image-preview")]
         {
             let (resize_tx, resize_rx) =
@@ -36,7 +37,6 @@ impl App {
         let (image_tx, mut image_rx) = mpsc::channel::<ImageResult>(4);
         let _ = &image_tx; // suppress unused warning when feature is off
 
-        // Set up file watcher with 100ms debounce
         let (fs_tx, mut fs_rx) = mpsc::channel::<()>(4);
         let watcher_result = crate::watcher::setup_watcher(&self.root, fs_tx);
         if let Some(err) = watcher_result.error {
@@ -45,16 +45,10 @@ impl App {
         let _watcher = watcher_result.debouncer;
         let mut watcher_active = true;
 
-        // Channel for receiving loaded preview results
         let (preview_tx, mut preview_rx) = mpsc::channel::<(u64, PathBuf, LoadedPreview)>(4);
-
-        // Channel for receiving background refresh results
         let (refresh_tx, mut refresh_rx) = mpsc::channel::<RefreshResult>(2);
-
-        // Channel for receiving global search results (streaming batches)
         let (search_tx, mut search_rx) = mpsc::channel::<SearchBatch>(16);
 
-        // Trigger initial preview load if auto_preview is on
         if self.preview.visible {
             self.trigger_preview_load(&preview_tx);
         }
@@ -62,7 +56,6 @@ impl App {
         let mut post_action = PostAction::None;
 
         loop {
-            // Poll for completed image resize results (non-blocking)
             #[cfg(feature = "image-preview")]
             if let Some(ref rx) = self.preview.resize_response_rx {
                 while let Ok(result) = rx.try_recv() {
@@ -79,13 +72,12 @@ impl App {
                 self.emit_osc8_hyperlinks()?;
             }
 
-            // When an error message is displayed, set a tick to auto-dismiss it
-            // even if no user events occur.
+            // An active error needs a wall-clock tick so it auto-dismisses even
+            // when no user event arrives.
             let has_error = self.ui.error_message.is_some();
 
             tokio::select! {
                 () = tokio::time::sleep(Duration::from_secs(1)), if has_error => {
-                    // Tick: re-draw will check if error should be dismissed
                     continue;
                 }
                 event = reader.next() => {
@@ -130,12 +122,11 @@ impl App {
                             } else if self.ui.input_mode == InputMode::Picker {
                                 post_action = self.handle_picker_mouse(mouse);
                             } else if self.ui.input_mode == InputMode::Dialog {
-                                // R5: Click outside dialog cancels it
                                 post_action = self.handle_dialog_mouse(mouse, &preview_tx);
                             } else if self.ui.input_mode == InputMode::GlobalSearch {
                                 post_action = self.handle_global_search_mouse(mouse, &preview_tx);
                             } else {
-                                // Route by area priority: status > search > tree/preview
+                                // Route by area priority: status bar > search bar > tree/preview
                                 let is_left_down = matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left));
 
                                 if mouse.row == self.status_bar_y && is_left_down {
@@ -172,7 +163,6 @@ impl App {
                         if batch.generation == self.search_state.request_id {
                             if !batch.results.is_empty() {
                                 if self.search_state.global_search_type == GlobalSearchType::Content {
-                                    // Merge new results into existing grouped results
                                     let new_groups = group_search_results(batch.results);
                                     for ng in new_groups {
                                         if let Some(existing) = self.search_state.grouped_results.iter_mut().find(|g| g.path == ng.path) {
@@ -195,7 +185,6 @@ impl App {
                 }
                 result = preview_rx.recv() => {
                     if let Some((gen, path, loaded)) = result {
-                        // Discard stale preview results from older generations
                         if gen != self.preview.generation {
                             continue;
                         }
@@ -204,7 +193,6 @@ impl App {
                         #[cfg(feature = "image-preview")]
                         if loaded.kind == PreviewKind::Image {
                             handled = true;
-                            // Decode image and create ThreadProtocol in background
                             if let (Some(picker), Some(resize_tx)) =
                                 (self.preview.image_picker.clone(), self.preview.resize_tx.clone())
                             {
@@ -243,12 +231,11 @@ impl App {
                             }
                         }
                         if !handled {
-                            // Staleness check: only apply if still viewing this path
+                            // Only apply if the user is still viewing this path
                             let still_selected = self.tree.selected()
                                 .is_some_and(|n| n.path == path);
                             if still_selected {
                                 self.preview.state.apply(path, loaded.kind, loaded.content, loaded.file_info, loaded.line_diffs, loaded.git_diff_hint);
-                                // Apply pending line scroll from content search confirm
                                 if let Some((ref target_path, line)) = self.preview.pending_line {
                                     if self.preview.state.current_path.as_ref() == Some(target_path) {
                                         self.preview.state.scroll_to_line(line);
@@ -262,7 +249,6 @@ impl App {
                 result = image_rx.recv() => {
                     #[cfg(feature = "image-preview")]
                     if let Some((path, file_info, thread_proto)) = result {
-                        // Staleness check: only apply if still viewing this path
                         let still_selected = self.tree.selected()
                             .is_some_and(|n| n.path == path);
                         if still_selected {
@@ -293,18 +279,18 @@ impl App {
                 }
                 result = refresh_rx.recv() => {
                     if let Some(refresh) = result {
-                        // Clear in-flight regardless of staleness and learn
-                        // whether a coalesced follow-up was queued.
+                        // Always clear in-flight; return value tells us whether
+                        // a coalesced follow-up was queued while we were busy.
                         let should_follow_up = self.refresh.finish_background();
 
                         if self.refresh.is_current(refresh.generation) {
                             // Capture cursor path at APPLY time (not request time)
+                            // so the newly-loaded tree can restore selection by path.
                             let cursor_path = self.tree.selected().map(|n| n.path.clone());
 
                             self.tree = refresh.tree;
                             self.git = refresh.git;
 
-                            // Restore cursor by path
                             if let Some(ref path) = cursor_path {
                                 if let Some(idx) = self.tree.nodes.iter().position(|n| n.path == *path) {
                                     self.tree.cursor = idx;
@@ -319,9 +305,8 @@ impl App {
                             }
                         }
 
-                        // Spawn the coalesced follow-up so any events that
-                        // arrived while the previous refresh was running are
-                        // captured in a single catch-up snapshot.
+                        // Catch up on events that arrived during the previous
+                        // refresh as a single coalesced snapshot.
                         if should_follow_up {
                             self.background_refresh(&refresh_tx);
                         }
@@ -329,7 +314,7 @@ impl App {
                 }
             }
 
-            // Process post-actions that require terminal access
+            // Post-actions that need terminal access (suspend, redraw, etc.)
             match std::mem::replace(&mut post_action, PostAction::None) {
                 PostAction::OpenEditor(path, line) => {
                     // Auto-detect: try cmux first, fall back to suspend
@@ -386,7 +371,7 @@ impl App {
             return Ok(());
         }
         let mut stdout = std::io::stdout();
-        // Save cursor position to avoid disturbing ratatui's cursor state
+        // Save/restore ratatui's cursor position around the OSC 8 writes.
         crossterm::queue!(stdout, crossterm::cursor::SavePosition)?;
         for region in &self.hyperlink_regions {
             crossterm::queue!(stdout, crossterm::cursor::MoveTo(region.x, region.y))?;
@@ -399,13 +384,12 @@ impl App {
                 "\x1b]8;;{}\x07{}\x1b]8;;\x07",
                 region.url, region.text
             )?;
-            // Undo only the Reverse attribute, not all attributes
+            // NoReverse (not Reset) so ratatui's fg/bg styling stays intact.
             crossterm::queue!(
                 stdout,
                 crossterm::style::SetAttribute(crossterm::style::Attribute::NoReverse)
             )?;
         }
-        // Restore cursor position
         crossterm::queue!(stdout, crossterm::cursor::RestorePosition)?;
         stdout.flush()?;
         Ok(())

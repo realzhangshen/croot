@@ -12,13 +12,14 @@ impl App {
         match self.search_state.mode {
             SearchMode::Find => self.update_find_matches(),
             SearchMode::Filter => self.update_filter_view(),
-            SearchMode::Global => {} // global search doesn't depend on tree structure
+            SearchMode::Global => {} // runs against disk, not the tree structure
         }
     }
 
     /// Find mode: compute `match_indices` (highlight only, no filtering).
     pub(super) fn update_find_matches(&mut self) {
-        // ALWAYS clear positions -- node indices shift on expand/collapse
+        // Positions are keyed by node index, which shifts on expand/collapse;
+        // always recompute from scratch.
         self.search_state.match_char_positions.clear();
 
         if self.search_state.query.is_empty() {
@@ -42,7 +43,8 @@ impl App {
                     .match_char_positions
                     .insert(idx, positions);
             } else {
-                // Fall back to path match (no character positions -- renderer uses FullName)
+                // Fall back to a path-segment match (renderer falls back to FullName
+                // highlighting when no character positions are recorded).
                 let rel_path = self.tree.nodes[idx]
                     .path
                     .strip_prefix(&self.root)
@@ -58,7 +60,7 @@ impl App {
         self.search_state.compiled_regex = re;
         self.search_state.match_indices = matches;
 
-        // Jump cursor to the closest match to origin_cursor
+        // Jump cursor to the match closest to the pre-search origin.
         if self.search_state.match_indices.is_empty() {
             self.search_state.current_match = 0;
         } else {
@@ -89,7 +91,6 @@ impl App {
         let re = self.search_state.compiled_regex.take();
         let displayable = self.tree.build_displayable_indices();
 
-        // Step 1: find matching displayable nodes
         let mut matches = Vec::new();
         for idx in displayable {
             let target_name = self.tree.compact_display_name_for(idx);
@@ -108,12 +109,11 @@ impl App {
 
         self.search_state.compiled_regex = re;
 
-        // Step 2: collect ancestors for each match
+        // Collect each match and walk back up to its ancestors so the filtered
+        // view still shows the containing directory chain.
         let mut visible_set = std::collections::HashSet::new();
         for &match_idx in &matches {
             visible_set.insert(match_idx);
-            // Walk up the tree to find ancestors: scan backward from match_idx,
-            // finding the closest node at each decreasing depth level.
             let match_depth = self.tree.nodes[match_idx].depth;
             if match_depth > 0 {
                 let mut target_depth = match_depth - 1;
@@ -125,7 +125,7 @@ impl App {
                         }
                         target_depth -= 1;
                     } else if self.tree.nodes[i].depth < target_depth {
-                        // Skipped a depth level -- adjust target and include this node
+                        // Compact chains can skip levels — catch up to this depth.
                         target_depth = self.tree.nodes[i].depth;
                         visible_set.insert(i);
                         if target_depth == 0 {
@@ -137,14 +137,12 @@ impl App {
             }
         }
 
-        // Step 3: sort visible set
         let mut visible: Vec<usize> = visible_set.into_iter().collect();
         visible.sort_unstable();
 
         self.search_state.match_indices = matches;
         self.search_state.visible_indices = visible;
 
-        // Move cursor to first match if not already on one
         if !self.search_state.match_indices.is_empty()
             && !self.search_state.match_indices.contains(&self.tree.cursor)
         {
@@ -234,7 +232,8 @@ impl App {
             GroupedItem::FileHeader(g) => {
                 let header_idx = self.search_state.flat_index_of_header(g);
                 let match_count = self.search_state.grouped_results[g].matches.len();
-                // If selection is inside this group's matches, remap to header
+                // Snap selection back to the header before collapsing so the
+                // cursor doesn't land on an index that disappears.
                 if !self.search_state.grouped_results[g].collapsed
                     && self.search_state.global_selected > header_idx
                     && self.search_state.global_selected <= header_idx + match_count

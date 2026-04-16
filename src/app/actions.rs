@@ -20,7 +20,6 @@ impl App {
                 }
             }
 
-            // Tree actions
             Action::CursorUp
             | Action::CursorDown
             | Action::CursorLeft
@@ -41,7 +40,6 @@ impl App {
                 self.full_refresh_sync(preview_tx);
             }
 
-            // Preview actions
             Action::PreviewScrollUp(_) | Action::PreviewScrollDown(_) | Action::SwitchFocus => {
                 self.handle_preview_action(action);
             }
@@ -61,7 +59,6 @@ impl App {
                 }
             }
 
-            // Separator drag
             Action::SeparatorDragStart => {
                 self.dragging_separator = true;
             }
@@ -76,7 +73,6 @@ impl App {
                 }
             }
 
-            // Selection actions
             Action::SelectionStart(_, _)
             | Action::SelectionUpdate(_, _)
             | Action::CopySelection
@@ -85,7 +81,6 @@ impl App {
                 self.handle_selection_action(action);
             }
 
-            // Click routing
             Action::ClickRow(row) => {
                 self.dragging_separator = false;
                 self.handle_click_row(row, preview_tx);
@@ -99,12 +94,10 @@ impl App {
                 self.update_hover(col, row);
             }
 
-            // Right-click context menu
             Action::RightClick(col, row) => {
                 self.open_context_menu(col, row);
             }
 
-            // Context menu actions
             Action::MenuClose => {
                 self.ui.context_menu = None;
                 self.ui.input_mode = InputMode::Normal;
@@ -120,7 +113,6 @@ impl App {
                 }
             }
             Action::MenuSelect => {
-                // Resolve actual action from selected menu item
                 if let Some(menu) = self.ui.context_menu.take() {
                     if let Some(menu_action) = menu.selected_action().cloned() {
                         self.ui.input_mode = InputMode::Normal;
@@ -128,7 +120,6 @@ impl App {
                     }
                 }
             }
-            // File operations (keyboard shortcuts)
             Action::NewFile => {
                 let dir = self.current_dir();
                 self.ui.input_dialog = Some(InputDialogState::for_new_file(dir));
@@ -159,7 +150,6 @@ impl App {
                 }
             }
 
-            // Dialog actions
             Action::DialogChar(ch) => {
                 if let Some(ref mut dialog) = self.ui.input_dialog {
                     dialog.insert_char(ch);
@@ -188,14 +178,12 @@ impl App {
                 self.ui.input_mode = InputMode::Normal;
             }
 
-            // Search actions -- Find mode
             Action::StartFind => {
                 self.search_state = SearchState::new(SearchMode::Find);
                 self.search_state.origin_cursor = self.tree.cursor;
                 self.search_state.origin_scroll_offset = self.tree.scroll_offset;
                 self.ui.input_mode = InputMode::Search;
             }
-            // Search actions -- Filter mode
             Action::StartFilter => {
                 self.search_state = SearchState::new(SearchMode::Filter);
                 self.search_state.origin_cursor = self.tree.cursor;
@@ -227,19 +215,18 @@ impl App {
             Action::SearchConfirm => {
                 match self.search_state.mode {
                     SearchMode::Find => {
-                        // Exit search, clear highlights, cursor stays
                         self.ui.input_mode = InputMode::Normal;
                         self.search_state.clear();
                     }
                     SearchMode::Filter => {
-                        // Exit input but keep filter active
+                        // Exit the input bar but keep the filter view applied
                         self.ui.input_mode = InputMode::Normal;
                     }
                     SearchMode::Global => {}
                 }
             }
             Action::SearchCancel => {
-                // Restore cursor and clear all search state
+                // Restore cursor/scroll to pre-search origin
                 self.tree.cursor = self.search_state.origin_cursor;
                 self.tree.scroll_offset = self.search_state.origin_scroll_offset;
                 self.ui.input_mode = InputMode::Normal;
@@ -251,7 +238,6 @@ impl App {
             Action::SearchPrev => {
                 self.search_navigate_prev();
             }
-            // Global search actions
             Action::StartGlobalSearch => {
                 let last_id = self.search_state.request_id;
                 self.search_state = SearchState::new(SearchMode::Global);
@@ -337,7 +323,6 @@ impl App {
                 }
             }
 
-            // Open file in editor
             Action::OpenInEditor => {
                 if let Some(node) = self.tree.selected() {
                     if !node.is_dir() {
@@ -353,7 +338,6 @@ impl App {
                     }
                 }
             }
-            // Collapse all directories
             Action::CollapseAll => {
                 self.tree.collapse_all();
                 self.reapply_git();
@@ -363,8 +347,8 @@ impl App {
                 }
             }
             Action::DoubleClick(row) => {
-                // Cursor already set by the first ClickRow. For files, open externally.
-                // For directories, do nothing -- the first click already toggled.
+                // First ClickRow already set cursor / toggled a dir; the second
+                // click only does work for files (open them externally).
                 let row_idx = row as usize;
                 if row_idx < self.tree.rendered_indices.len() {
                     let idx = self.tree.rendered_indices[row_idx];
@@ -374,7 +358,6 @@ impl App {
                     }
                 }
             }
-            // Branch picker
             Action::OpenBranchPicker => {
                 if self.git.is_some() {
                     self.open_branch_picker();
@@ -423,35 +406,31 @@ impl App {
                 }
             }
 
-            Action::Paste(ref text) => {
-                match self.ui.input_mode {
-                    InputMode::Normal | InputMode::ContextMenu => {
-                        // Ignore paste in non-input modes -- safety guard
-                    }
-                    InputMode::Search => {
-                        self.search_state.insert_str(text);
-                        match self.search_state.mode {
-                            SearchMode::Find => self.update_find_matches(),
-                            SearchMode::Filter => self.update_filter_view(),
-                            SearchMode::Global => {}
-                        }
-                    }
-                    InputMode::Dialog => {
-                        if let Some(ref mut dialog) = self.ui.input_dialog {
-                            dialog.insert_str(text);
-                        }
-                    }
-                    InputMode::Picker => {
-                        if let Some(ref mut picker) = self.ui.picker_state {
-                            picker.insert_str(text);
-                        }
-                    }
-                    InputMode::GlobalSearch => {
-                        self.search_state.insert_str(text);
-                        self.spawn_global_search(search_tx);
+            Action::Paste(ref text) => match self.ui.input_mode {
+                InputMode::Normal | InputMode::ContextMenu => {}
+                InputMode::Search => {
+                    self.search_state.insert_str(text);
+                    match self.search_state.mode {
+                        SearchMode::Find => self.update_find_matches(),
+                        SearchMode::Filter => self.update_filter_view(),
+                        SearchMode::Global => {}
                     }
                 }
-            }
+                InputMode::Dialog => {
+                    if let Some(ref mut dialog) = self.ui.input_dialog {
+                        dialog.insert_str(text);
+                    }
+                }
+                InputMode::Picker => {
+                    if let Some(ref mut picker) = self.ui.picker_state {
+                        picker.insert_str(text);
+                    }
+                }
+                InputMode::GlobalSearch => {
+                    self.search_state.insert_str(text);
+                    self.spawn_global_search(search_tx);
+                }
+            },
 
             Action::None => {}
         }

@@ -24,7 +24,6 @@ impl App {
         let main_area = chunks[0];
         let status_area = chunks[1];
 
-        // Store status/search bar y for mouse routing
         self.status_bar_y = status_area.y;
         self.search_bar_y = if show_search_bar {
             Some(chunks[2].y)
@@ -37,7 +36,6 @@ impl App {
         self.main_area_width = main_area.width;
 
         if self.preview.visible && content_area.width > 20 {
-            // Split horizontally: tree | separator | preview
             let ratio = self.config.preview.split_ratio.clamp(0.2, 0.8);
             let tree_width = (f32::from(content_area.width) * (1.0 - ratio)) as u16;
             let separator_width: u16 = 1;
@@ -191,13 +189,11 @@ impl App {
             selected_path: selected_rel.as_deref(),
             selected_abs_path: selected_abs.as_deref(),
         };
-        // Track branch click region for mouse routing
         self.status_bar_branch_region = branch.as_ref().map(|b| {
-            // Branch is rendered as "  \u{e0a0} {branch} \u{2502} " starting at col 0.
-            // Nerd Font glyphs like \u{e0a0} typically render as 2 terminal columns
-            // but UnicodeWidthStr reports them as 1. Add a compensation column.
-            // On terminals without Nerd Fonts the hit-box may be 1 column too wide,
-            // which is the safer direction (false-positive click > missed click).
+            // UnicodeWidthStr reports Nerd-Font glyphs like U+E0A0 as 1 column, but
+            // most terminals render them as 2. Over-estimating by one keeps the
+            // click target accurate on Nerd-Font terminals without missing on
+            // plain ones (false-positive click > missed click).
             let nerd_font_compensation: u16 = 1;
             let span_text = format!("  \u{e0a0} {b} ");
             let end = UnicodeWidthStr::width(span_text.as_str()) as u16 + nerd_font_compensation;
@@ -207,7 +203,7 @@ impl App {
         self.hyperlink_regions = status_bar.hyperlink_regions(status_area);
         status_bar.render(status_area, frame.buffer_mut());
 
-        // Overlay error message on status bar (auto-dismiss after 3 seconds)
+        // Overlay error message on the status bar; auto-dismisses after 3s.
         if let Some((ref msg, ts)) = self.ui.error_message {
             if ts.elapsed() < Duration::from_secs(3) {
                 let error_style = ratatui::style::Style::default()
@@ -226,7 +222,6 @@ impl App {
             }
         }
 
-        // Search bar (shown when in search mode or filter is active)
         if show_search_bar {
             let search_area = chunks[2];
             let search_bar = SearchBar {
@@ -236,7 +231,6 @@ impl App {
             search_bar.render(search_area, frame.buffer_mut());
         }
 
-        // Render overlays (context menu / input dialog)
         if let Some(ref menu) = self.ui.context_menu {
             let widget = ContextMenuWidget { state: menu };
             widget.render(size, frame.buffer_mut());
@@ -251,9 +245,8 @@ impl App {
             PickerWidget::render_mut(picker, size, frame.buffer_mut());
         }
 
-        // Global search overlay
         if self.ui.input_mode == InputMode::GlobalSearch {
-            // Compute visible results height (same formula as GlobalSearchOverlay::render)
+            // Keep this formula in sync with GlobalSearchOverlay::render.
             let dialog_height = (size.height * 3 / 5)
                 .max(10)
                 .min(size.height.saturating_sub(4));
