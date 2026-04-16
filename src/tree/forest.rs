@@ -71,8 +71,8 @@ impl FileTree {
         self.nodes.get(self.cursor)
     }
 
-    /// Mark the chain length cache as stale. Must be called after any node list mutation.
-    fn invalidate_chain_cache(&mut self) {
+    /// Mark all caches derived from `nodes` as stale.
+    fn invalidate_node_caches(&mut self) {
         self.chain_cache_valid = false;
         self.displayable_cache_valid = false;
         self.guides_cache_valid = false;
@@ -80,7 +80,7 @@ impl FileTree {
 
     fn set_nodes(&mut self, nodes: Vec<TreeNode>) {
         self.nodes = nodes;
-        self.invalidate_chain_cache();
+        self.invalidate_node_caches();
     }
 
     /// Compact chain length for a node, using the cache if available.
@@ -166,7 +166,7 @@ impl FileTree {
 
         let insert_pos = index + 1;
         self.nodes.splice(insert_pos..insert_pos, children);
-        self.invalidate_chain_cache();
+        self.invalidate_node_caches();
     }
 
     /// Collapse a directory node: remove all descendant nodes.
@@ -198,7 +198,7 @@ impl FileTree {
         self.nodes.drain(start..end);
         self.nodes[index].is_expanded = false;
         self.nodes[index].children_loaded = false;
-        self.invalidate_chain_cache();
+        self.invalidate_node_caches();
 
         if self.cursor >= end {
             self.cursor -= removed_count;
@@ -839,12 +839,12 @@ mod tests {
         // Simulate expand by manually marking expanded and inserting a child,
         // then calling invalidate via collapse/expand path.
         // We can't call expand() because it hits the filesystem; instead
-        // we manually mutate and call invalidate_chain_cache.
+        // we manually mutate and call invalidate_node_caches.
         tree.nodes[0].is_expanded = true;
         tree.nodes[0].children_loaded = true;
         let child = TreeNode::new(PathBuf::from("main.rs"), NodeKind::File, 1);
         tree.nodes.insert(1, child);
-        tree.invalidate_chain_cache();
+        tree.invalidate_node_caches();
 
         // Cache should be invalid now
         assert!(!tree.displayable_cache_valid);
