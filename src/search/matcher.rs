@@ -192,8 +192,6 @@ mod tests {
         assert!(do_match(MatchMode::Exact, "app", None, "app.rs"));
     }
 
-    // ── Position-returning match tests ──────────────────────────────────
-
     #[test]
     fn fuzzy_match_positions_subsequence() {
         let pos = fuzzy_match_positions("ars", "app.rs");

@@ -91,13 +91,11 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    // Load config before terminal setup so we know whether to enable mouse
     let cfg = config::Config::load();
     render::colors::init(&cfg.colors);
     syntax::theme::init(&cfg.syntax);
     let mouse_enabled = cfg.mouse.enabled;
 
-    // Terminal setup
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     if mouse_enabled {
@@ -106,7 +104,7 @@ async fn main() -> anyhow::Result<()> {
         execute!(stdout, EnterAlternateScreen)?;
     }
 
-    // Enable Kitty keyboard protocol so we can receive Super (Command) modifier
+    // Kitty keyboard protocol gives us Super (Command) modifier events
     let enhanced_keyboard = crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false);
     if enhanced_keyboard {
         execute!(
@@ -115,17 +113,15 @@ async fn main() -> anyhow::Result<()> {
         )?;
     }
 
-    // Enable bracketed paste so we can distinguish typed input from pasted text
     execute!(stdout, EnableBracketedPaste)?;
 
-    // Query terminal for graphics protocol support (must happen before EventStream consumes stdin)
+    // Must query before EventStream consumes stdin
     #[cfg(feature = "image-preview")]
     let image_picker = ratatui_image::picker::Picker::from_query_stdio().ok();
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Helper closure for terminal teardown (used on both success and error paths)
     let teardown = |terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
                     enhanced_kb: bool,
                     mouse: bool|
@@ -148,7 +144,6 @@ async fn main() -> anyhow::Result<()> {
         Ok(())
     };
 
-    // Run app
     let mut app = match App::new(
         path,
         enhanced_keyboard,
@@ -164,7 +159,6 @@ async fn main() -> anyhow::Result<()> {
     };
     let result = app.run(&mut terminal).await;
 
-    // Terminal teardown
     teardown(&mut terminal, enhanced_keyboard, mouse_enabled)?;
 
     result
@@ -173,7 +167,6 @@ async fn main() -> anyhow::Result<()> {
 fn handle_config(action: Option<ConfigAction>) -> anyhow::Result<()> {
     match action {
         None => {
-            // Print resolved config
             let cfg = config::Config::load();
             print!("{}", cfg.to_toml_string()?);
         }
@@ -194,7 +187,6 @@ fn handle_config(action: Option<ConfigAction>) -> anyhow::Result<()> {
         }
         Some(ConfigAction::Edit) => {
             let path = config::config_path();
-            // Init if file doesn't exist
             if !path.exists() {
                 if let Some(parent) = path.parent() {
                     std::fs::create_dir_all(parent)?;
@@ -240,7 +232,6 @@ fn handle_config(action: Option<ConfigAction>) -> anyhow::Result<()> {
 fn self_update() -> anyhow::Result<()> {
     println!("Updating croot...");
 
-    // Refresh tap to get latest formula
     let _ = process::Command::new("brew").args(["update"]).status();
 
     let status = process::Command::new("brew")

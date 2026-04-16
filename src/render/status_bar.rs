@@ -127,7 +127,6 @@ impl Widget for StatusBar<'_> {
             style,
         ));
 
-        // cmux indicator
         if let Some(status) = self.cmux_status {
             spans.push(Span::styled(" │ ", style));
             spans.push(Span::styled(

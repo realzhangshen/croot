@@ -687,7 +687,7 @@ pub fn set_value(key: &str, value: &str) -> Result<(), String> {
 
     let parsed_value = parse_value_str(value);
 
-    // Check if target is an array — not supported via set
+    // Array values can't be set via CLI — only scalars and tables
     if let Ok(existing) = navigate(&table, key) {
         if existing.is_array() {
             return Err(format!(
@@ -718,7 +718,6 @@ fn navigate<'a>(val: &'a toml::Value, key: &str) -> Result<&'a toml::Value, Stri
     Ok(current)
 }
 
-/// Insert a value at a dotted key path, creating intermediate tables as needed.
 fn insert_at_key(root: &mut toml::Value, key: &str, value: toml::Value) -> Result<(), String> {
     let parts: Vec<&str> = key.split('.').collect();
     if parts.is_empty() {
@@ -726,7 +725,7 @@ fn insert_at_key(root: &mut toml::Value, key: &str, value: toml::Value) -> Resul
     }
 
     let mut current = root;
-    // Navigate/create intermediate tables
+    // Create intermediate tables on the fly
     for part in &parts[..parts.len() - 1] {
         match current.get(part) {
             Some(v) if v.is_table() => { /* exists and is a table — fall through to navigate below */
@@ -1076,8 +1075,6 @@ auto_preview = true
         let cfg: Config = toml::from_str(content).unwrap();
         assert!(cfg.preview.show_git_diff);
     }
-
-    // ── SearchOpenMode / EditorConfig.external tests ─────────────────
 
     #[test]
     fn search_open_mode_defaults_to_external() {

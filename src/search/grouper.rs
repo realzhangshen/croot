@@ -100,8 +100,6 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    // ── parse_rg_json_match ───────────────────────────────────────────
-
     #[test]
     fn parse_rg_json_match_standard_format() {
         let line = r#"{"type":"match","data":{"path":{"text":"src/main.rs"},"lines":{"text":"fn main() {\n"},"line_number":42}}"#;
@@ -135,8 +133,6 @@ mod tests {
         let line = r#"{"type":"begin","data":{"path":{"text":"src/main.rs"}}}"#;
         assert_eq!(parse_rg_json_match(line).unwrap(), None);
     }
-
-    // ── group_search_results ─────────────────────────────────────────
 
     #[test]
     fn group_results_empty() {

@@ -187,7 +187,6 @@ impl MdRenderer {
                 let marker = match self.list_stack.last() {
                     Some(Some(n)) => {
                         let s = format!("{indent}{n}. ");
-                        // Increment the counter
                         if let Some(Some(ref mut counter)) = self.list_stack.last_mut() {
                             *counter += 1;
                         }
@@ -494,7 +493,6 @@ fn format_table_row(
 mod tests {
     use super::*;
 
-    /// Extract the plain text from styled lines.
     fn lines_to_text(lines: &[Vec<StyledSpan>]) -> Vec<String> {
         lines
             .iter()

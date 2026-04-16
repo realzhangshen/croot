@@ -75,7 +75,7 @@ impl CmuxBridge {
     }
 }
 
-/// Build the shell command string to send to a cmux surface.
+/// Shell command string to send to a cmux surface.
 ///
 /// Splits the editor command (e.g. `"nvim --wait"`) into tokens, optionally inserts
 /// a `+LINE` goto argument, appends the file path, then joins everything with proper
@@ -89,7 +89,7 @@ fn build_editor_command(editor_cmd: &str, path: &Path, line: Option<usize>) -> S
     format!("{}\n", shell_words::join(&parts))
 }
 
-/// Parse the surface reference (e.g. `"surface:15"`) from `cmux new-surface` output.
+/// Surface reference (e.g. `"surface:15"`) from `cmux new-surface` output.
 ///
 /// Expected format: `"OK surface:15 pane:9 workspace:6"`
 fn parse_surface_ref(output: &str) -> anyhow::Result<String> {

@@ -216,7 +216,6 @@ impl PreviewState {
         self.image_state = Some(thread_proto);
     }
 
-    /// Extract the selected text from the content spans.
     pub fn extract_selected_text(&self) -> Option<String> {
         let (start, end) = self.selection.normalized()?;
         if start == end {
@@ -262,7 +261,6 @@ pub fn is_image_extension(ext: &str) -> bool {
     )
 }
 
-/// Extract text from styled spans between display columns `col_start` and `col_end`.
 fn extract_line_range(spans: &[StyledSpan], col_start: usize, col_end: usize) -> String {
     let mut result = String::new();
     let mut col: usize = 0;

@@ -97,7 +97,6 @@ impl StatefulWidget for TreeView<'_> {
             let is_cursor = absolute_idx == state.cursor;
             let is_hovered = self.hover_row == Some(row);
 
-            // Check if this node is highlighted (Find mode match)
             let is_highlighted = !self.highlight_indices.is_empty()
                 && self.highlight_indices.binary_search(&absolute_idx).is_ok();
 
@@ -390,7 +389,6 @@ fn build_filtered_visible(
     filter_indices[start..end].to_vec()
 }
 
-/// Check if a node at `pos` in `visible_indices` is the last visible sibling at its depth.
 fn is_last_visible_sibling(nodes: &[TreeNode], visible_indices: &[usize], pos: usize) -> bool {
     if pos >= visible_indices.len() {
         return true;
@@ -575,7 +573,7 @@ fn git_status_marker(status: GitStatus) -> &'static str {
 
 // ── Info columns ─────────────────────────────────────────────────────────
 
-/// Build the right-aligned info text combining size and/or modified time.
+/// Right-aligned info text combining size and/or modified time.
 fn build_info_text(node: &TreeNode, show_size: bool, show_modified: bool) -> String {
     let mut parts = Vec::new();
 
@@ -647,7 +645,7 @@ fn format_time(time: SystemTime) -> String {
     }
 
     // Beyond 7 days: show date
-    // Convert SystemTime to a simple month + day
+    // SystemTime → "Mon DD" display
     // Use days since epoch to compute rough month/day
     let secs_since_epoch = time
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -657,7 +655,7 @@ fn format_time(time: SystemTime) -> String {
     format_epoch_date(secs_since_epoch)
 }
 
-/// Convert seconds since epoch to "Mon DD" format (e.g., "Jan 18").
+/// Seconds since epoch to "Mon DD" (e.g. "Jan 18").
 #[allow(clippy::cast_possible_wrap)]
 fn format_epoch_date(epoch_secs: u64) -> String {
     // Days since epoch
@@ -687,7 +685,7 @@ fn format_epoch_date(epoch_secs: u64) -> String {
     }
 }
 
-/// Convert days since epoch 0000-03-01 to (year, month, day).
+/// Days since epoch 0000-03-01 to (year, month, day).
 /// Algorithm from Howard Hinnant's chrono-compatible date library.
 #[allow(clippy::cast_possible_truncation, clippy::cast_lossless)]
 fn days_to_civil(days: i64) -> (i64, u32, u32) {

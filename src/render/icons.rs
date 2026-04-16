@@ -16,7 +16,6 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
         };
     }
 
-    // Check full filename first (higher priority than extension)
     let lower = name.to_ascii_lowercase();
     match lower.as_str() {
         "cargo.toml" | "cargo.lock" => {
@@ -49,7 +48,6 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
     let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
 
     match ext.as_str() {
-        // Systems/Compiled — Red
         "rs" => IconInfo {
             icon: "\u{e7a8}",
             color: Color::Red,
@@ -74,7 +72,6 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
             icon: "\u{e739}",
             color: Color::Red,
         },
-        // Scripting/Dynamic — Yellow
         "js" | "mjs" | "cjs" => IconInfo {
             icon: "\u{e74e}",
             color: Color::Yellow,
@@ -95,7 +92,6 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
             icon: "\u{f0187}",
             color: Color::Yellow,
         },
-        // Typed/Modern — Blue
         "ts" | "mts" | "cts" => IconInfo {
             icon: "\u{e628}",
             color: Color::Blue,
@@ -112,7 +108,6 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
             icon: "\u{e749}",
             color: Color::Blue,
         },
-        // Markup/Web — Cyan
         "html" | "htm" => IconInfo {
             icon: "\u{e736}",
             color: Color::Cyan,
@@ -137,7 +132,6 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
             icon: "\u{e6a1}",
             color: Color::Cyan,
         },
-        // Config/Data — Green
         "json" => IconInfo {
             icon: "\u{e60b}",
             color: Color::Green,
@@ -166,7 +160,6 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
             icon: "\u{f0614}",
             color: Color::Green,
         },
-        // Documentation — White
         "md" | "mdx" => IconInfo {
             icon: "\u{e73e}",
             color: Color::White,
@@ -179,12 +172,10 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
             icon: "\u{f0722}",
             color: Color::White,
         },
-        // Media — Magenta
         "png" | "jpg" | "jpeg" | "gif" | "bmp" | "ico" | "webp" | "svg" => IconInfo {
             icon: "\u{f021f}",
             color: Color::Magenta,
         },
-        // DevOps — LightBlue
         "ipynb" => IconInfo {
             icon: "\u{e678}",
             color: Color::LightBlue,
@@ -193,7 +184,6 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
             icon: "\u{e603}",
             color: Color::LightBlue,
         },
-        // VCS/Meta — DarkGray
         "gitignore" | "gitmodules" | "gitattributes" => IconInfo {
             icon: "\u{e702}",
             color: Color::DarkGray,
@@ -202,7 +192,6 @@ pub fn icon_for_file(name: &str, is_dir: bool) -> IconInfo {
             icon: "\u{f023a}",
             color: Color::DarkGray,
         },
-        // Default — Reset
         _ => IconInfo {
             icon: "\u{f0214}",
             color: Color::Reset,

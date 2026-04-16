@@ -253,13 +253,11 @@ impl ContextMenuState {
         Rect::new(x, y, width.min(terminal_width), height.min(terminal_height))
     }
 
-    /// Check if a screen position (col, row) is inside the menu.
     pub fn contains(&self, col: u16, row: u16, terminal_width: u16, terminal_height: u16) -> bool {
         let rect = self.menu_rect(terminal_width, terminal_height);
         col >= rect.x && col < rect.x + rect.width && row >= rect.y && row < rect.y + rect.height
     }
 
-    /// Convert a screen row to a menu item index (if valid).
     pub fn row_to_item(
         &self,
         row: u16,
@@ -296,11 +294,9 @@ impl Widget for ContextMenuWidget<'_> {
         let selected_danger_style = colors::popup_selected_danger();
         let separator_style = colors::popup_border();
 
-        // Fill background with REVERSED base, then draw rounded border.
         colors::clear_region(buf, menu_rect, base);
         draw_border(buf, menu_rect, border_style);
 
-        // Menu items
         for (i, item) in self.state.items.iter().enumerate() {
             let y = menu_rect.y + 1 + i as u16;
             if y >= menu_rect.y + menu_rect.height - 1 {
@@ -321,7 +317,6 @@ impl Widget for ContextMenuWidget<'_> {
                 normal_style
             };
 
-            // Fill row with style
             if is_selected {
                 for x in (menu_rect.x + 1)..(menu_rect.x + menu_rect.width - 1) {
                     if let Some(cell) = buf.cell_mut((x, y)) {
@@ -330,7 +325,6 @@ impl Widget for ContextMenuWidget<'_> {
                 }
             }
 
-            // Render item text
             if is_separator {
                 let content_width = menu_rect.width.saturating_sub(2) as usize;
                 let separator_line: String = "─".repeat(content_width);
@@ -458,7 +452,6 @@ mod tests {
         let area = ratatui::layout::Rect::new(0, 0, 40, 20);
         let mut buf = ratatui::buffer::Buffer::empty(area);
 
-        // Pre-fill entire buffer with colored content (simulating syntax highlighting)
         for row in 0..area.height {
             for col in 0..area.width {
                 if let Some(cell) = buf.cell_mut((col, row)) {
@@ -472,7 +465,6 @@ mod tests {
             }
         }
 
-        // Render menu on top
         let widget = ContextMenuWidget { state: &state };
         widget.render(area, &mut buf);
 

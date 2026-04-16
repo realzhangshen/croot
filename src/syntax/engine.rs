@@ -54,19 +54,16 @@ pub fn highlight_file(path: &Path, content: &str, max_lines: usize) -> Vec<Vec<S
 /// Look up syntax by file extension (without doing real file I/O).
 /// Falls back through: extension lookup → fallback token → None.
 fn find_syntax_for_path<'a>(ss: &'a SyntaxSet, path: &Path) -> Option<&'a SyntaxReference> {
-    // Try by file extension first
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         if let Some(syntax) = ss.find_syntax_by_extension(ext) {
             return Some(syntax);
         }
-        // Extension not in bundle — try fallback mapping
         if let Some(fallback) = fallback_token(ext) {
             if let Some(syntax) = ss.find_syntax_by_token(fallback) {
                 return Some(syntax);
             }
         }
     }
-    // Try by full filename (e.g. "Makefile")
     if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
         if let Some(syntax) = ss.find_syntax_by_extension(name) {
             return Some(syntax);

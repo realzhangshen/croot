@@ -58,7 +58,6 @@ impl GitState {
         }
     }
 
-    /// Get the git status for a file or directory.
     pub fn status_for(&self, path: &Path, is_dir: bool) -> GitStatus {
         let direct = if is_dir {
             self.dir_statuses
@@ -77,7 +76,6 @@ impl GitState {
         GitStatus::Clean
     }
 
-    /// Check if a path is nested inside an ignored directory.
     fn is_inside_ignored(&self, path: &Path) -> bool {
         let mut current = path.parent();
         while let Some(dir) = current {

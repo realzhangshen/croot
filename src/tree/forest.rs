@@ -78,7 +78,7 @@ impl FileTree {
         self.guides_cache_valid = false;
     }
 
-    /// Get the compact chain length for a node, using the cache if available.
+    /// Compact chain length for a node, using the cache if available.
     /// If the cache is stale, recomputes all chain lengths in a single O(N) pass.
     ///
     /// **Important:** Only valid for displayable-head indices (i.e., indices that
@@ -151,7 +151,6 @@ impl FileTree {
         self.nodes[index].is_expanded = true;
         self.nodes[index].children_loaded = true;
 
-        // Update cached counts
         for child in &children {
             match child.kind {
                 NodeKind::File => self.file_count += 1,
@@ -160,7 +159,6 @@ impl FileTree {
             }
         }
 
-        // Insert children right after the expanded node
         let insert_pos = index + 1;
         self.nodes.splice(insert_pos..insert_pos, children);
         self.invalidate_chain_cache();
@@ -178,14 +176,12 @@ impl FileTree {
 
         let parent_depth = node.depth;
 
-        // Find the range of children to remove: all subsequent nodes with depth > parent_depth
         let start = index + 1;
         let mut end = start;
         while end < self.nodes.len() && self.nodes[end].depth > parent_depth {
             end += 1;
         }
 
-        // Update cached counts before draining
         for node in &self.nodes[start..end] {
             match node.kind {
                 NodeKind::File | NodeKind::Symlink => self.file_count -= 1,
@@ -199,7 +195,6 @@ impl FileTree {
         self.nodes[index].children_loaded = false;
         self.invalidate_chain_cache();
 
-        // Adjust cursor if it was in the removed range
         if self.cursor >= end {
             self.cursor -= removed_count;
         } else if self.cursor > index {
@@ -245,7 +240,6 @@ impl FileTree {
                 self.collapse(self.cursor);
                 return;
             }
-            // Move to parent: find the nearest node above with depth - 1
             if node.depth == 0 {
                 return; // already at root level, no parent to navigate to
             }
@@ -273,7 +267,6 @@ impl FileTree {
             if !was_expanded {
                 self.expand(cursor);
             }
-            // Move to first child if there is one
             let depth = self.nodes[cursor].depth;
             if cursor + 1 < self.nodes.len() && self.nodes[cursor + 1].depth > depth {
                 self.cursor = cursor + 1;
@@ -302,7 +295,6 @@ impl FileTree {
         self.nodes = load_children_with_meta(&self.root, 0, &self.config);
         self.recount();
         self.invalidate_chain_cache();
-        // Restore cursor position by path, or clamp to valid range
         if let Some(ref target) = cursor_path {
             self.cursor = self
                 .nodes
@@ -316,7 +308,6 @@ impl FileTree {
     /// Refresh expanded directories (re-read from filesystem).
     /// Preserves which directories were expanded by collecting their paths first.
     pub fn refresh(&mut self) {
-        // Collect paths of expanded directories before rebuilding (HashSet for O(1) lookup)
         let expanded_paths: HashSet<PathBuf> = self
             .nodes
             .iter()
@@ -324,13 +315,10 @@ impl FileTree {
             .map(|n| n.path.clone())
             .collect();
 
-        // Remember cursor path for restoration
         let cursor_path = self.nodes.get(self.cursor).map(|n| n.path.clone());
-
-        // Re-read root from scratch
         self.nodes = load_children_with_meta(&self.root, 0, &self.config);
 
-        // Re-expand previously expanded dirs (forward scan, expanding shifts indices)
+        // Forward scan: expanding shifts indices, so increment i linearly
         let mut i = 0;
         while i < self.nodes.len() {
             if self.nodes[i].is_dir() && expanded_paths.contains(&self.nodes[i].path) {
@@ -341,7 +329,6 @@ impl FileTree {
 
         self.recount();
 
-        // Restore cursor position by path, or clamp to valid range
         if let Some(ref target) = cursor_path {
             self.cursor = self
                 .nodes
@@ -416,8 +403,7 @@ impl FileTree {
         count
     }
 
-    /// Build the compacted display name for a node at `index` that has `chain_len`
-    /// intermediate directories merged into it.
+    /// Compacted display name joining `chain_len` intermediate single-child dirs with `/`.
     pub fn compact_display_name(&self, index: usize, chain_len: usize) -> String {
         let mut parts = vec![self.nodes[index].name.clone()];
         let mut cur = index;
@@ -434,8 +420,7 @@ impl FileTree {
         self.cached_displayable_indices().to_vec()
     }
 
-    /// Get the display name for a node, using the compact chain name if applicable.
-    /// Uses the cache when available for O(1) lookups.
+    /// Display name for a node, using the compact chain name if applicable.
     pub fn compact_display_name_for(&mut self, idx: usize) -> String {
         let chain_len = self.cached_chain_len(idx);
         if chain_len > 0 {

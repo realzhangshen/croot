@@ -145,13 +145,9 @@ impl Widget for InputDialogWidget<'_> {
         let text_style = base;
         let title_style = base.add_modifier(Modifier::BOLD);
 
-        // Fill background with REVERSED base
         colors::clear_region(buf, dialog_rect, base);
-
-        // Draw border
         draw_border(buf, dialog_rect, border_style);
 
-        // Title
         let title = self.state.kind.title();
         let title_x = dialog_rect.x
             + (dialog_rect
@@ -161,7 +157,6 @@ impl Widget for InputDialogWidget<'_> {
         buf.set_string(title_x, dialog_rect.y, format!(" {title} "), title_style);
 
         if matches!(self.state.kind, DialogKind::ConfirmDelete) {
-            // Show confirmation message
             let msg = if self.state.use_trash {
                 format!("Move '{}' to Trash?", self.state.target_name)
             } else {
@@ -176,12 +171,10 @@ impl Widget for InputDialogWidget<'_> {
             let cancel_x = confirm_x + 9 + 2;
             buf.set_string(cancel_x, btn_y, "[Cancel]", colors::popup_dim());
         } else {
-            // Input field
             let input_y = dialog_rect.y + 2;
             let input_x = dialog_rect.x + 2;
             let input_width = dialog_rect.width.saturating_sub(4) as usize;
 
-            // Draw input background (sunken field)
             let input_style = colors::popup_input();
             for dx in 0..input_width {
                 if let Some(cell) = buf.cell_mut((input_x + dx as u16, input_y)) {
@@ -190,12 +183,10 @@ impl Widget for InputDialogWidget<'_> {
                 }
             }
 
-            // Draw input text
             let display_text =
                 super::text_util::truncate_start_to_display_width(&self.state.input, input_width);
             buf.set_string(input_x, input_y, &display_text, input_style);
 
-            // Draw cursor (block cursor: swap fg/bg)
             let cursor_col =
                 super::search_bar::cursor_byte_to_column(&self.state.input, self.state.cursor_pos);
             let input_display_width = UnicodeWidthStr::width(self.state.input.as_str());
@@ -211,7 +202,6 @@ impl Widget for InputDialogWidget<'_> {
                 cell.set_style(colors::popup_cursor());
             }
 
-            // Buttons
             let btn_y = dialog_rect.y + 3;
             let confirm_x = dialog_rect.x + 2;
             buf.set_string(confirm_x, btn_y, "[Confirm]", colors::popup_selected());

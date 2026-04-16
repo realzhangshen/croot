@@ -76,7 +76,6 @@ pub struct SearchState {
     /// Per-node byte positions of matched characters (Find mode).
     /// Keyed by node index; absent entry → full-name underline fallback.
     pub match_char_positions: HashMap<usize, Vec<usize>>,
-    // Global search fields
     pub global_results: Vec<GlobalSearchResult>,
     /// Grouped results for content search (VS Code-style).
     pub grouped_results: Vec<FileGroup>,
@@ -179,14 +178,13 @@ impl SearchState {
         self.query.is_empty()
     }
 
-    /// Convert a byte offset within `query` to its display column width.
-    /// This bridges the gap between byte-based `cursor_pos` (used for string
-    /// mutation) and the screen column where the cursor should render.
+    /// Byte offset within `query` to display column width, bridging
+    /// byte-based `cursor_pos` and the screen column where the cursor renders.
     pub fn cursor_display_column(&self) -> usize {
         cursor_byte_to_column(&self.query, self.cursor_pos)
     }
 
-    /// Parse the query to determine match mode and effective query string.
+    /// Determine match mode and effective query string.
     /// Compiles and caches regex when in Regex mode.
     pub fn effective_query(&mut self) -> (String, MatchMode) {
         if self.query.starts_with('/') && self.query.len() > 1 {

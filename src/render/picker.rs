@@ -38,13 +38,11 @@ pub struct PickerState {
 }
 
 impl PickerState {
-    /// Create a new branch picker from a list of branches.
     pub fn new_branch(branches: &[BranchInfo]) -> Self {
         let has_remote = branches.iter().any(|b| b.is_remote);
         let mut items = Vec::new();
 
         for b in branches {
-            // Insert separator before first remote branch
             if b.is_remote && !items.iter().any(|i: &PickerItem| i.is_separator) && has_remote {
                 items.push(PickerItem {
                     label: "Remote".to_string(),

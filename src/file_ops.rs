@@ -57,11 +57,10 @@ pub fn is_path_within_root(root: &Path, target: &Path) -> bool {
 /// Strict path-within-root check that canonicalizes the nearest existing
 /// ancestor to defeat symlink-based path traversal.
 pub fn is_path_within_root_strict(root: &Path, target: &Path) -> bool {
-    // Fast lexical check first
     if !is_path_within_root(root, target) {
         return false;
     }
-    // Canonicalize the nearest existing ancestor
+    // Canonicalize the nearest existing ancestor to defeat symlink traversal
     let mut check = target.to_path_buf();
     loop {
         match check.canonicalize() {
@@ -195,7 +194,7 @@ pub fn execute_dialog(
     }
 }
 
-/// Get the directory context for a tree node (the node itself if dir, or its parent).
+/// Directory context for a tree node: itself if dir, otherwise its parent.
 pub fn dir_for_path(path: &Path, is_dir: bool, root: &Path) -> PathBuf {
     if is_dir {
         path.to_path_buf()
@@ -208,8 +207,6 @@ pub fn dir_for_path(path: &Path, is_dir: bool, root: &Path) -> PathBuf {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-
-    // ── Path validation ─────────────────────────────────────────────────
 
     #[test]
     fn rejects_absolute_path() {
@@ -280,8 +277,6 @@ mod tests {
         // Should return false because root can't be canonicalized
         assert!(!is_path_within_root_strict(bad_root, &target));
     }
-
-    // ── execute_dialog ──────────────────────────────────────────────────
 
     #[test]
     fn new_file_creates_file() {
@@ -492,8 +487,6 @@ mod tests {
         assert!(!file.exists());
     }
 
-    // ── dir_for_path ────────────────────────────────────────────────────
-
     #[test]
     fn dir_for_path_returns_dir_itself() {
         let root = Path::new("/root");
@@ -521,8 +514,6 @@ mod tests {
         // A root path has no parent, so should fall back
         assert_eq!(dir_for_path(path, false, root), PathBuf::from("/root"));
     }
-
-    // ── Property-based tests ────────────────────────────────────────────
 
     mod proptests {
         use super::*;

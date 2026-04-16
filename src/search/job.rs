@@ -49,7 +49,6 @@ impl SearchJob {
         let flag = cancelled.clone();
 
         let handle = tokio::spawn(async move {
-            // Debounce: sleep in small increments, checking cancellation
             let debounce = std::time::Duration::from_millis(debounce_ms);
             let step = std::time::Duration::from_millis(20);
             let mut elapsed = std::time::Duration::ZERO;
@@ -64,7 +63,6 @@ impl SearchJob {
                 return;
             }
 
-            // Build command
             let child_result = match search_type {
                 GlobalSearchType::FileName => {
                     let parts =
@@ -120,7 +118,7 @@ impl SearchJob {
             let mut batch = Vec::new();
             let mut total_count = 0usize;
             let mut parse_failed = false;
-            // For content search, cap by unique files, not raw matches.
+            // Cap content search by unique files, not raw match count
             let mut unique_file_count = 0usize;
             let mut last_file: Option<String> = None;
             let mut capped = false;
@@ -186,7 +184,6 @@ impl SearchJob {
                     },
                 }
 
-                // Send intermediate batch
                 if batch.len() >= BATCH_SIZE {
                     let intermediate = std::mem::take(&mut batch);
                     let _ = tx
@@ -200,12 +197,10 @@ impl SearchJob {
                 }
             }
 
-            // If capped, kill the child to stop further output
             if capped {
                 let _ = child.kill().await;
             }
 
-            // Wait for child to finish and check status
             let status = child.wait().await;
             let stderr_output = {
                 // stderr was piped; read it now (child has exited or been killed)
@@ -242,7 +237,6 @@ impl SearchJob {
                 None
             };
 
-            // Send final batch
             let _ = tx
                 .send(SearchBatch {
                     generation,

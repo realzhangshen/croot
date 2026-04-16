@@ -26,7 +26,6 @@ pub struct GlobalSearchOverlay<'a> {
 
 impl Widget for GlobalSearchOverlay<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // Guard: skip rendering if terminal is too small for the dialog
         if area.width < 10 || area.height < 6 {
             return;
         }
@@ -36,13 +35,9 @@ impl Widget for GlobalSearchOverlay<'_> {
         let base = colors::popup_base();
         let border_style = colors::popup_border();
 
-        // Fill background
         colors::clear_region(buf, dialog, base);
-
-        // Draw border
         draw_border(buf, dialog, border_style);
 
-        // Title
         let title = match self.state.global_search_type {
             GlobalSearchType::FileName => " Search Files ",
             GlobalSearchType::Content => " Search Contents ",
@@ -59,7 +54,6 @@ impl Widget for GlobalSearchOverlay<'_> {
             colors::popup_border().add_modifier(Modifier::BOLD),
         );
 
-        // Pre-fill input row with sunken input style
         let input_y = dialog.y + 1;
         let input_style = colors::popup_input();
         for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
@@ -69,7 +63,6 @@ impl Widget for GlobalSearchOverlay<'_> {
             }
         }
 
-        // Input line
         let prompt = " > ";
         buf.set_string(dialog.x + 1, input_y, prompt, colors::popup_prompt());
 
@@ -80,7 +73,6 @@ impl Widget for GlobalSearchOverlay<'_> {
             super::text_util::truncate_start_to_display_width(&self.state.query, input_width);
         buf.set_string(input_x, input_y, &query_display, input_style);
 
-        // Cursor (block cursor: swap fg/bg)
         let query_display_width = UnicodeWidthStr::width(self.state.query.as_str());
         let cursor_pos = if query_display_width > input_width {
             input_width
@@ -94,7 +86,6 @@ impl Widget for GlobalSearchOverlay<'_> {
             }
         }
 
-        // Separator
         let sep_y = dialog.y + 2;
         for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
             if let Some(cell) = buf.cell_mut((col, sep_y)) {
@@ -103,7 +94,6 @@ impl Widget for GlobalSearchOverlay<'_> {
             }
         }
 
-        // Results area
         let results_y = dialog.y + 3;
         let results_height = dialog.height.saturating_sub(5) as usize; // -3 top, -2 bottom
         let content_width = (dialog.width.saturating_sub(3)) as usize;
@@ -119,7 +109,6 @@ impl Widget for GlobalSearchOverlay<'_> {
             let display = super::text_util::truncate_with_ellipsis(err, content_width);
             buf.set_string(dialog.x + 2, results_y, display, colors::popup_error());
         } else if self.state.global_search_type == GlobalSearchType::Content {
-            // ── Grouped content search results ──
             self.render_grouped_results(
                 buf,
                 dialog,
@@ -133,7 +122,6 @@ impl Widget for GlobalSearchOverlay<'_> {
                 buf.set_string(dialog.x + 2, results_y, "No results", colors::popup_dim());
             }
         } else {
-            // ── Flat filename search results ──
             let start = self.state.global_scroll_offset;
             let end = (start + results_height).min(self.state.global_results.len());
 
@@ -161,7 +149,6 @@ impl Widget for GlobalSearchOverlay<'_> {
             }
         }
 
-        // Help line at bottom
         let help_y = dialog.y + dialog.height.saturating_sub(2);
         let help = if self.state.global_search_type == GlobalSearchType::Content {
             "[Enter] open  [Tab] go to  [Esc] cancel"
@@ -170,7 +157,6 @@ impl Widget for GlobalSearchOverlay<'_> {
         };
         buf.set_string(dialog.x + 2, help_y, help, colors::popup_dim());
 
-        // Result count
         let (has_results, count_str) = if self.state.global_search_type == GlobalSearchType::Content
         {
             let total_files = self.state.grouped_results.len();
@@ -239,7 +225,6 @@ impl GlobalSearchOverlay<'_> {
                 break;
             }
 
-            // File header row
             if flat_idx >= scroll {
                 let row_y = results_y + rendered as u16;
                 let is_selected = flat_idx == self.state.global_selected;
@@ -276,7 +261,6 @@ impl GlobalSearchOverlay<'_> {
             }
             flat_idx += 1;
 
-            // Match lines (skip if collapsed)
             if !group.collapsed {
                 for m in &group.matches {
                     if rendered >= results_height {
@@ -370,8 +354,6 @@ mod tests {
             cell.modifier
         );
     }
-
-    // ── Grouped content search rendering tests ─────────────────────────
 
     use crate::search::{ContentMatch, FileGroup};
     use std::path::PathBuf;
