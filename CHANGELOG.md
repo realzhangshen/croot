@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-16
+
 ### Added
 - Bundle the `two-face` extended syntax set so file preview now highlights Swift, TOML (incl. `Cargo.toml`), Kotlin, Dockerfile, INI, Nix, Dart, Zig, native TypeScript, and many other languages missing from syntect's default bundle
 
@@ -17,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Background refresh now coalesces concurrent triggers. Filesystem event bursts (e.g. `cargo build`) collapse to at most one running refresh plus one pending follow-up instead of spawning N concurrent full-tree rebuilds.
 
 ### Fixed
+- Tree view panic after deleting the currently previewed file. `FileTree::refresh` rebuilt `nodes` without invalidating the derived `chain_len`, `displayable`, and `guides` caches when no subdirectories needed re-expansion, so the next render dereferenced stale indices past the shrunken `nodes` vec. Cache invalidation is now enforced by a `set_nodes` helper that wraps every full replacement of `nodes`.
 - Remove stale demo GIF release workflow after the website migration
 
 ## [0.5.5] - 2026-04-08
@@ -289,7 +292,8 @@ _Release-only commit (CI/packaging fix). No user-facing changes._
 - Git ignored file display: removed redundant status marker, fixed directory lookup
 - macOS x86_64 CI build using correct runner (macos-14)
 
-[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/realzhangshen/croot/compare/v0.5.5...v0.6.0
 [0.5.5]: https://github.com/realzhangshen/croot/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/realzhangshen/croot/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/realzhangshen/croot/compare/v0.5.2...v0.5.3
