@@ -1,91 +1,79 @@
 # Keybindings
 
-croot provides two layers of keybindings: built-in defaults that work out of the box, and opt-in bindings you can enable in your config.
+croot has a small default keyboard layer and a larger set of opt-in shortcuts. Defaults work immediately; opt-in actions only become active after you add them to `~/.config/croot/config.toml`.
 
-## Navigation
-
-| Key | Action |
-|-----|--------|
-| `Up` / `k` | Move cursor up |
-| `Down` / `j` | Move cursor down |
-| `Left` / `h` | Collapse directory |
-| `Right` / `l` | Expand directory |
-| `Home` / `g` | Jump to top |
-| `End` / `G` | Jump to bottom |
-| `Enter` | Toggle directory or open file |
-| `PageUp` | Scroll page up |
-| `PageDown` | Scroll page down |
-
-## Search & Filter
+## Built-in Defaults
 
 | Key | Action |
 |-----|--------|
-| `/` | Fuzzy search — jump to match |
-| `f` | Filter — show only matching files |
-| `s` | Global search — fd filename search |
-| `S` | Global content search — rg content search |
-| `Tab` | Next search match |
-| `Shift+Tab` | Previous search match |
-| `Esc` | Cancel search/filter |
+| `Up` | Move cursor up |
+| `Down` | Move cursor down |
+| `Left` | Collapse directory |
+| `Right` | Expand directory |
+| `Home` | Jump to top |
+| `End` | Jump to bottom |
+| `/` | Find by filename and jump between matches |
+| `f` | Filter the tree to matching files |
+| `s` | Global filename search using `fd` |
+| `S` | Global content search using `rg` |
+| `m` | Toggle Markdown rendered/raw preview |
+| `Ctrl+C` / `Super+C` | Quit, or copy selected preview text |
 
-## Preview
+`Esc`, `Enter`, `Tab`, `Shift+Tab`, and arrow keys are also used inside popups, dialogs, and search overlays. For example, local search uses `Tab` / `Down` for the next match, `Shift+Tab` / `Up` for the previous match, `Enter` to confirm, and `Esc` to cancel.
 
-| Key | Action |
-|-----|--------|
-| `p` | Toggle preview pane |
-| `m` | Toggle Markdown rendering (raw/rendered) |
+In global search, `Enter` opens the selected result in the configured editor. `Tab` jumps to the file in the tree without opening it.
 
-## File Operations
+## Opt-in Shortcuts
 
-| Key | Action |
-|-----|--------|
-| `a` | Create new file |
-| `A` | Create new directory |
-| `R` | Rename file/directory |
-| `D` | Delete file/directory |
-| `e` | Open in editor |
-| `x` | Open externally (Finder, xdg-open) |
+These actions have no default key until you configure them:
 
-## Other
-
-| Key | Action |
-|-----|--------|
-| `q` | Quit |
-| `r` | Refresh tree |
-| `o` | Toggle expand/collapse |
-| `W` | Collapse all directories |
-| `b` | Branch picker (git repos) |
-| `Ctrl+C` | Force quit |
-| Right-click | Context menu |
+| Config key | Example | Action |
+|------------|---------|--------|
+| `quit` | `q` | Quit |
+| `toggle` | `o` | Toggle directory expand/collapse |
+| `refresh` | `r` | Refresh tree |
+| `new_file` | `a` | Create new file |
+| `new_dir` | `A` | Create new directory |
+| `rename` | `R` | Rename selected file or directory |
+| `delete` | `D` | Delete selected file or directory |
+| `toggle_preview` | `p` | Toggle preview pane |
+| `open_in_editor` | `e` | Open selected file in editor |
+| `open_externally` | `x` | Open selected file with the system default app |
+| `collapse_all` | `W` | Collapse all directories |
+| `branch_picker` | `b` | Open the git branch picker |
+| `enter` | `Enter` | Toggle directory or open selected file |
 
 ## Customizing Keybindings
 
-All keybindings are configurable in `~/.config/croot/config.toml`:
-
 ```toml
 [keybindings]
-# Override defaults
+# Override built-in defaults. Overrides replace the original key.
 cursor_up = "Up"
 cursor_down = "Down"
 search = "/"
 filter = "f"
 
-# Enable opt-in bindings
+# Disable a built-in binding by setting it to an empty string.
+# filter = ""
+
+# Enable opt-in bindings.
 quit = "q"
 toggle_preview = "p"
 new_file = "a"
+new_dir = "A"
+rename = "R"
 delete = "D"
-
-# Disable a binding by setting it to empty string
-# filter = ""
+open_in_editor = "e"
+open_externally = "x"
+enter = "Enter"
 ```
 
-### Key Format
+## Key Format
 
 - Single characters: `q`, `a`, `/`
 - Special keys: `Enter`, `Esc`, `Tab`, `Space`, `Backspace`, `Delete`
 - Arrow keys: `Up`, `Down`, `Left`, `Right`
-- Navigation: `Home`, `End`, `PageUp`, `PageDown`
+- Navigation names: `Home`, `End`, `PageUp`, `PageDown`
 - Function keys: `F1` through `F12`
 - Modifiers: `Ctrl+c`, `Shift+a`, `Alt+x`, `Super+k`
 - Uppercase letters automatically include Shift: `S` = `Shift+s`

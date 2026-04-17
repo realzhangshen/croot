@@ -39,7 +39,7 @@ Available targets:
 Example for macOS Apple Silicon:
 
 ```bash
-TAG=v0.5.1
+TAG=v0.6.0
 curl -fsSL "https://github.com/realzhangshen/croot/releases/download/${TAG}/croot-${TAG}-aarch64-apple-darwin.tar.gz" | tar xz
 sudo mv croot /usr/local/bin/
 ```

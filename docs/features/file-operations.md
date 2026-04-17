@@ -4,24 +4,21 @@ croot lets you manage files and directories without leaving the terminal.
 
 ## Create
 
-| Key | Action |
-|-----|--------|
-| `a` | Create a new file |
-| `A` | Create a new directory |
+Right-click a directory, or the empty space below the tree, and choose **New File** or **New Directory**.
 
 A dialog prompts for the name. The new entry appears in the tree immediately.
 
 ## Rename
 
-Press `R` to rename the selected file or directory. The dialog pre-fills with the current name.
+Right-click a file or directory and choose **Rename**. The dialog pre-fills with the current name.
 
 ## Delete
 
-Press `D` to delete the selected file or directory. A confirmation dialog appears before deletion.
+Right-click a file or directory and choose **Delete**. A confirmation dialog appears before deletion.
 
 ## Open in Editor
 
-Press `e` to open the selected file in your configured editor.
+Right-click a file and choose **Open in Editor**. When croot detects a cmux session, file menus also include **Open in cmux Tab** so the editor can open without suspending croot.
 
 The editor is resolved in this order:
 1. `editor.command` in config
@@ -36,7 +33,7 @@ command = "nvim"
 
 ## Open Externally
 
-Press `x` to open the selected file with the system default application (`open` on macOS, `xdg-open` on Linux).
+Right-click a file and choose **Open Externally** to open it with the system default application (`open` on macOS, `xdg-open` on Linux).
 
 Configure custom open rules per file pattern:
 
@@ -47,4 +44,18 @@ default = "open"
 [[open.rules]]
 pattern = "*.pdf"
 command = "zathura"
+```
+
+## Optional Keyboard Shortcuts
+
+File operation shortcuts are opt-in. Add any of these to `[keybindings]`:
+
+```toml
+[keybindings]
+new_file = "a"
+new_dir = "A"
+rename = "R"
+delete = "D"
+open_in_editor = "e"
+open_externally = "x"
 ```

@@ -23,7 +23,8 @@ Press `s` to search filenames across the entire project using `fd`. This opens a
 
 - Type to filter results
 - `Up` / `Down` to navigate
-- `Enter` to jump to the selected file
+- `Enter` to open the selected file in the configured editor
+- `Tab` to jump to the selected file in the tree without opening it
 - `Esc` to cancel
 
 Requires [fd](https://github.com/sharkdp/fd) to be installed.
@@ -31,6 +32,8 @@ Requires [fd](https://github.com/sharkdp/fd) to be installed.
 ## Global Content Search (`S`)
 
 Press `S` to search file contents using `rg` (ripgrep). This finds text inside files across your project.
+
+Content search groups matches by file. Use `Up` / `Down` to move through results, `Enter` to open the selected match at its line, and `Tab` to jump to the file in the tree.
 
 Requires [ripgrep](https://github.com/BurntSushi/ripgrep) to be installed.
 
@@ -41,6 +44,8 @@ Requires [ripgrep](https://github.com/BurntSushi/ripgrep) to be installed.
 fd_command = "fd"       # Path to fd binary
 rg_command = "rg"       # Path to rg binary
 max_results = 500       # Maximum number of search results
+open_mode = "external"  # "external" opens in a GUI/background editor;
+                        # "editor" suspends croot for terminal editors
 ```
 
 ```toml

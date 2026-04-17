@@ -255,3 +255,43 @@ fn self_update() -> anyhow::Result<()> {
         Err(e) => Err(e.into()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const CONFIG_DOCS: &str = include_str!("../docs/guide/configuration.md");
+    const GETTING_STARTED_DOCS: &str = include_str!("../docs/guide/getting-started.md");
+
+    #[test]
+    fn config_docs_use_subcommands_not_legacy_flags() {
+        for docs in [CONFIG_DOCS, GETTING_STARTED_DOCS] {
+            assert!(docs.contains("croot config init"));
+            assert!(docs.contains("croot config edit"));
+            assert!(!docs.contains("croot config --init"));
+            assert!(!docs.contains("croot config --edit"));
+        }
+    }
+
+    #[test]
+    fn config_subcommands_parse_as_documented() {
+        let init = Cli::try_parse_from(["croot", "config", "init"]).unwrap();
+        assert!(matches!(
+            init.command,
+            Some(Command::Config {
+                action: Some(ConfigAction::Init)
+            })
+        ));
+
+        let edit = Cli::try_parse_from(["croot", "config", "edit"]).unwrap();
+        assert!(matches!(
+            edit.command,
+            Some(Command::Config {
+                action: Some(ConfigAction::Edit)
+            })
+        ));
+
+        assert!(Cli::try_parse_from(["croot", "config", "--init"]).is_err());
+        assert!(Cli::try_parse_from(["croot", "config", "--edit"]).is_err());
+    }
+}

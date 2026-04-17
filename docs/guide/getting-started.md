@@ -27,7 +27,7 @@ croot opens a full-screen TUI file explorer in your terminal.
 |-----|--------|
 | `Up` / `Down` | Move cursor |
 | `Left` / `Right` | Collapse / expand directory |
-| `Enter` | Toggle directory or open file |
+| Left click | Toggle a directory or preview a file |
 | `Home` / `End` | Jump to top / bottom |
 | `/` | Fuzzy search by filename |
 | `Esc` | Cancel search or close popup |
@@ -35,19 +35,15 @@ croot opens a full-screen TUI file explorer in your terminal.
 
 ## Open a Preview
 
-Press `p` to toggle the split-pane preview. It shows syntax-highlighted source code, rendered Markdown, or hex dumps for binary files.
+Click a file to open the split-pane preview. It shows syntax-highlighted source code, rendered Markdown, image previews when built with the optional image feature, or hex dumps for binary files.
 
 Navigate the tree while the preview updates automatically.
 
 ## File Operations
 
-| Key | Action |
-|-----|--------|
-| `a` | Create new file |
-| `A` | Create new directory |
-| `R` | Rename |
-| `D` | Delete |
-| `e` | Open in editor |
+Right-click a file, directory, or empty tree space to open the context menu. From there you can create files and directories, rename, delete, copy paths, reveal files, open externally, or open files in your editor.
+
+Keyboard shortcuts for file operations are available as opt-in keybindings. See the [Keybindings](./keybindings) guide for a ready-to-copy config snippet.
 
 ## Git Status
 
@@ -65,8 +61,8 @@ croot works out of the box with zero configuration. To customize behavior:
 
 ```bash
 croot config        # Show current config values
-croot config --edit # Open config in your editor
-croot config --init # Create default config file
+croot config edit   # Open config in your editor
+croot config init   # Create default config file
 ```
 
 Config file location: `~/.config/croot/config.toml`

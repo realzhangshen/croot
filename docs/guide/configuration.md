@@ -5,8 +5,8 @@ croot uses a TOML config file at `~/.config/croot/config.toml` (or `$XDG_CONFIG_
 ## Quick Start
 
 ```bash
-croot config --init  # Create default config file
-croot config --edit  # Open config in your editor
+croot config init    # Create default config file
+croot config edit    # Open config in your editor
 croot config         # Show all resolved values
 ```
 
@@ -33,16 +33,19 @@ auto_preview = false      # Auto-open preview on start
 preview_delay_ms = 150    # Debounce delay before updating preview
 show_line_numbers = true  # Show line numbers in preview
 max_file_size_kb = 1024   # Max file size to preview (KB)
+syntax_highlight = true   # Legacy fallback for syntax.enabled
 split_ratio = 0.5         # Tree/preview width ratio (0.0–1.0)
 render_markdown = true    # Render Markdown or show raw
 close_on_exit = true      # Close preview when quitting
+image_preview = false     # True by default only when built with image-preview
+show_git_diff = true      # Show git diff gutter in text previews
 ```
 
 `preview.syntax_highlight` is kept as a legacy fallback, but new syntax highlighting settings live in `[syntax]`.
 
 ### `[syntax]` — ANSI Syntax Highlighting
 
-Syntax token colors are ANSI-only: `reset`, ANSI 16 names, or `indexed:N`. Hex/RGB is intentionally rejected so code colors keep adapting to your terminal theme.
+Syntax highlighting uses syntect plus the extended two-face syntax bundle, so common languages such as Rust, Swift, TOML, Kotlin, Dockerfile, Nix, Dart, Zig, TypeScript, JSON, Markdown, and many more are recognized. Syntax token colors are ANSI-only: `reset`, ANSI 16 names, or `indexed:N`. Hex/RGB is intentionally rejected so code colors keep adapting to your terminal theme.
 
 ```toml
 [syntax]
@@ -63,16 +66,19 @@ fg = "dark_gray"
 italic = true
 ```
 
-Available semantic tokens in v1 include:
+Available semantic tokens include:
 - `text`
 - `keyword`
 - `type`
 - `type_builtin`
 - `string`
+- `escape`
 - `number`
+- `constant`
 - `comment`
 - `function`
 - `method`
+- `constructor`
 - `variable`
 - `parameter`
 - `property`
@@ -81,6 +87,8 @@ Available semantic tokens in v1 include:
 - `module`
 - `tag`
 - `attribute`
+- `macro`
+- `lifetime`
 
 ### `[editor]` — Editor Command
 
@@ -120,6 +128,13 @@ See the [Keybindings](./keybindings) page for full details.
 
 ```toml
 [keybindings]
+# Override built-in defaults
+search = "/"
+filter = "f"
+global_search = "s"
+global_search_content = "S"
+
+# Enable opt-in shortcuts
 quit = "q"
 toggle_preview = "p"
 new_file = "a"
@@ -166,7 +181,7 @@ find_match = "cyan"
 popup_bg = "black"
 popup_fg = "white"
 popup_accent = "light_blue"
-popup_border_fg = "blue"
+popup_border_fg = "reset"
 popup_input_bg = "white"
 popup_input_fg = "black"
 ```

@@ -25,7 +25,8 @@ auto_preview = false
 # syntax_highlight = true
 # split_ratio = 0.5
 # render_markdown = true
-# image_preview = true         # No-op unless built with --features image-preview
+# close_on_exit = true
+# image_preview = true         # Enable inline images; requires --features image-preview
 # show_git_diff = true
 
 [syntax]
@@ -100,7 +101,7 @@ auto_preview = false
 # popup_bg = "black"
 # popup_fg = "white"
 # popup_accent = "light_blue"
-# popup_border_fg = "blue"
+# popup_border_fg = "reset"
 # popup_input_bg = "white"
 # popup_input_fg = "black"
 # popup_selected_danger_bg = "red"
