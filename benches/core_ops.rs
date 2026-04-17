@@ -228,8 +228,10 @@ fn bench_fuzzy_match_5k(c: &mut Criterion) {
 
 fn bench_build_displayable_5k(c: &mut Criterion) {
     let tmp = create_test_tree(3000, 500);
-    let mut config = TreeConfig::default();
-    config.compact_folders = true;
+    let config = TreeConfig {
+        compact_folders: true,
+        ..TreeConfig::default()
+    };
 
     c.bench_function("build_displayable_indices_5k_compact", |b| {
         b.iter_batched(

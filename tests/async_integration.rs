@@ -27,9 +27,9 @@ async fn search_job_cancel_during_debounce_produces_no_results() {
     job.cancel();
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
-    match rx.try_recv() {
-        Ok(batch) => assert!(batch.results.is_empty()),
-        Err(_) => {} // Expected -- cancelled before any send
+    // Err is expected (cancelled before any send); a stray Ok must carry no results.
+    if let Ok(batch) = rx.try_recv() {
+        assert!(batch.results.is_empty());
     }
 }
 
