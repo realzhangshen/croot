@@ -256,6 +256,7 @@ mod tests {
     };
     use crate::tree::node::TreeNode;
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    use ratatui::backend::TestBackend;
     use std::path::Path;
 
     /// Helper to create a minimal App rooted in a temp directory.
@@ -359,6 +360,55 @@ mod tests {
         // After 3 seconds the message should be considered expired
         let (_, ts) = app.ui.error_message.as_ref().unwrap();
         assert!(ts.elapsed() >= Duration::from_secs(3));
+    }
+
+    fn rendered_line(buffer: &ratatui::buffer::Buffer, y: u16, width: u16) -> String {
+        (0..width)
+            .map(|x| buffer.cell((x, y)).unwrap().symbol().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn error_message_clears_status_bar_text() {
+        let (mut app, _tmp) = test_app_with_files();
+        app.tree.cursor = app
+            .tree
+            .nodes
+            .iter()
+            .position(|node| node.name == "aaa.txt")
+            .expect("test file exists");
+        app.show_error("ERR".to_string());
+
+        let width = 80;
+        let mut terminal = Terminal::new(TestBackend::new(width, 10)).unwrap();
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+
+        let status_line = rendered_line(terminal.backend().buffer(), app.status_bar_y, width);
+        assert!(status_line.starts_with("ERR"));
+        assert!(
+            !status_line.contains("aaa.txt"),
+            "status bar text leaked through error line: {status_line:?}"
+        );
+    }
+
+    #[test]
+    fn error_message_suppresses_status_hyperlinks() {
+        let (mut app, _tmp) = test_app_with_files();
+        app.tree.cursor = app
+            .tree
+            .nodes
+            .iter()
+            .position(|node| node.name == "aaa.txt")
+            .expect("test file exists");
+        app.show_error("Rename failed: Target already exists".to_string());
+
+        let mut terminal = Terminal::new(TestBackend::new(80, 10)).unwrap();
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+
+        assert!(
+            app.hyperlink_regions.is_empty(),
+            "OSC8 status hyperlinks would overwrite the visible error"
+        );
     }
 
     #[test]

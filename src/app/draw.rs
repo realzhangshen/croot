@@ -206,6 +206,7 @@ impl App {
         // Overlay error message on the status bar; auto-dismisses after 3s.
         if let Some((ref msg, ts)) = self.ui.error_message {
             if ts.elapsed() < Duration::from_secs(3) {
+                self.hyperlink_regions.clear();
                 let error_style = ratatui::style::Style::default()
                     .fg(ratatui::style::Color::White)
                     .bg(ratatui::style::Color::Red)
@@ -214,9 +215,14 @@ impl App {
                     msg,
                     status_area.width as usize,
                 );
-                frame
-                    .buffer_mut()
-                    .set_string(status_area.x, status_area.y, display, error_style);
+                let buf = frame.buffer_mut();
+                for x in status_area.x..status_area.x + status_area.width {
+                    if let Some(cell) = buf.cell_mut((x, status_area.y)) {
+                        cell.set_symbol(" ");
+                        cell.set_style(error_style);
+                    }
+                }
+                buf.set_string(status_area.x, status_area.y, display, error_style);
             } else {
                 self.ui.error_message = None;
             }

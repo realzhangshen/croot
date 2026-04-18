@@ -84,6 +84,24 @@ fn is_single_name(input: &str) -> bool {
     matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
 }
 
+fn names_differ_only_by_case(current: &str, requested: &str) -> bool {
+    current != requested && current.to_lowercase() == requested.to_lowercase()
+}
+
+#[cfg(unix)]
+fn paths_refer_to_same_existing_entry(left: &Path, right: &Path) -> std::io::Result<bool> {
+    use std::os::unix::fs::MetadataExt;
+
+    let left_meta = std::fs::symlink_metadata(left)?;
+    let right_meta = std::fs::symlink_metadata(right)?;
+    Ok(left_meta.dev() == right_meta.dev() && left_meta.ino() == right_meta.ino())
+}
+
+#[cfg(not(unix))]
+fn paths_refer_to_same_existing_entry(left: &Path, right: &Path) -> std::io::Result<bool> {
+    Ok(left.canonicalize()? == right.canonicalize()?)
+}
+
 /// Execute a confirmed dialog operation on the filesystem.
 /// Returns a `FileOpResult` indicating success, error, or no-op.
 pub fn execute_dialog(
@@ -160,7 +178,18 @@ pub fn execute_dialog(
                 // a hard-link/unlink dance that does not work for directories.
                 match new_path.try_exists() {
                     Ok(true) => {
-                        return FileOpResult::Error("Target already exists".to_string());
+                        let is_case_only_current_entry =
+                            names_differ_only_by_case(target_name, input)
+                                && match paths_refer_to_same_existing_entry(context_path, &new_path)
+                                {
+                                    Ok(same) => same,
+                                    Err(e) => {
+                                        return FileOpResult::Error(format!("Rename failed: {e}"));
+                                    }
+                                };
+                        if !is_case_only_current_entry {
+                            return FileOpResult::Error("Target already exists".to_string());
+                        }
                     }
                     Err(e) => return FileOpResult::Error(format!("Rename failed: {e}")),
                     Ok(false) => {}
@@ -430,6 +459,35 @@ mod tests {
         assert!(matches!(result, FileOpResult::Error(_)));
         assert_eq!(std::fs::read_to_string(&source).unwrap(), "source");
         assert_eq!(std::fs::read_to_string(&target).unwrap(), "target");
+    }
+
+    #[test]
+    fn rename_case_only_updates_directory_entry() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path();
+        let source = dir.join("MixedCase.txt");
+        let target = dir.join("mixedcase.txt");
+        std::fs::write(&source, "case-sensitive rename").unwrap();
+
+        let result = execute_dialog(
+            &DialogKind::Rename,
+            "mixedcase.txt",
+            "MixedCase.txt",
+            &source,
+            dir,
+            false,
+        );
+
+        assert!(matches!(result, FileOpResult::Ok));
+        assert_eq!(
+            std::fs::read_to_string(&target).unwrap(),
+            "case-sensitive rename"
+        );
+        let names: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["mixedcase.txt"]);
     }
 
     #[test]
