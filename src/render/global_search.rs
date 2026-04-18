@@ -5,18 +5,56 @@ use super::colors;
 use super::popup::draw_border;
 use crate::search::{exact_match_positions, regex_match_positions, GlobalSearchType, SearchState};
 
+const MIN_DIALOG_WIDTH: u16 = 40;
+const MIN_DIALOG_HEIGHT: u16 = 10;
+const DIALOG_MARGIN: u16 = 4;
+const HEADER_ROWS: u16 = 3;
+const FOOTER_ROWS: u16 = 3;
+
+#[derive(Debug, Clone, Copy)]
+struct GlobalSearchLayout {
+    dialog: Rect,
+    input_y: u16,
+    separator_y: u16,
+    results_y: u16,
+    results_height: usize,
+    footer_status_y: u16,
+    footer_actions_y: u16,
+    content_width: usize,
+    footer_width: usize,
+}
+
+fn global_search_layout(area: Rect) -> GlobalSearchLayout {
+    let dialog = global_search_rect(area);
+    GlobalSearchLayout {
+        input_y: dialog.y + 1,
+        separator_y: dialog.y + 2,
+        results_y: dialog.y + 3,
+        results_height: dialog.height.saturating_sub(HEADER_ROWS + FOOTER_ROWS) as usize,
+        footer_status_y: dialog.y + dialog.height.saturating_sub(3),
+        footer_actions_y: dialog.y + dialog.height.saturating_sub(2),
+        content_width: dialog.width.saturating_sub(3) as usize,
+        footer_width: dialog.width.saturating_sub(4) as usize,
+        dialog,
+    }
+}
+
 /// Compute the centered overlay rect for the global search dialog.
 /// Shared between render and mouse-hit-test to avoid layout drift.
 pub fn global_search_rect(area: Rect) -> Rect {
     let width = (area.width * 3 / 5)
-        .max(40)
-        .min(area.width.saturating_sub(4));
+        .max(MIN_DIALOG_WIDTH)
+        .min(area.width.saturating_sub(DIALOG_MARGIN));
     let height = (area.height * 3 / 5)
-        .max(10)
-        .min(area.height.saturating_sub(4));
+        .max(MIN_DIALOG_HEIGHT)
+        .min(area.height.saturating_sub(DIALOG_MARGIN));
     let x = area.x + (area.width.saturating_sub(width)) / 2;
     let y = area.y + (area.height.saturating_sub(height)) / 2;
     Rect::new(x, y, width, height)
+}
+
+pub(crate) fn global_search_results_height(area: Rect) -> usize {
+    global_search_layout(area).results_height
 }
 
 /// Overlay widget for global file/content search (fd/rg).
@@ -93,13 +131,87 @@ fn render_highlighted_text(
     }
 }
 
+fn footer_actions(max_width: usize) -> String {
+    if max_width == 0 {
+        return String::new();
+    }
+
+    let candidates = [
+        "[Enter] open/toggle  [Tab] reveal path  [Esc] close",
+        "[Enter] open  [Tab] reveal path  [Esc] close",
+        "[Enter] open  [Tab] path  [Esc] close",
+        "Enter open  Tab path  Esc close",
+        "Enter open  Esc close",
+        "Enter  Esc",
+    ];
+
+    for candidate in candidates {
+        if UnicodeWidthStr::width(candidate) <= max_width {
+            return candidate.to_string();
+        }
+    }
+
+    super::text_util::truncate_with_ellipsis("Enter open  Esc close", max_width)
+}
+
+fn footer_status(state: &SearchState) -> Option<(String, ratatui::style::Style)> {
+    let has_results = state.has_any_results();
+
+    if let Some(err) = state.global_error.as_deref() {
+        return Some((err.to_string(), colors::popup_warning()));
+    }
+
+    if state.global_loading && !has_results {
+        return Some((
+            "Searching workspace...".to_string(),
+            colors::popup_warning(),
+        ));
+    }
+
+    if !has_results {
+        if state.query.is_empty() {
+            return None;
+        }
+        return Some(("No results".to_string(), colors::popup_dim()));
+    }
+
+    let summary = match state.global_search_type {
+        GlobalSearchType::Unified => format!(
+            "{} paths, {} text files, {} matches",
+            state.global_results.len(),
+            state.grouped_results.len(),
+            state.content_match_count()
+        ),
+        GlobalSearchType::FileName if !state.global_results.is_empty() => {
+            format!(
+                "{}/{}",
+                state.global_selected + 1,
+                state.global_results.len()
+            )
+        }
+        GlobalSearchType::Content if !state.grouped_results.is_empty() => format!(
+            "{} files, {} matches",
+            state.grouped_results.len(),
+            state.content_match_count()
+        ),
+        _ => String::new(),
+    };
+
+    if summary.is_empty() {
+        None
+    } else {
+        Some((summary, colors::popup_success()))
+    }
+}
+
 impl Widget for GlobalSearchOverlay<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         if area.width < 10 || area.height < 6 {
             return;
         }
 
-        let dialog = global_search_rect(area);
+        let layout = global_search_layout(area);
+        let dialog = layout.dialog;
 
         let base = colors::popup_base();
         let border_style = colors::popup_border();
@@ -124,24 +236,23 @@ impl Widget for GlobalSearchOverlay<'_> {
             colors::popup_border().add_modifier(Modifier::BOLD),
         );
 
-        let input_y = dialog.y + 1;
         let input_style = colors::popup_input();
         for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
-            if let Some(cell) = buf.cell_mut((col, input_y)) {
+            if let Some(cell) = buf.cell_mut((col, layout.input_y)) {
                 cell.reset();
                 cell.set_style(input_style);
             }
         }
 
         let prompt = " > ";
-        buf.set_string(dialog.x + 1, input_y, prompt, colors::popup_prompt());
+        buf.set_string(dialog.x + 1, layout.input_y, prompt, colors::popup_prompt());
 
         let input_x = dialog.x + 1 + prompt.len() as u16;
         // Available width: dialog.width - left_border(1) - prompt(3) - right_border(1)
         let input_width = dialog.width.saturating_sub(1 + prompt.len() as u16 + 1) as usize;
         let query_display =
             super::text_util::truncate_start_to_display_width(&self.state.query, input_width);
-        buf.set_string(input_x, input_y, &query_display, input_style);
+        buf.set_string(input_x, layout.input_y, &query_display, input_style);
 
         let query_display_width = UnicodeWidthStr::width(self.state.query.as_str());
         let cursor_pos = if query_display_width > input_width {
@@ -149,86 +260,46 @@ impl Widget for GlobalSearchOverlay<'_> {
         } else {
             self.state.cursor_display_column()
         };
-        if let Some(cell) = buf.cell_mut((input_x + cursor_pos as u16, input_y)) {
+        if let Some(cell) = buf.cell_mut((input_x + cursor_pos as u16, layout.input_y)) {
             cell.set_style(colors::popup_cursor());
             if cell.symbol() == " " || cell.symbol().is_empty() {
                 cell.set_symbol(" ");
             }
         }
 
-        let sep_y = dialog.y + 2;
         for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
-            if let Some(cell) = buf.cell_mut((col, sep_y)) {
+            if let Some(cell) = buf.cell_mut((col, layout.separator_y)) {
                 cell.set_symbol("─");
                 cell.set_style(border_style);
             }
         }
 
-        let results_y = dialog.y + 3;
-        let results_height = dialog.height.saturating_sub(5) as usize; // -3 top, -2 bottom
-        let content_width = (dialog.width.saturating_sub(3)) as usize;
         let has_results = self.state.has_any_results();
 
-        if self.state.global_loading && !has_results {
+        if has_results && layout.results_height > 0 {
+            self.render_results(
+                buf,
+                dialog,
+                layout.results_y,
+                layout.results_height,
+                layout.content_width,
+                base,
+            );
+        }
+
+        if let Some((status, style)) = footer_status(self.state) {
+            let display = super::text_util::truncate_with_ellipsis(&status, layout.footer_width);
+            buf.set_string(dialog.x + 2, layout.footer_status_y, display, style);
+        }
+
+        let actions = footer_actions(layout.footer_width);
+        if !actions.is_empty() {
             buf.set_string(
                 dialog.x + 2,
-                results_y,
-                "Searching workspace...",
-                colors::popup_warning(),
+                layout.footer_actions_y,
+                actions,
+                colors::popup_dim(),
             );
-        } else if !has_results {
-            if let Some(ref err) = self.state.global_error {
-                let display = super::text_util::truncate_with_ellipsis(err, content_width);
-                buf.set_string(dialog.x + 2, results_y, display, colors::popup_error());
-            } else if !self.state.query.is_empty() {
-                buf.set_string(dialog.x + 2, results_y, "No results", colors::popup_dim());
-            }
-        } else {
-            self.render_results(buf, dialog, results_y, results_height, content_width, base);
-        }
-
-        let help_y = dialog.y + dialog.height.saturating_sub(2);
-        let help = "[Enter] select/toggle  [Tab] reveal path  [Esc] cancel";
-        buf.set_string(dialog.x + 2, help_y, help, colors::popup_dim());
-
-        if let Some(ref err) = self.state.global_error {
-            if has_results {
-                let warn = super::text_util::truncate_with_ellipsis(err, content_width);
-                buf.set_string(
-                    dialog.x + 2,
-                    help_y.saturating_sub(1),
-                    warn,
-                    colors::popup_warning(),
-                );
-            }
-        }
-
-        let count_str = match self.state.global_search_type {
-            GlobalSearchType::Unified => format!(
-                " {} paths, {} text files, {} matches ",
-                self.state.global_results.len(),
-                self.state.grouped_results.len(),
-                self.state.content_match_count()
-            ),
-            GlobalSearchType::FileName if !self.state.global_results.is_empty() => format!(
-                " {}/{} ",
-                self.state.global_selected + 1,
-                self.state.global_results.len()
-            ),
-            GlobalSearchType::Content if !self.state.grouped_results.is_empty() => format!(
-                " {} files, {} matches ",
-                self.state.grouped_results.len(),
-                self.state.content_match_count()
-            ),
-            _ => String::new(),
-        };
-        if has_results && !count_str.is_empty() {
-            let count_x = dialog
-                .x
-                .saturating_add(dialog.width.saturating_sub(count_str.width() as u16 + 2));
-            if count_x > dialog.x + 2 {
-                buf.set_string(count_x, help_y, &count_str, colors::popup_success());
-            }
         }
     }
 }
@@ -513,12 +584,11 @@ mod tests {
         let widget = GlobalSearchOverlay { state: &state };
         widget.render(area, &mut buf);
 
-        // "No results" should appear somewhere in the buffer
-        let text: String = (0..area.width)
+        let layout = global_search_layout(area);
+        let text: String = (layout.dialog.x + 1..layout.dialog.x + layout.dialog.width - 1)
             .filter_map(|x| {
-                let dialog = global_search_rect(area);
-                let y = dialog.y + 3;
-                buf.cell((x, y)).map(|c| c.symbol().to_string())
+                buf.cell((x, layout.footer_status_y))
+                    .map(|c| c.symbol().to_string())
             })
             .collect();
         assert!(
@@ -609,5 +679,82 @@ mod tests {
 
         assert_eq!(cell.fg, colors::find_match());
         assert!(cell.modifier.contains(Modifier::UNDERLINED));
+    }
+
+    #[test]
+    fn footer_actions_do_not_render_past_dialog_border_on_narrow_layouts() {
+        let state = SearchState::new(SearchMode::Global);
+        let area = Rect::new(0, 0, 50, 20);
+        let mut buf = Buffer::empty(area);
+        let widget = GlobalSearchOverlay { state: &state };
+        widget.render(area, &mut buf);
+
+        let dialog = global_search_rect(area);
+        let footer_y = dialog.y + dialog.height.saturating_sub(2);
+
+        for x in dialog.x + dialog.width..area.width {
+            let cell = buf.cell((x, footer_y)).unwrap();
+            assert_eq!(
+                cell.symbol(),
+                " ",
+                "footer action text overflowed outside dialog at x={x}: {:?}",
+                cell.symbol()
+            );
+        }
+    }
+
+    #[test]
+    fn footer_reserves_a_dedicated_status_row_for_results() {
+        let mut state = SearchState::new(SearchMode::Global);
+        state.global_search_type = GlobalSearchType::FileName;
+        state.global_results = vec![
+            crate::search::GlobalSearchResult {
+                path: PathBuf::from("src/main.rs"),
+                display: "src/main.rs".into(),
+                line: None,
+                context: None,
+            },
+            crate::search::GlobalSearchResult {
+                path: PathBuf::from("src/lib.rs"),
+                display: "src/lib.rs".into(),
+                line: None,
+                context: None,
+            },
+            crate::search::GlobalSearchResult {
+                path: PathBuf::from("src/app.rs"),
+                display: "src/app.rs".into(),
+                line: None,
+                context: None,
+            },
+            crate::search::GlobalSearchResult {
+                path: PathBuf::from("src/config.rs"),
+                display: "src/config.rs".into(),
+                line: None,
+                context: None,
+            },
+        ];
+
+        let area = Rect::new(0, 0, 80, 18);
+        let mut buf = Buffer::empty(area);
+        let widget = GlobalSearchOverlay { state: &state };
+        widget.render(area, &mut buf);
+
+        let dialog = global_search_rect(area);
+        let status_y = dialog.y + dialog.height.saturating_sub(3);
+        let status_text: String = (dialog.x + 1..dialog.x + dialog.width.saturating_sub(1))
+            .filter_map(|x| {
+                buf.cell((x, status_y))
+                    .map(|cell| cell.symbol().to_string())
+            })
+            .collect();
+
+        assert!(
+            status_text.contains("1/4"),
+            "expected footer status row to show selection summary, got {status_text:?}"
+        );
+        assert!(
+            !status_text.contains("src/config.rs"),
+            "expected footer status row to stay reserved for footer content, got {status_text:?}"
+        );
     }
 }

@@ -252,11 +252,8 @@ impl App {
         }
 
         if self.ui.input_mode == InputMode::GlobalSearch {
-            // Keep this formula in sync with GlobalSearchOverlay::render.
-            let dialog_height = (size.height * 3 / 5)
-                .max(10)
-                .min(size.height.saturating_sub(4));
-            self.search_state.global_visible_height = dialog_height.saturating_sub(5) as usize;
+            self.search_state.global_visible_height =
+                crate::render::global_search::global_search_results_height(size);
 
             let overlay = GlobalSearchOverlay {
                 state: &self.search_state,
