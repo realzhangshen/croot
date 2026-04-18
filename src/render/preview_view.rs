@@ -100,21 +100,6 @@ impl StatefulWidget for PreviewView<'_> {
 }
 
 impl PreviewView<'_> {
-    fn search_target_line_style() -> Style {
-        Style::reset().fg(Color::White).bg(Color::Blue)
-    }
-
-    fn search_target_gutter_style() -> Style {
-        Self::search_target_line_style().add_modifier(Modifier::DIM)
-    }
-
-    fn search_target_match_style() -> Style {
-        Style::reset()
-            .fg(colors::git_modified())
-            .bg(Color::Blue)
-            .add_modifier(Modifier::UNDERLINED | Modifier::BOLD)
-    }
-
     fn render_header(&self, area: Rect, buf: &mut Buffer, state: &PreviewState) {
         let bg = if self.focused {
             colors::status_bar_bg()
@@ -217,8 +202,7 @@ impl PreviewView<'_> {
     fn render_content(&self, area: Rect, buf: &mut Buffer, state: &PreviewState) {
         let height = area.height as usize;
         let has_diff = state.line_diffs.is_some();
-        let line_highlight_style = Self::search_target_line_style();
-        let line_highlight_bg = Color::Blue;
+        let line_highlight_style = colors::preview_search_target_row();
         let gutter_width = compute_gutter_width(
             self.config.show_line_numbers,
             self.config.show_git_diff,
@@ -233,7 +217,7 @@ impl PreviewView<'_> {
         // Pre-compute normalized selection range
         let sel_range = state.selection.normalized();
         let highlight_style = Style::default().add_modifier(Modifier::REVERSED);
-        let search_highlight_style = Self::search_target_match_style();
+        let search_highlight_style = colors::preview_search_target_match();
 
         for row in 0..height {
             let line_idx = state.scroll_offset + row;
@@ -271,7 +255,7 @@ impl PreviewView<'_> {
                     LineDiffStatus::Unchanged => (" ", Color::Reset),
                 };
                 let style = if is_search_target_line {
-                    Style::default().fg(color).bg(line_highlight_bg)
+                    colors::preview_search_target_text(Style::default().fg(color))
                 } else {
                     Style::default().fg(color)
                 };
@@ -287,7 +271,7 @@ impl PreviewView<'_> {
                     width = (line_num_width - 1) as usize
                 );
                 let gutter_style = if is_search_target_line {
-                    Self::search_target_gutter_style()
+                    colors::preview_search_target_gutter()
                 } else {
                     Style::default().fg(Color::DarkGray)
                 };
@@ -332,7 +316,7 @@ impl PreviewView<'_> {
                             .as_ref()
                             .is_some_and(|positions| positions.contains(&char_byte));
                         let base_style = if is_search_target_line {
-                            line_highlight_style
+                            colors::preview_search_target_text(*style)
                         } else {
                             *style
                         };
@@ -378,7 +362,7 @@ impl PreviewView<'_> {
                         let char_byte = line_byte;
                         line_byte += ch.len_utf8();
                         let base_style = if is_search_target_line {
-                            line_highlight_style
+                            colors::preview_search_target_text(*style)
                         } else {
                             *style
                         };
@@ -424,7 +408,7 @@ impl PreviewView<'_> {
                     }
                     let display = &text[..char_end];
                     let text_style = if is_search_target_line {
-                        line_highlight_style
+                        colors::preview_search_target_text(*style)
                     } else {
                         *style
                     };
@@ -449,7 +433,6 @@ fn render_centered_message(area: Rect, buf: &mut Buffer, msg: &str, fg: Color) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::colors;
     use ratatui::{buffer::Buffer, layout::Rect, style::Style, widgets::StatefulWidget};
 
     #[test]
@@ -551,9 +534,9 @@ mod tests {
         let match_y = area.y + 1;
         let cell = buf.cell((match_x, match_y)).unwrap();
 
-        assert_eq!(cell.fg, colors::git_modified());
-        assert_eq!(cell.bg, Color::Blue);
+        assert!(cell.modifier.contains(Modifier::REVERSED));
         assert!(cell.modifier.contains(Modifier::UNDERLINED));
+        assert!(cell.modifier.contains(Modifier::BOLD));
     }
 
     #[test]
@@ -578,12 +561,12 @@ mod tests {
         let line_number_cell = buf.cell((area.x, line_y)).unwrap();
         let trailing_cell = buf.cell((area.x + area.width - 1, line_y)).unwrap();
 
-        assert_eq!(line_number_cell.bg, Color::Blue);
-        assert_eq!(trailing_cell.bg, Color::Blue);
+        assert!(line_number_cell.modifier.contains(Modifier::REVERSED));
+        assert!(trailing_cell.modifier.contains(Modifier::REVERSED));
     }
 
     #[test]
-    fn preview_keeps_non_match_text_high_contrast_on_target_line() {
+    fn preview_uses_terminal_default_contrast_on_target_line() {
         let mut state = PreviewState::new();
         state.kind = PreviewKind::Text;
         state.total_lines = 1;
@@ -611,7 +594,8 @@ mod tests {
         let non_match_y = area.y + 1;
         let cell = buf.cell((non_match_x, non_match_y)).unwrap();
 
-        assert_eq!(cell.bg, Color::Blue);
-        assert_eq!(cell.fg, Color::White);
+        assert!(cell.modifier.contains(Modifier::REVERSED));
+        assert_eq!(cell.fg, Color::Reset);
+        assert_eq!(cell.bg, Color::Reset);
     }
 }

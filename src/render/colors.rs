@@ -117,6 +117,31 @@ pub fn hover_style() -> Style {
     Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM)
 }
 
+/// Preview search target row: rely on terminal reverse-video defaults for
+/// contrast instead of hard-coded fg/bg pairs.
+pub fn preview_search_target_row() -> Style {
+    Style::default().add_modifier(Modifier::REVERSED)
+}
+
+/// Preview search target gutter: same reverse-video row fill, but dimmer so
+/// line numbers stay secondary.
+pub fn preview_search_target_gutter() -> Style {
+    preview_search_target_row().add_modifier(Modifier::DIM)
+}
+
+/// Apply preview search target row styling to syntax-highlighted content while
+/// preserving non-color modifiers such as bold or italic.
+pub fn preview_search_target_text(base: Style) -> Style {
+    Style::default()
+        .add_modifier(Modifier::REVERSED | base.add_modifier)
+        .remove_modifier(base.sub_modifier)
+}
+
+/// Preview search target match: stronger emphasis within the reversed row.
+pub fn preview_search_target_match() -> Style {
+    Style::default().add_modifier(Modifier::REVERSED | Modifier::UNDERLINED | Modifier::BOLD)
+}
+
 /// Popup / menu base: REVERSED uses the terminal's default fg/bg pair,
 /// which themes carefully tune for optimal contrast.
 pub fn popup_base() -> Style {
