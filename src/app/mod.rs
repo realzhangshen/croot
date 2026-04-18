@@ -84,8 +84,6 @@ pub enum PostAction {
     OpenEditorSuspend(PathBuf, Option<usize>),
     /// Force cmux mode (context menu "Open in cmux Tab").
     OpenEditorCmux(PathBuf, Option<usize>),
-    /// Open in external/GUI editor (background, no TUI suspend).
-    OpenExternalEditor(PathBuf, Option<usize>),
 }
 
 /// Modal overlay state: input mode, context menu, dialogs, picker, and error messages.
@@ -232,22 +230,6 @@ impl App {
     }
 }
 
-/// Build argv for an external editor command, appending `file` or `file:LINE`
-/// (the goto syntax understood by VS Code `-g`, Sublime, etc.).
-fn build_external_editor_argv(
-    editor_cmd: &str,
-    path: &std::path::Path,
-    line: Option<usize>,
-) -> Vec<String> {
-    let mut argv = shell_words::split(editor_cmd).unwrap_or_else(|_| vec![editor_cmd.to_string()]);
-    let file_arg = match line {
-        Some(n) => format!("{}:{n}", path.display()),
-        None => path.display().to_string(),
-    };
-    argv.push(file_arg);
-    argv
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,8 +241,6 @@ mod tests {
     use crate::tree::node::TreeNode;
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
     use ratatui::backend::TestBackend;
-    use std::path::Path;
-
     /// Helper to create a minimal App rooted in a temp directory.
     /// Returns (App, `TempDir`) -- the `TempDir` must be kept alive for the test duration.
     fn test_app() -> (App, tempfile::TempDir) {
@@ -637,7 +617,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn global_search_confirm_opens_editor() {
+    async fn global_search_confirm_selects_file_in_tree() {
         let (mut app, _tmp) = test_app();
         let test_file = app.root.join("preview_test.txt");
         std::fs::write(&test_file, "content").unwrap();
@@ -657,12 +637,12 @@ mod tests {
         let (ptx, _prx) = mpsc::channel(16);
         let search_tx: mpsc::Sender<SearchBatch> = mpsc::channel(1).0;
 
-        // Default open_mode is External -> should return OpenExternalEditor
         let post = app.handle_action(&Action::GlobalSearchConfirm, &ptx, &search_tx);
         assert_eq!(app.ui.input_mode, InputMode::Normal);
-        assert!(
-            matches!(post, PostAction::OpenExternalEditor(ref p, None) if *p == test_file),
-            "Expected OpenExternalEditor, got {post:?}"
+        assert!(matches!(post, PostAction::None));
+        assert_eq!(
+            app.tree.selected().map(|n| n.path.clone()),
+            Some(test_file.clone())
         );
 
         let _ = std::fs::remove_file(&test_file);
@@ -702,10 +682,10 @@ mod tests {
         let _ = std::fs::remove_file(&test_file);
     }
 
-    // -- Content search: confirm opens editor, goto navigates --
+    // -- Content search: confirm and goto stay inside the TUI --
 
-    #[test]
-    fn content_search_confirm_on_match_defaults_to_external() {
+    #[tokio::test]
+    async fn content_search_confirm_on_match_shows_preview_at_line() {
         let (mut app, _tmp) = test_app();
         let test_file = app.root.join("match_test.rs");
         std::fs::write(&test_file, "line1\nline2\nTODO: fix\n").unwrap();
@@ -728,47 +708,16 @@ mod tests {
         let (ptx, _prx) = mpsc::channel(16);
         let stx = mpsc::channel(1).0;
 
-        // Default open_mode is External
         let post = app.handle_action(&Action::GlobalSearchConfirm, &ptx, &stx);
         assert_eq!(app.ui.input_mode, InputMode::Normal);
-        assert!(
-            matches!(post, PostAction::OpenExternalEditor(ref p, Some(3)) if *p == test_file),
-            "Expected OpenExternalEditor with line 3, got {post:?}"
+        assert!(matches!(post, PostAction::None));
+        assert_eq!(
+            app.tree.selected().map(|n| n.path.clone()),
+            Some(test_file.clone())
         );
-    }
-
-    #[test]
-    fn content_search_confirm_editor_mode_returns_open_editor() {
-        use crate::config::SearchOpenMode;
-        let (mut app, _tmp) = test_app();
-        let test_file = app.root.join("match_test2.rs");
-        std::fs::write(&test_file, "line1\nline2\nTODO: fix\n").unwrap();
-        app.tree.refresh();
-        app.config.search.open_mode = SearchOpenMode::Editor;
-
-        app.ui.input_mode = InputMode::GlobalSearch;
-        app.search_state = SearchState::new(SearchMode::Global);
-        app.search_state.global_search_type = GlobalSearchType::Content;
-        app.search_state.grouped_results.push(FileGroup {
-            path: test_file.clone(),
-            display: "match_test2.rs".to_string(),
-            matches: vec![ContentMatch {
-                line: Some(3),
-                context: Some("TODO: fix".to_string()),
-            }],
-            collapsed: false,
-        });
-        app.search_state.global_selected = 1;
-
-        let (ptx, _prx) = mpsc::channel(16);
-        let stx = mpsc::channel(1).0;
-
-        let post = app.handle_action(&Action::GlobalSearchConfirm, &ptx, &stx);
-        assert_eq!(app.ui.input_mode, InputMode::Normal);
-        assert!(
-            matches!(post, PostAction::OpenEditor(ref p, Some(3)) if *p == test_file),
-            "Expected OpenEditor with line 3, got {post:?}"
-        );
+        assert!(app.preview.visible);
+        assert_eq!(app.preview.pending_line, Some((test_file.clone(), 3)));
+        assert!(app.preview.debounce_handle.is_some());
     }
 
     #[test]
@@ -1279,33 +1228,6 @@ mod tests {
             let post = app.handle_action(&Action::OpenInEditor, &ptx, &stx);
             assert!(matches!(post, PostAction::None));
         }
-    }
-
-    // -- build_external_editor_argv --
-
-    #[test]
-    fn build_external_editor_argv_no_line() {
-        let argv = build_external_editor_argv("code -g", Path::new("/tmp/f.rs"), None);
-        assert_eq!(argv, vec!["code", "-g", "/tmp/f.rs"]);
-    }
-
-    #[test]
-    fn build_external_editor_argv_with_line() {
-        let argv = build_external_editor_argv("code -g", Path::new("/tmp/f.rs"), Some(42));
-        assert_eq!(argv, vec!["code", "-g", "/tmp/f.rs:42"]);
-    }
-
-    #[test]
-    fn build_external_editor_argv_subl() {
-        let argv = build_external_editor_argv("subl", Path::new("src/main.rs"), Some(10));
-        assert_eq!(argv, vec!["subl", "src/main.rs:10"]);
-    }
-
-    #[test]
-    fn build_external_editor_argv_path_with_spaces() {
-        let argv =
-            build_external_editor_argv("code -g", Path::new("/tmp/my project/f.rs"), Some(5));
-        assert_eq!(argv, vec!["code", "-g", "/tmp/my project/f.rs:5"]);
     }
 
     // -- Action handling: error auto-dismiss --

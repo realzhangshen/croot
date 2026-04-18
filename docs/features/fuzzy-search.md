@@ -4,7 +4,7 @@ croot now uses one unified workspace search instead of splitting search into loc
 
 ## Unified Workspace Search
 
-Press `/` to open the search overlay. The legacy default keys `f`, `s`, and `S` also open the same overlay, so existing muscle memory still works.
+Press `/` to open the search overlay. If you want compatibility aliases, you can still opt back into `f`, `s`, or `S` in config, but `/` is the only built-in entry by default.
 
 For each query, croot runs both search backends:
 
@@ -16,6 +16,7 @@ Results are shown together in one list:
 - file-name matches appear as direct file rows
 - content matches are grouped by file
 - grouped text results can be collapsed or expanded in place
+- matching characters in file names and matched lines are highlighted inline
 
 This makes the search flow closer to VS Code: type once, then decide whether you want the file itself or a specific text hit inside it.
 
@@ -23,12 +24,13 @@ This makes the search flow closer to VS Code: type once, then decide whether you
 
 - Type to update results live
 - `Up` / `Down` move through the mixed result list
-- `Enter` opens the selected file or match
+- `Enter` selects the current file result in the tree
+- `Enter` on a text match selects the file, opens preview, and jumps to the matched line
 - `Enter` on a grouped text row toggles collapse
-- `Tab` jumps to the selected file in the tree without opening it
+- `Tab` reveals the underlying file in the tree; on a text match it also keeps the preview line jump
 - `Esc` closes the overlay
 
-When you open a text match, croot passes the matched line number through to the configured editor. When you jump with `Tab`, croot navigates the tree and scrolls the preview toward that line.
+This keeps the interaction inside croot instead of immediately suspending into an editor.
 
 ## Requirements
 
@@ -46,14 +48,12 @@ If one backend is unavailable, croot still shows results from the other and surf
 fd_command = "fd"       # Path to fd binary
 rg_command = "rg"       # Path to rg binary
 max_results = 500       # Maximum file rows per search source
-open_mode = "external"  # "external" opens in a GUI/background editor;
-                        # "editor" suspends croot for terminal editors
 ```
 
 ```toml
 [keybindings]
 search = "/"                 # Primary unified search entry
-filter = "f"                 # Legacy alias -> unified search
-global_search = "s"          # Legacy alias -> unified search
-global_search_content = "S"  # Legacy alias -> unified search
+filter = "f"                 # Optional legacy alias -> unified search
+global_search = "s"          # Optional legacy alias -> unified search
+global_search_content = "S"  # Optional legacy alias -> unified search
 ```

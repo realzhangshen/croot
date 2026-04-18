@@ -245,9 +245,41 @@ impl App {
         self.ui.input_mode = InputMode::Normal;
     }
 
-    /// Handle Enter in unified search: open file result, toggle a content
-    /// header, or navigate to a content match line.
-    pub(super) fn handle_unified_search_confirm(&mut self) -> PostAction {
+    fn select_search_path(
+        &mut self,
+        path: PathBuf,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
+    ) -> PostAction {
+        self.close_global_search_overlay();
+        self.tree.navigate_to_path(&path);
+        self.reapply_git();
+        if self.preview.visible {
+            self.trigger_preview_load(preview_tx);
+        }
+        PostAction::None
+    }
+
+    fn select_search_match(
+        &mut self,
+        path: PathBuf,
+        line: Option<usize>,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
+    ) -> PostAction {
+        if let Some(rg_line) = line {
+            self.preview.pending_line = Some((path.clone(), rg_line));
+        }
+        self.preview.visible = true;
+        self.close_global_search_overlay();
+        self.tree.navigate_to_path(&path);
+        self.reapply_git();
+        self.trigger_preview_load(preview_tx);
+        PostAction::None
+    }
+
+    pub(super) fn handle_unified_search_confirm_with_preview(
+        &mut self,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
+    ) -> PostAction {
         let Some(item) = self
             .search_state
             .resolve_item(self.search_state.global_selected)
@@ -259,8 +291,7 @@ impl App {
                 let Some(result) = self.search_state.global_results.get(idx).cloned() else {
                     return PostAction::None;
                 };
-                self.close_global_search_overlay();
-                self.search_open_action(result.path, None)
+                self.select_search_path(result.path, preview_tx)
             }
             GroupedItem::FileHeader(g) => {
                 let header_idx = self.search_state.flat_index_of_header(g);
@@ -282,18 +313,8 @@ impl App {
                 let group = &self.search_state.grouped_results[g];
                 let path = group.path.clone();
                 let line = group.matches[m].line;
-                self.close_global_search_overlay();
-                self.search_open_action(path, line)
+                self.select_search_match(path, line, preview_tx)
             }
-        }
-    }
-
-    /// Return the appropriate `PostAction` for opening a search result,
-    /// based on the configured `search.open_mode`.
-    pub(super) fn search_open_action(&self, path: PathBuf, line: Option<usize>) -> PostAction {
-        match self.config.search.open_mode {
-            crate::config::SearchOpenMode::External => PostAction::OpenExternalEditor(path, line),
-            crate::config::SearchOpenMode::Editor => PostAction::OpenEditor(path, line),
         }
     }
 
@@ -313,29 +334,17 @@ impl App {
                 let Some(result) = self.search_state.global_results.get(idx).cloned() else {
                     return;
                 };
-                self.close_global_search_overlay();
-                self.tree.navigate_to_path(&result.path);
-                self.reapply_git();
-                self.trigger_preview_load(preview_tx);
+                let _ = self.select_search_path(result.path, preview_tx);
             }
             GroupedItem::FileHeader(g) => {
                 let path = self.search_state.grouped_results[g].path.clone();
-                self.close_global_search_overlay();
-                self.tree.navigate_to_path(&path);
-                self.reapply_git();
-                self.trigger_preview_load(preview_tx);
+                let _ = self.select_search_path(path, preview_tx);
             }
             GroupedItem::MatchLine(g, m) => {
                 let group = &self.search_state.grouped_results[g];
                 let path = group.path.clone();
                 let line = group.matches[m].line;
-                if let Some(rg_line) = line {
-                    self.preview.pending_line = Some((path.clone(), rg_line));
-                }
-                self.close_global_search_overlay();
-                self.tree.navigate_to_path(&path);
-                self.reapply_git();
-                self.trigger_preview_load(preview_tx);
+                let _ = self.select_search_match(path, line, preview_tx);
             }
         }
     }

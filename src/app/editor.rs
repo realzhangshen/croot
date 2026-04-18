@@ -44,28 +44,6 @@ impl App {
         }
     }
 
-    /// Open `path` in `editor.external` (no TUI suspend), falling back to
-    /// `open_externally` when the config does not set one.
-    pub(super) fn open_in_external_editor(&mut self, path: &std::path::Path, line: Option<usize>) {
-        let Some(ext_cmd) = crate::config::resolve_external_editor(&self.config) else {
-            self.open_externally(path);
-            return;
-        };
-        let argv = build_external_editor_argv(&ext_cmd, path, line);
-        let Some((cmd, args)) = argv.split_first() else {
-            return;
-        };
-        if let Err(e) = std::process::Command::new(cmd)
-            .args(args)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-        {
-            self.show_error(format!("Failed to open external editor '{cmd}': {e}"));
-        }
-    }
-
     /// Suspend the terminal, spawn the editor, then resume.
     pub(super) fn open_editor_suspend<B: ratatui::backend::Backend>(
         &mut self,

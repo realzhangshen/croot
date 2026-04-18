@@ -290,7 +290,7 @@ impl App {
                 }
             }
             Action::GlobalSearchConfirm => {
-                post = self.handle_unified_search_confirm();
+                post = self.handle_unified_search_confirm_with_preview(preview_tx);
             }
             Action::GlobalSearchCancel => {
                 self.close_global_search_overlay();

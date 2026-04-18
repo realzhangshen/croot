@@ -1,9 +1,9 @@
 use ratatui::{buffer::Buffer, layout::Rect, style::Modifier, widgets::Widget};
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::colors;
 use super::popup::draw_border;
-use crate::search::{GlobalSearchType, SearchState};
+use crate::search::{exact_match_positions, regex_match_positions, GlobalSearchType, SearchState};
 
 /// Compute the centered overlay rect for the global search dialog.
 /// Shared between render and mouse-hit-test to avoid layout drift.
@@ -22,6 +22,75 @@ pub fn global_search_rect(area: Rect) -> Rect {
 /// Overlay widget for global file/content search (fd/rg).
 pub struct GlobalSearchOverlay<'a> {
     pub state: &'a SearchState,
+}
+
+fn highlight_positions(query: &str, target: &str) -> Vec<usize> {
+    if query.is_empty() {
+        return Vec::new();
+    }
+    if let Some(positions) = exact_match_positions(query, target) {
+        return positions;
+    }
+
+    let smart_case_insensitive = !query.chars().any(char::is_uppercase);
+    let regex = regex::RegexBuilder::new(query)
+        .case_insensitive(smart_case_insensitive)
+        .build()
+        .ok();
+    regex
+        .and_then(|re| regex_match_positions(&re, target))
+        .unwrap_or_default()
+}
+
+fn highlight_style(base: ratatui::style::Style, selected: bool) -> ratatui::style::Style {
+    if selected {
+        base.add_modifier(Modifier::UNDERLINED)
+    } else {
+        base.fg(colors::find_match())
+            .add_modifier(Modifier::UNDERLINED | Modifier::BOLD)
+    }
+}
+
+fn render_highlighted_text(
+    buf: &mut Buffer,
+    x: u16,
+    y: u16,
+    text: &str,
+    max_width: usize,
+    base: ratatui::style::Style,
+    highlight: ratatui::style::Style,
+    positions: &[usize],
+) {
+    if max_width == 0 {
+        return;
+    }
+
+    let mut used = 0usize;
+    let mut cursor_x = x;
+    let mut truncated = false;
+    let mut chars = text.char_indices().peekable();
+
+    while let Some((byte_idx, ch)) = chars.next() {
+        let width = UnicodeWidthChar::width(ch).unwrap_or(0);
+        let has_more = chars.peek().is_some();
+        if used + width > max_width || (has_more && used + width == max_width) {
+            truncated = true;
+            break;
+        }
+
+        let style = if positions.contains(&byte_idx) {
+            highlight
+        } else {
+            base
+        };
+        buf.set_string(cursor_x, y, ch.to_string(), style);
+        cursor_x = cursor_x.saturating_add(width as u16);
+        used += width;
+    }
+
+    if truncated {
+        buf.set_string(cursor_x, y, "…", base);
+    }
 }
 
 impl Widget for GlobalSearchOverlay<'_> {
@@ -119,7 +188,7 @@ impl Widget for GlobalSearchOverlay<'_> {
         }
 
         let help_y = dialog.y + dialog.height.saturating_sub(2);
-        let help = "[Enter] open/toggle  [Tab] go to  [Esc] cancel";
+        let help = "[Enter] select/toggle  [Tab] reveal file  [Esc] cancel";
         buf.set_string(dialog.x + 2, help_y, help, colors::popup_dim());
 
         if let Some(ref err) = self.state.global_error {
@@ -212,11 +281,21 @@ impl GlobalSearchOverlay<'_> {
                     } else {
                         ""
                     };
-                    let display = super::text_util::truncate_with_ellipsis(
-                        &format!("{label}{}", result.display),
-                        content_width,
+                    let start_x = dialog.x + 2;
+                    buf.set_string(start_x, row_y, label, style);
+                    let consumed = UnicodeWidthStr::width(label);
+                    let max_width = content_width.saturating_sub(consumed);
+                    let positions = highlight_positions(&self.state.query, &result.display);
+                    render_highlighted_text(
+                        buf,
+                        start_x + consumed as u16,
+                        row_y,
+                        &result.display,
+                        max_width,
+                        style,
+                        highlight_style(style, is_selected),
+                        &positions,
                     );
-                    buf.set_string(dialog.x + 2, row_y, &display, style);
                 }
                 crate::search::GroupedItem::FileHeader(g) => {
                     let Some(group) = self.state.grouped_results.get(g) else {
@@ -233,14 +312,39 @@ impl GlobalSearchOverlay<'_> {
                     } else {
                         ""
                     };
-                    let header = format!("{prefix}{indicator}{}{}", group.display, match_label);
-                    let display = super::text_util::truncate_with_ellipsis(&header, content_width);
+                    let start_x = dialog.x + 2;
+                    let header_prefix = format!("{prefix}{indicator}");
                     buf.set_string(
-                        dialog.x + 2,
+                        start_x,
                         row_y,
-                        &display,
+                        &header_prefix,
                         style.add_modifier(Modifier::BOLD),
                     );
+                    let prefix_width = UnicodeWidthStr::width(header_prefix.as_str());
+                    let label_width = UnicodeWidthStr::width(match_label.as_str());
+                    let available = content_width
+                        .saturating_sub(prefix_width)
+                        .saturating_sub(label_width);
+                    let positions = highlight_positions(&self.state.query, &group.display);
+                    render_highlighted_text(
+                        buf,
+                        start_x + prefix_width as u16,
+                        row_y,
+                        &group.display,
+                        available,
+                        style.add_modifier(Modifier::BOLD),
+                        highlight_style(style.add_modifier(Modifier::BOLD), is_selected),
+                        &positions,
+                    );
+                    let display_width =
+                        UnicodeWidthStr::width(group.display.as_str()).min(available);
+                    let label_x = start_x + (prefix_width + display_width) as u16;
+                    let remaining = content_width.saturating_sub(prefix_width + display_width);
+                    if remaining > 0 {
+                        let label =
+                            super::text_util::truncate_with_ellipsis(&match_label, remaining);
+                        buf.set_string(label_x, row_y, &label, style.add_modifier(Modifier::BOLD));
+                    }
                 }
                 crate::search::GroupedItem::MatchLine(g, m) => {
                     let Some(group) = self.state.grouped_results.get(g) else {
@@ -249,15 +353,28 @@ impl GlobalSearchOverlay<'_> {
                     let Some(matched) = group.matches.get(m) else {
                         continue;
                     };
-                    let line_text = match (matched.line, &matched.context) {
-                        (Some(ln), Some(ctx)) => format!("        {:>5}: {}", ln, ctx.trim()),
-                        (Some(ln), None) => format!("        {:>5}:", ln),
-                        (None, Some(ctx)) => format!("        {}", ctx.trim()),
-                        (None, None) => "        ...".to_string(),
+                    let (prefix, content) = match (matched.line, &matched.context) {
+                        (Some(ln), Some(ctx)) => {
+                            (format!("        {:>5}: ", ln), ctx.trim().to_string())
+                        }
+                        (Some(ln), None) => (format!("        {:>5}: ", ln), String::new()),
+                        (None, Some(ctx)) => ("        ".to_string(), ctx.trim().to_string()),
+                        (None, None) => ("        ".to_string(), "...".to_string()),
                     };
-                    let display =
-                        super::text_util::truncate_with_ellipsis(&line_text, content_width);
-                    buf.set_string(dialog.x + 2, row_y, &display, style);
+                    let start_x = dialog.x + 2;
+                    buf.set_string(start_x, row_y, &prefix, style);
+                    let prefix_width = UnicodeWidthStr::width(prefix.as_str());
+                    let positions = highlight_positions(&self.state.query, &content);
+                    render_highlighted_text(
+                        buf,
+                        start_x + prefix_width as u16,
+                        row_y,
+                        &content,
+                        content_width.saturating_sub(prefix_width),
+                        style,
+                        highlight_style(style, is_selected),
+                        &positions,
+                    );
                 }
             }
         }
@@ -456,5 +573,41 @@ mod tests {
 
         assert!(all_text.contains("[file]"));
         assert!(all_text.contains("[text]"));
+    }
+
+    #[test]
+    fn unified_render_highlights_file_match_characters() {
+        let mut state = SearchState::new(SearchMode::Global);
+        state.global_search_type = GlobalSearchType::Unified;
+        state.query = "main".into();
+        state.global_results = vec![crate::search::GlobalSearchResult {
+            path: PathBuf::from("src/main.rs"),
+            display: "src/main.rs".into(),
+            line: None,
+            context: None,
+        }];
+        state.grouped_results = vec![FileGroup {
+            path: PathBuf::from("src/app.rs"),
+            display: "src/app.rs".into(),
+            matches: vec![ContentMatch {
+                line: Some(12),
+                context: Some("fn bootstrap()".into()),
+            }],
+            collapsed: false,
+        }];
+        state.global_selected = 1;
+
+        let area = Rect::new(0, 0, 90, 28);
+        let mut buf = Buffer::empty(area);
+        let widget = GlobalSearchOverlay { state: &state };
+        widget.render(area, &mut buf);
+
+        let dialog = global_search_rect(area);
+        let row_y = dialog.y + 3;
+        let match_x = dialog.x + 2 + "[file] src/".len() as u16;
+        let cell = buf.cell((match_x, row_y)).unwrap();
+
+        assert_eq!(cell.fg, colors::find_match());
+        assert!(cell.modifier.contains(Modifier::UNDERLINED));
     }
 }

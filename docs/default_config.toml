@@ -57,7 +57,6 @@ auto_preview = false
 # fd_command = "fd"
 # rg_command = "rg"
 # max_results = 500
-# open_mode = "external"  # "external" (GUI editor) or "editor" (terminal editor)
 
 # ── Layer 2: Simple toggles ──────────────────────────────
 
@@ -73,12 +72,12 @@ auto_preview = false
 # goto_top = "Home"       # default
 # goto_bottom = "End"     # default
 # search = "/"            # default — unified workspace search
-# filter = "f"            # default — legacy alias -> unified search
-# global_search = "s"     # default — legacy alias -> unified search
-# global_search_content = "S"  # default — legacy alias -> unified search
 # toggle_render = "m"     # default — toggle markdown rendered/raw
 #
 # Opt-in (no default, uncomment to enable):
+# filter = "f"            # legacy alias -> unified workspace search
+# global_search = "s"     # legacy alias -> unified workspace search
+# global_search_content = "S"  # legacy alias -> unified workspace search
 # quit = "q"
 # toggle = "o"
 # refresh = "r"

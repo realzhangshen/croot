@@ -138,21 +138,6 @@ impl Default for MouseConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SearchOpenMode {
-    /// Open search results in an external/GUI editor (background, no TUI suspend).
-    External,
-    /// Open search results in the terminal editor (suspend TUI).
-    Editor,
-}
-
-impl Default for SearchOpenMode {
-    fn default() -> Self {
-        Self::External
-    }
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SearchConfig {
     #[serde(default = "default_fd_command")]
@@ -161,8 +146,6 @@ pub struct SearchConfig {
     pub rg_command: String,
     #[serde(default = "default_max_results")]
     pub max_results: usize,
-    #[serde(default)]
-    pub open_mode: SearchOpenMode,
 }
 
 fn default_fd_command() -> String {
@@ -181,7 +164,6 @@ impl Default for SearchConfig {
             fd_command: default_fd_command(),
             rg_command: default_rg_command(),
             max_results: default_max_results(),
-            open_mode: SearchOpenMode::default(),
         }
     }
 }
@@ -250,12 +232,12 @@ define_keybinding_schema! {
         goto_top = "Home",
         goto_bottom = "End",
         search = "/",
-        filter = "f",
-        global_search = "s",
-        global_search_content = "S",
         toggle_render = "m",
     }
     opt_in {
+        filter,
+        global_search,
+        global_search_content,
         quit,
         toggle,
         refresh,
@@ -402,8 +384,6 @@ pub fn parse_color(s: &str) -> Option<Color> {
 pub struct EditorConfig {
     #[serde(default)]
     pub command: Option<String>,
-    #[serde(default)]
-    pub external: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -636,16 +616,6 @@ pub fn resolve_editor(config: &Config) -> String {
         }
     }
     "vi".to_string()
-}
-
-/// Resolve the external editor command from config, or `None` (caller falls back to OS open).
-pub fn resolve_external_editor(config: &Config) -> Option<String> {
-    config
-        .editor
-        .external
-        .as_ref()
-        .filter(|s| !s.is_empty())
-        .cloned()
 }
 
 /// Read a dotted key (e.g. `tree.show_hidden`) from the resolved config.
@@ -1074,78 +1044,6 @@ auto_preview = true
 ";
         let cfg: Config = toml::from_str(content).unwrap();
         assert!(cfg.preview.show_git_diff);
-    }
-
-    #[test]
-    fn search_open_mode_defaults_to_external() {
-        let config = Config::default();
-        assert_eq!(config.search.open_mode, SearchOpenMode::External);
-    }
-
-    #[test]
-    fn search_open_mode_parses_editor() {
-        let content = r#"
-[search]
-open_mode = "editor"
-"#;
-        let cfg: Config = toml::from_str(content).unwrap();
-        assert_eq!(cfg.search.open_mode, SearchOpenMode::Editor);
-    }
-
-    #[test]
-    fn search_open_mode_parses_external() {
-        let content = r#"
-[search]
-open_mode = "external"
-"#;
-        let cfg: Config = toml::from_str(content).unwrap();
-        assert_eq!(cfg.search.open_mode, SearchOpenMode::External);
-    }
-
-    #[test]
-    fn search_open_mode_defaults_when_missing_from_toml() {
-        let content = r"
-[search]
-max_results = 100
-";
-        let cfg: Config = toml::from_str(content).unwrap();
-        assert_eq!(cfg.search.open_mode, SearchOpenMode::External);
-    }
-
-    #[test]
-    fn editor_external_defaults_to_none() {
-        let config = Config::default();
-        assert!(config.editor.external.is_none());
-    }
-
-    #[test]
-    fn editor_external_parses_from_toml() {
-        let content = r#"
-[editor]
-external = "code -g"
-"#;
-        let cfg: Config = toml::from_str(content).unwrap();
-        assert_eq!(cfg.editor.external.as_deref(), Some("code -g"));
-    }
-
-    #[test]
-    fn resolve_external_editor_returns_none_when_unset() {
-        let config = Config::default();
-        assert!(resolve_external_editor(&config).is_none());
-    }
-
-    #[test]
-    fn resolve_external_editor_returns_configured_value() {
-        let mut config = Config::default();
-        config.editor.external = Some("code -g".to_string());
-        assert_eq!(resolve_external_editor(&config).as_deref(), Some("code -g"));
-    }
-
-    #[test]
-    fn resolve_external_editor_ignores_empty_string() {
-        let mut config = Config::default();
-        config.editor.external = Some(String::new());
-        assert!(resolve_external_editor(&config).is_none());
     }
 
     #[test]

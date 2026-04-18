@@ -123,9 +123,9 @@ pub enum Action {
     GlobalSearchChar(char),
     /// Global search input: backspace.
     GlobalSearchBackspace,
-    /// Global search: confirm selection (open in editor).
+    /// Global search: confirm selection inside the TUI, or toggle a text group.
     GlobalSearchConfirm,
-    /// Global search: navigate to file in tree without opening editor.
+    /// Global search: reveal the file in the tree.
     GlobalSearchGoto,
     /// Global search: cancel.
     GlobalSearchCancel,
@@ -179,13 +179,6 @@ pub fn build_keybinding_map(config: &KeybindingsConfig) -> KeybindingMap {
         (Action::GotoTop, "Home", &config.goto_top),
         (Action::GotoBottom, "End", &config.goto_bottom),
         (Action::StartFind, "/", &config.search),
-        (Action::StartFilter, "f", &config.filter),
-        (Action::StartGlobalSearch, "s", &config.global_search),
-        (
-            Action::StartGlobalSearchContent,
-            "S",
-            &config.global_search_content,
-        ),
         (Action::ToggleRender, "m", &config.toggle_render),
     ];
 
@@ -210,6 +203,12 @@ pub fn build_keybinding_map(config: &KeybindingsConfig) -> KeybindingMap {
 
     // Phase 2: Opt-in actions (no built-in default)
     let opt_ins: &[(&Option<String>, Action)] = &[
+        (&config.filter, Action::StartFilter),
+        (&config.global_search, Action::StartGlobalSearch),
+        (
+            &config.global_search_content,
+            Action::StartGlobalSearchContent,
+        ),
         (&config.quit, Action::Quit),
         (&config.toggle, Action::Toggle),
         (&config.refresh, Action::Refresh),
@@ -602,9 +601,12 @@ mod tests {
     }
 
     #[test]
-    fn uppercase_normalization_via_default_config() {
-        // End-to-end: build_keybinding_map with default config, then handle_key
-        let config = KeybindingsConfig::default();
+    fn uppercase_normalization_via_opt_in_config() {
+        // End-to-end: build_keybinding_map with an opt-in uppercase alias.
+        let config = KeybindingsConfig {
+            global_search_content: Some("S".to_string()),
+            ..Default::default()
+        };
         let map = build_keybinding_map(&config);
 
         // Char('S') + SHIFT → should reach StartGlobalSearchContent
@@ -619,6 +621,39 @@ mod tests {
         // Char('S') + NONE (legacy terminal) → should also reach StartGlobalSearchContent
         let action = handle_key(make_key(KeyCode::Char('S')), false, false, &map);
         assert_eq!(action, Action::StartGlobalSearchContent);
+    }
+
+    #[test]
+    fn legacy_search_aliases_are_opt_in() {
+        let config = KeybindingsConfig {
+            filter: Some("f".to_string()),
+            global_search: Some("s".to_string()),
+            global_search_content: Some("S".to_string()),
+            ..Default::default()
+        };
+        let map = build_keybinding_map(&config);
+
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('f'),
+                modifiers: KeyModifiers::NONE,
+            }),
+            Some(&Action::StartFilter)
+        );
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('s'),
+                modifiers: KeyModifiers::NONE,
+            }),
+            Some(&Action::StartGlobalSearch)
+        );
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('s'),
+                modifiers: KeyModifiers::SHIFT,
+            }),
+            Some(&Action::StartGlobalSearchContent)
+        );
     }
 
     #[test]
@@ -821,6 +856,27 @@ mod tests {
                 modifiers: KeyModifiers::NONE,
             }),
             Some(&Action::StartFind)
+        );
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('f'),
+                modifiers: KeyModifiers::NONE,
+            }),
+            None
+        );
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('s'),
+                modifiers: KeyModifiers::NONE,
+            }),
+            None
+        );
+        assert_eq!(
+            map.get(&KeyBinding {
+                code: KeyCode::Char('s'),
+                modifiers: KeyModifiers::SHIFT,
+            }),
+            None
         );
     }
 

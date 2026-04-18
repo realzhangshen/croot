@@ -161,7 +161,7 @@ impl App {
     pub(super) fn handle_global_search_mouse(
         &mut self,
         mouse: crossterm::event::MouseEvent,
-        _preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
+        preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
 
@@ -191,7 +191,7 @@ impl App {
 
             if clicked_index < self.search_state.visible_item_count() {
                 self.search_state.global_selected = clicked_index;
-                return self.handle_unified_search_confirm();
+                return self.handle_unified_search_confirm_with_preview(preview_tx);
             }
         }
 

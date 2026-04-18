@@ -366,9 +366,6 @@ impl App {
                         }
                     }
                 }
-                PostAction::OpenExternalEditor(path, line) => {
-                    self.open_in_external_editor(&path, line);
-                }
                 PostAction::None => {}
             }
 
