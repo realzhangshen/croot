@@ -250,6 +250,8 @@ impl App {
         path: PathBuf,
         preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) -> PostAction {
+        self.preview.pending_line = None;
+        self.preview.pending_highlight = None;
         self.close_global_search_overlay();
         self.tree.navigate_to_path(&path);
         self.reapply_git();
@@ -267,6 +269,15 @@ impl App {
     ) -> PostAction {
         if let Some(rg_line) = line {
             self.preview.pending_line = Some((path.clone(), rg_line));
+            self.preview.pending_highlight =
+                (!self.search_state.query.is_empty()).then(|| PendingPreviewHighlight {
+                    path: path.clone(),
+                    line: rg_line,
+                    query: self.search_state.query.clone(),
+                });
+        } else {
+            self.preview.pending_line = None;
+            self.preview.pending_highlight = None;
         }
         self.preview.visible = true;
         self.close_global_search_overlay();

@@ -56,7 +56,7 @@ mod refresh;
 mod search_ops;
 mod tree_ops;
 
-pub(super) use preview_controller::PreviewController;
+pub(super) use preview_controller::{PendingPreviewHighlight, PreviewController};
 pub(super) use refresh::RefreshCoordinator;
 
 /// Result of an async branch switch operation.
@@ -694,6 +694,7 @@ mod tests {
         app.ui.input_mode = InputMode::GlobalSearch;
         app.search_state = SearchState::new(SearchMode::Global);
         app.search_state.global_search_type = GlobalSearchType::Content;
+        app.search_state.query = "TODO".to_string();
         app.search_state.grouped_results.push(FileGroup {
             path: test_file.clone(),
             display: "match_test.rs".to_string(),
@@ -717,6 +718,14 @@ mod tests {
         );
         assert!(app.preview.visible);
         assert_eq!(app.preview.pending_line, Some((test_file.clone(), 3)));
+        assert_eq!(
+            app.preview.pending_highlight.as_ref().map(|pending| (
+                pending.path.clone(),
+                pending.line,
+                pending.query.clone()
+            )),
+            Some((test_file.clone(), 3, "TODO".to_string()))
+        );
         assert!(app.preview.debounce_handle.is_some());
     }
 
@@ -746,6 +755,53 @@ mod tests {
         assert!(app.search_state.grouped_results[0].collapsed);
         // Still in GlobalSearch mode (didn't close overlay)
         assert_eq!(app.ui.input_mode, InputMode::GlobalSearch);
+    }
+
+    #[test]
+    fn trigger_preview_load_applies_pending_search_jump_on_cache_hit() {
+        let (mut app, _tmp) = test_app_with_files();
+        let file_idx = (0..app.tree.len())
+            .find(|&i| !app.tree.nodes[i].is_dir())
+            .expect("should have a file node");
+        let file_path = app.tree.nodes[file_idx].path.clone();
+        let file_mtime = std::fs::metadata(&file_path).unwrap().modified().unwrap();
+        let git_diff_hint =
+            crate::git::diff::GitDiffHint::from_status(app.tree.nodes[file_idx].git_status);
+
+        app.tree.cursor = file_idx;
+        app.preview.visible = true;
+        app.preview.state.kind = PreviewKind::Text;
+        app.preview.state.current_path = Some(file_path.clone());
+        app.preview.state.content = vec![
+            vec![("line 1".to_string(), ratatui::style::Style::default())],
+            vec![("TODO: fix".to_string(), ratatui::style::Style::default())],
+            vec![("line 3".to_string(), ratatui::style::Style::default())],
+        ];
+        app.preview.state.total_lines = 3;
+        app.preview.state.cached_mtime = Some(file_mtime);
+        app.preview.state.cached_diff_hint = Some(git_diff_hint);
+        app.preview.pending_line = Some((file_path.clone(), 2));
+        app.preview.pending_highlight = Some(PendingPreviewHighlight {
+            path: file_path.clone(),
+            line: 2,
+            query: "TODO".to_string(),
+        });
+
+        let (preview_tx, _preview_rx) = mpsc::channel(1);
+        app.trigger_preview_load(&preview_tx);
+
+        assert_eq!(app.preview.state.scroll_offset, 0);
+        assert_eq!(
+            app.preview
+                .state
+                .search_highlight
+                .as_ref()
+                .map(|highlight| (highlight.line, highlight.query.clone())),
+            Some((1, "TODO".to_string()))
+        );
+        assert!(app.preview.pending_line.is_none());
+        assert!(app.preview.pending_highlight.is_none());
+        assert!(app.preview.debounce_handle.is_none());
     }
 
     #[tokio::test]

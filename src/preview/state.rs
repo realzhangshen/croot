@@ -75,6 +75,12 @@ pub enum PreviewKind {
     Image,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchHighlight {
+    pub line: usize,
+    pub query: String,
+}
+
 /// Holds the state of the built-in preview panel.
 pub struct PreviewState {
     /// Path currently being displayed.
@@ -91,6 +97,8 @@ pub struct PreviewState {
     pub file_info: String,
     /// Current mouse text selection.
     pub selection: Selection,
+    /// Active search-result highlight inside the preview pane.
+    pub search_highlight: Option<SearchHighlight>,
     /// Cached mtime of the currently displayed file (to skip redundant reloads).
     pub cached_mtime: Option<std::time::SystemTime>,
     /// Cached diff hint used when the current preview was generated. This
@@ -124,6 +132,7 @@ impl PreviewState {
             total_lines: 0,
             file_info: String::new(),
             selection: Selection::new(),
+            search_highlight: None,
             cached_mtime: None,
             cached_diff_hint: None,
             line_diffs: None,
@@ -151,6 +160,17 @@ impl PreviewState {
         }
     }
 
+    pub fn set_search_highlight(&mut self, rg_line: usize, query: &str) {
+        if query.is_empty() {
+            self.search_highlight = None;
+            return;
+        }
+        self.search_highlight = Some(SearchHighlight {
+            line: rg_line.saturating_sub(1),
+            query: query.to_string(),
+        });
+    }
+
     pub fn clear(&mut self) {
         self.current_path = None;
         self.content.clear();
@@ -159,6 +179,7 @@ impl PreviewState {
         self.total_lines = 0;
         self.file_info.clear();
         self.selection.clear();
+        self.search_highlight = None;
         self.cached_mtime = None;
         self.cached_diff_hint = None;
         self.line_diffs = None;
@@ -178,6 +199,7 @@ impl PreviewState {
         line_diffs: Option<Vec<LineDiffStatus>>,
         git_diff_hint: GitDiffHint,
     ) {
+        let keep_search_highlight = self.current_path.as_ref() == Some(&path);
         self.cached_mtime = std::fs::metadata(&path)
             .ok()
             .and_then(|m| m.modified().ok());
@@ -190,6 +212,9 @@ impl PreviewState {
         self.line_diffs = line_diffs;
         self.scroll_offset = 0;
         self.selection.clear();
+        if !keep_search_highlight {
+            self.search_highlight = None;
+        }
     }
 
     /// Apply an image preview result.
@@ -213,7 +238,18 @@ impl PreviewState {
         self.line_diffs = None;
         self.scroll_offset = 0;
         self.selection.clear();
+        self.search_highlight = None;
         self.image_state = Some(thread_proto);
+    }
+
+    pub fn search_highlight_positions(&self, line_idx: usize) -> Option<Vec<usize>> {
+        let highlight = self.search_highlight.as_ref()?;
+        if highlight.line != line_idx {
+            return None;
+        }
+        let line = self.content.get(line_idx)?;
+        let text = flatten_line(line);
+        crate::search::search_match_positions(&highlight.query, &text)
     }
 
     pub fn extract_selected_text(&self) -> Option<String> {
@@ -281,6 +317,14 @@ fn extract_line_range(spans: &[StyledSpan], col_start: usize, col_end: usize) ->
     result
 }
 
+fn flatten_line(spans: &[StyledSpan]) -> String {
+    let mut result = String::new();
+    for (text, _) in spans {
+        result.push_str(text);
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -316,6 +360,7 @@ mod tests {
         state.scroll_offset = 5;
         state.file_info = "test".into();
         state.current_path = Some(PathBuf::from("/tmp/test.rs"));
+        state.set_search_highlight(1, "hello");
 
         state.clear();
 
@@ -325,6 +370,7 @@ mod tests {
         assert_eq!(state.scroll_offset, 0);
         assert!(state.file_info.is_empty());
         assert!(state.current_path.is_none());
+        assert!(state.search_highlight.is_none());
         assert!(state.cached_mtime.is_none());
         assert!(state.line_diffs.is_none());
     }
@@ -441,6 +487,15 @@ mod tests {
         // Should not panic; extracts what's available
         let text = state.extract_selected_text().unwrap();
         assert!(text.contains("only line"));
+    }
+
+    #[test]
+    fn search_highlight_positions_match_target_line_only() {
+        let mut state = state_with_content(vec![vec![span("line one")], vec![span("TODO: fix")]]);
+        state.set_search_highlight(2, "TODO");
+
+        assert_eq!(state.search_highlight_positions(0), None);
+        assert_eq!(state.search_highlight_positions(1), Some(vec![0, 1, 2, 3]));
     }
 
     // ── scroll_to_line tests ──────────────────────────────────────────

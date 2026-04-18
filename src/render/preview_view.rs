@@ -216,6 +216,9 @@ impl PreviewView<'_> {
         // Pre-compute normalized selection range
         let sel_range = state.selection.normalized();
         let highlight_style = Style::default().add_modifier(Modifier::REVERSED);
+        let search_highlight_style = Style::default()
+            .fg(colors::find_match())
+            .add_modifier(Modifier::UNDERLINED | Modifier::BOLD);
 
         for row in 0..height {
             let line_idx = state.scroll_offset + row;
@@ -258,6 +261,7 @@ impl PreviewView<'_> {
             }
 
             let content_width = area.width.saturating_sub(gutter_width);
+            let search_positions = state.search_highlight_positions(line_idx);
 
             // Determine if this line intersects the selection
             let line_sel = sel_range.and_then(|(start, end)| {
@@ -276,6 +280,7 @@ impl PreviewView<'_> {
             if let Some((sel_col_start, sel_col_end)) = line_sel {
                 // Character-by-character rendering for lines with selection
                 let mut col: usize = 0;
+                let mut line_byte = 0usize;
                 for (text, style) in &state.content[line_idx] {
                     if col >= content_width as usize {
                         break;
@@ -286,13 +291,58 @@ impl PreviewView<'_> {
                             break;
                         }
                         let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+                        let char_byte = line_byte;
+                        line_byte += ch.len_utf8();
+                        let in_search_highlight = search_positions
+                            .as_ref()
+                            .is_some_and(|positions| positions.contains(&char_byte));
                         let s = if col >= sel_col_start && col < sel_col_end {
                             highlight_style
+                        } else if in_search_highlight {
+                            search_highlight_style
                         } else {
                             *style
                         };
                         if w == 0 {
                             // Zero-width combining char: append to previous cell
+                            if col > 0 {
+                                if let Some(cell) = buf.cell_mut((last_cell_x, y)) {
+                                    let mut sym = cell.symbol().to_string();
+                                    sym.push(ch);
+                                    cell.set_symbol(&sym);
+                                }
+                            }
+                            continue;
+                        }
+                        last_cell_x = x + col as u16;
+                        let mut char_buf = [0u8; 4];
+                        let char_str = ch.encode_utf8(&mut char_buf);
+                        buf.set_string(last_cell_x, y, char_str, s);
+                        col += w;
+                    }
+                }
+            } else if let Some(search_positions) = search_positions {
+                // Character-by-character rendering for lines with a search-result highlight
+                let mut col: usize = 0;
+                let mut line_byte = 0usize;
+                for (text, style) in &state.content[line_idx] {
+                    if col >= content_width as usize {
+                        break;
+                    }
+                    let mut last_cell_x = x;
+                    for ch in text.chars() {
+                        if col >= content_width as usize {
+                            break;
+                        }
+                        let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+                        let char_byte = line_byte;
+                        line_byte += ch.len_utf8();
+                        let s = if search_positions.contains(&char_byte) {
+                            search_highlight_style
+                        } else {
+                            *style
+                        };
+                        if w == 0 {
                             if col > 0 {
                                 if let Some(cell) = buf.cell_mut((last_cell_x, y)) {
                                     let mut sym = cell.symbol().to_string();
@@ -349,6 +399,8 @@ fn render_centered_message(area: Rect, buf: &mut Buffer, msg: &str, fg: Color) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::render::colors;
+    use ratatui::{buffer::Buffer, layout::Rect, style::Style, widgets::StatefulWidget};
 
     #[test]
     fn gutter_width_text_with_line_numbers_and_diff() {
@@ -418,5 +470,38 @@ mod tests {
             compute_gutter_width(true, false, &PreviewKind::Text, 1000, false),
             5
         );
+    }
+
+    #[test]
+    fn preview_highlights_search_match_on_target_line() {
+        let mut state = PreviewState::new();
+        state.kind = PreviewKind::Text;
+        state.total_lines = 1;
+        state.content = vec![vec![("TODO: fix".to_string(), Style::default())]];
+        state.set_search_highlight(1, "TODO");
+
+        let config = PreviewConfig::default();
+        let area = Rect::new(0, 0, 40, 4);
+        let mut buf = Buffer::empty(area);
+
+        PreviewView {
+            config: &config,
+            focused: false,
+        }
+        .render(area, &mut buf, &mut state);
+
+        let gutter = compute_gutter_width(
+            config.show_line_numbers,
+            config.show_git_diff,
+            &PreviewKind::Text,
+            state.total_lines,
+            false,
+        );
+        let match_x = area.x + gutter;
+        let match_y = area.y + 1;
+        let cell = buf.cell((match_x, match_y)).unwrap();
+
+        assert_eq!(cell.fg, colors::find_match());
+        assert!(cell.modifier.contains(Modifier::UNDERLINED));
     }
 }

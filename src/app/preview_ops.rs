@@ -1,6 +1,22 @@
 use super::*;
 
 impl App {
+    pub(super) fn apply_pending_preview_navigation(&mut self, path: &std::path::Path) {
+        if let Some((target_path, line)) = self.preview.pending_line.take() {
+            if target_path == path {
+                self.preview.state.scroll_to_line(line);
+            }
+        }
+
+        if let Some(pending) = self.preview.pending_highlight.take() {
+            if pending.path == path {
+                self.preview
+                    .state
+                    .set_search_highlight(pending.line, &pending.query);
+            }
+        }
+    }
+
     pub(super) fn handle_preview_action(&mut self, action: &Action) {
         #[cfg(feature = "image-preview")]
         if self.preview.state.kind == PreviewKind::Image {
@@ -74,6 +90,7 @@ impl App {
             }
             self.preview.generation = self.preview.generation.wrapping_add(1);
             self.preview.pending_line = None;
+            self.preview.pending_highlight = None;
             self.preview.state.clear();
             return;
         };
@@ -102,6 +119,7 @@ impl App {
                 .ok()
                 .and_then(|m| m.modified().ok());
             if current_mtime == self.preview.state.cached_mtime {
+                self.apply_pending_preview_navigation(&path);
                 return;
             }
         }

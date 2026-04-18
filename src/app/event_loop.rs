@@ -251,12 +251,9 @@ impl App {
                                 .is_some_and(|n| n.path == path);
                             if still_selected {
                                 self.preview.state.apply(path, loaded.kind, loaded.content, loaded.file_info, loaded.line_diffs, loaded.git_diff_hint);
-                                if let Some((ref target_path, line)) = self.preview.pending_line {
-                                    if self.preview.state.current_path.as_ref() == Some(target_path) {
-                                        self.preview.state.scroll_to_line(line);
-                                    }
+                                if let Some(current_path) = self.preview.state.current_path.clone() {
+                                    self.apply_pending_preview_navigation(&current_path);
                                 }
-                                self.preview.pending_line = None;
                             }
                         }
                     }

@@ -5,6 +5,13 @@ use tokio::task::JoinHandle;
 use crate::layout::PreviewLayout;
 use crate::preview::state::PreviewState;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingPreviewHighlight {
+    pub path: PathBuf,
+    pub line: usize,
+    pub query: String,
+}
+
 /// All preview-pane state grouped in one struct. Methods still live on `App`
 /// so they can reach `Config`, `FileTree`, etc. without extra plumbing.
 pub struct PreviewController {
@@ -27,6 +34,8 @@ pub struct PreviewController {
     /// Pending "scroll to line N of path P" request, used by content search
     /// to navigate to a match after the preview finishes loading.
     pub pending_line: Option<(PathBuf, usize)>,
+    /// Pending "highlight the match on line N of path P" request.
+    pub pending_highlight: Option<PendingPreviewHighlight>,
     /// Picker for encoding the terminal's image capability set.
     #[cfg(feature = "image-preview")]
     pub image_picker: Option<ratatui_image::picker::Picker>,
@@ -55,6 +64,7 @@ impl PreviewController {
             content_width: 80,
             generation: 0,
             pending_line: None,
+            pending_highlight: None,
             #[cfg(feature = "image-preview")]
             image_picker: None,
             #[cfg(feature = "image-preview")]

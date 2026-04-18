@@ -121,6 +121,26 @@ pub fn regex_match_positions(re: &regex::Regex, target: &str) -> Option<Vec<usiz
     )
 }
 
+/// Search highlight positions used by the unified workspace search UI.
+///
+/// Prefers a literal substring highlight first, then falls back to ripgrep-like
+/// regex semantics with smart-case matching.
+pub fn search_match_positions(query: &str, target: &str) -> Option<Vec<usize>> {
+    if query.is_empty() {
+        return Some(vec![]);
+    }
+    if let Some(positions) = exact_match_positions(query, target) {
+        return Some(positions);
+    }
+
+    let smart_case_insensitive = !query.chars().any(char::is_uppercase);
+    let regex = regex::RegexBuilder::new(query)
+        .case_insensitive(smart_case_insensitive)
+        .build()
+        .ok()?;
+    regex_match_positions(&regex, target)
+}
+
 /// Dispatch position-returning match based on mode.
 pub fn do_match_positions(
     match_mode: MatchMode,
@@ -242,6 +262,18 @@ mod tests {
     fn regex_match_positions_no_match() {
         let re = regex::Regex::new("^handler").unwrap();
         assert_eq!(regex_match_positions(&re, "input_handler.rs"), None);
+    }
+
+    #[test]
+    fn search_match_positions_prefers_exact_substring() {
+        let pos = search_match_positions("main", "src/main.rs");
+        assert_eq!(pos, Some(vec![4, 5, 6, 7]));
+    }
+
+    #[test]
+    fn search_match_positions_falls_back_to_regex() {
+        let pos = search_match_positions("^main", "main.rs");
+        assert_eq!(pos, Some(vec![0, 1, 2, 3]));
     }
 
     #[test]

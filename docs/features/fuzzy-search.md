@@ -25,9 +25,9 @@ This makes the search flow closer to VS Code: type once, then decide whether you
 - Type to update results live
 - `Up` / `Down` move through the mixed result list
 - `Enter` selects the current file result in the tree
-- `Enter` on a text match selects the file, opens preview, and jumps to the matched line
+- `Enter` on a text match selects the file, opens preview, jumps to the matched line, and highlights the matched content
 - `Enter` on a grouped text row toggles collapse
-- `Tab` reveals the underlying file in the tree; on a text match it also keeps the preview line jump
+- `Tab` reveals the underlying file in the tree; on a text match it also keeps the preview line jump and highlight
 - `Esc` closes the overlay
 
 This keeps the interaction inside croot instead of immediately suspending into an editor.
