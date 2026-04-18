@@ -19,6 +19,7 @@ pub struct LoadedPreview {
     pub content: Vec<Vec<StyledSpan>>,
     pub file_info: String,
     pub line_diffs: Option<Vec<LineDiffStatus>>,
+    pub render_width: Option<usize>,
     /// The diff hint used to generate this preview. Stored so the
     /// preview cache (path+mtime → skip reload) can detect a hint
     /// change (e.g. Clean → Modified after git status refresh) and
@@ -63,6 +64,7 @@ pub fn load_preview(path: &Path, req: &PreviewRequest<'_>) -> LoadedPreview {
                 content: Vec::new(),
                 file_info: String::new(),
                 line_diffs: None,
+                render_width: None,
                 git_diff_hint: req.git_diff_hint,
             };
         }
@@ -81,6 +83,7 @@ pub fn load_preview(path: &Path, req: &PreviewRequest<'_>) -> LoadedPreview {
             )]],
             file_info,
             line_diffs: None,
+            render_width: None,
             git_diff_hint: req.git_diff_hint,
         };
     }
@@ -93,6 +96,7 @@ pub fn load_preview(path: &Path, req: &PreviewRequest<'_>) -> LoadedPreview {
             content: Vec::new(),
             file_info,
             line_diffs: None,
+            render_width: None,
             git_diff_hint: req.git_diff_hint,
         };
     }
@@ -105,6 +109,7 @@ pub fn load_preview(path: &Path, req: &PreviewRequest<'_>) -> LoadedPreview {
                 content: Vec::new(),
                 file_info,
                 line_diffs: None,
+                render_width: None,
                 git_diff_hint: req.git_diff_hint,
             };
         }
@@ -144,6 +149,7 @@ fn load_text_preview(path: &Path, file_info: &str, req: &PreviewRequest<'_>) -> 
                 content: Vec::new(),
                 file_info: file_info.to_string(),
                 line_diffs: None,
+                render_width: None,
                 git_diff_hint: req.git_diff_hint,
             };
         }
@@ -159,6 +165,7 @@ fn load_text_preview(path: &Path, file_info: &str, req: &PreviewRequest<'_>) -> 
             content: lines,
             file_info: file_info.to_string(),
             line_diffs: None,
+            render_width: Some(req.preview_width),
             git_diff_hint: req.git_diff_hint,
         };
     }
@@ -185,6 +192,7 @@ fn load_text_preview(path: &Path, file_info: &str, req: &PreviewRequest<'_>) -> 
         content: lines,
         file_info: file_info.to_string(),
         line_diffs,
+        render_width: None,
         git_diff_hint: req.git_diff_hint,
     }
 }
@@ -196,6 +204,7 @@ fn load_binary_preview(path: &Path, file_info: &str, git_diff_hint: GitDiffHint)
             content: generate_hex_dump(&data),
             file_info: file_info.to_string(),
             line_diffs: None,
+            render_width: None,
             git_diff_hint,
         },
         Err(e) => LoadedPreview {
@@ -203,6 +212,7 @@ fn load_binary_preview(path: &Path, file_info: &str, git_diff_hint: GitDiffHint)
             content: Vec::new(),
             file_info: file_info.to_string(),
             line_diffs: None,
+            render_width: None,
             git_diff_hint,
         },
     }
@@ -219,6 +229,7 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
                 content: Vec::new(),
                 file_info: String::new(),
                 line_diffs: None,
+                render_width: None,
                 git_diff_hint,
             };
         }
@@ -293,6 +304,7 @@ fn load_directory_preview(path: &Path) -> LoadedPreview {
         content: lines,
         file_info: format!("{dir_name}/"),
         line_diffs: None,
+        render_width: None,
         git_diff_hint,
     }
 }

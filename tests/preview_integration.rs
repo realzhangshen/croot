@@ -122,6 +122,7 @@ fn preview_state_scroll_stays_in_bounds_after_apply() {
         loaded.content,
         loaded.file_info,
         loaded.line_diffs,
+        loaded.render_width,
         loaded.git_diff_hint,
     );
 
@@ -141,6 +142,7 @@ fn preview_state_scroll_stays_in_bounds_after_apply() {
             vec![("gamma".to_string(), Style::default())],
         ],
         "3 lines".to_string(),
+        None,
         None,
         GitDiffHint::Skip,
     );

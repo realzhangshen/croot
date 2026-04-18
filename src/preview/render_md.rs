@@ -1,8 +1,8 @@
-use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use ratatui::style::{Color, Modifier, Style};
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use crate::render::colors;
+use crate::render::{colors, text_util::truncate_with_ellipsis};
 
 use super::highlight;
 use super::state::StyledSpan;
@@ -29,11 +29,12 @@ struct MdRenderer {
     current_line: Vec<StyledSpan>,
     style_stack: Vec<Style>,
     list_stack: Vec<Option<u64>>, // None = unordered, Some(n) = ordered starting at n
+    list_item_prefixes: Vec<Vec<StyledSpan>>,
     in_code_block: bool,
     code_lang: Option<String>,
     code_buf: String,
     in_heading: bool,
-    in_blockquote: bool,
+    blockquote_depth: usize,
     in_image: bool,
     in_table: bool,
     table_alignments: Vec<pulldown_cmark::Alignment>,
@@ -41,6 +42,7 @@ struct MdRenderer {
     table_rows: Vec<Vec<String>>, // body rows: each is a list of cell texts
     current_table_row: Vec<String>,
     current_cell_text: String,
+    line_has_text_content: bool,
     link_url: Option<String>,
     width: usize,
 }
@@ -52,11 +54,12 @@ impl MdRenderer {
             current_line: Vec::new(),
             style_stack: vec![Style::default()],
             list_stack: Vec::new(),
+            list_item_prefixes: Vec::new(),
             in_code_block: false,
             code_lang: None,
             code_buf: String::new(),
             in_heading: false,
-            in_blockquote: false,
+            blockquote_depth: 0,
             in_image: false,
             in_table: false,
             table_alignments: Vec::new(),
@@ -64,6 +67,7 @@ impl MdRenderer {
             table_rows: Vec::new(),
             current_table_row: Vec::new(),
             current_cell_text: String::new(),
+            line_has_text_content: false,
             link_url: None,
             width: width.max(20),
         }
@@ -86,8 +90,16 @@ impl MdRenderer {
     }
 
     fn flush_line(&mut self) {
+        self.trim_trailing_space();
         let line = std::mem::take(&mut self.current_line);
         self.lines.push(line);
+        self.line_has_text_content = false;
+    }
+
+    fn flush_line_if_not_empty(&mut self) {
+        if !self.current_line.is_empty() {
+            self.flush_line();
+        }
     }
 
     fn push_blank_line(&mut self) {
@@ -101,6 +113,148 @@ impl MdRenderer {
         "  ".repeat(depth)
     }
 
+    fn current_line_width(&self) -> usize {
+        line_width(&self.current_line)
+    }
+
+    fn trim_trailing_space(&mut self) {
+        if let Some((text, _)) = self.current_line.last_mut() {
+            while text.ends_with(' ') {
+                text.pop();
+            }
+            if text.is_empty() {
+                self.current_line.pop();
+            }
+        }
+    }
+
+    fn blockquote_prefix(&self) -> Vec<StyledSpan> {
+        if self.blockquote_depth == 0 {
+            return Vec::new();
+        }
+
+        vec![(
+            "│ ".repeat(self.blockquote_depth),
+            Style::default().fg(Color::DarkGray),
+        )]
+    }
+
+    fn active_line_prefix(&self) -> Vec<StyledSpan> {
+        self.list_item_prefixes
+            .last()
+            .cloned()
+            .unwrap_or_else(|| self.blockquote_prefix())
+    }
+
+    fn ensure_line_prefix(&mut self) {
+        if self.current_line.is_empty() {
+            self.current_line.extend(self.active_line_prefix());
+        }
+    }
+
+    fn start_wrapped_line(&mut self) {
+        self.flush_line();
+        self.current_line = self.active_line_prefix();
+    }
+
+    fn push_space(&mut self, style: Style) {
+        if !self.line_has_text_content {
+            return;
+        }
+
+        if self.current_line_width() + 1 > self.width {
+            self.start_wrapped_line();
+            return;
+        }
+
+        if self
+            .current_line
+            .last()
+            .is_some_and(|(text, _)| text.ends_with(' '))
+        {
+            return;
+        }
+
+        self.current_line.push((" ".to_string(), style));
+    }
+
+    fn push_token(&mut self, token: &str, style: Style) {
+        if token.is_empty() {
+            return;
+        }
+
+        self.ensure_line_prefix();
+
+        if self.line_has_text_content
+            && self.current_line_width() + UnicodeWidthStr::width(token) > self.width
+        {
+            self.start_wrapped_line();
+        }
+
+        let mut remaining = token;
+        loop {
+            let available = self.width.saturating_sub(self.current_line_width());
+            if available == 0 {
+                self.start_wrapped_line();
+                continue;
+            }
+
+            let end = prefix_fitting_width(remaining, available);
+            if end == 0 {
+                break;
+            }
+
+            let chunk = &remaining[..end];
+            self.current_line.push((chunk.to_string(), style));
+            self.line_has_text_content = true;
+            remaining = &remaining[end..];
+
+            if remaining.is_empty() {
+                break;
+            }
+
+            self.start_wrapped_line();
+        }
+    }
+
+    fn push_wrapped_text(&mut self, text: &str, style: Style) {
+        if text.is_empty() {
+            return;
+        }
+
+        let mut run = String::new();
+        let mut run_is_whitespace: Option<bool> = None;
+
+        for ch in text.chars() {
+            let is_whitespace = ch.is_whitespace();
+            match run_is_whitespace {
+                Some(state) if state == is_whitespace => run.push(ch),
+                Some(state) => {
+                    if state {
+                        self.push_space(style);
+                    } else {
+                        self.push_token(&run, style);
+                    }
+                    run.clear();
+                    run.push(ch);
+                    run_is_whitespace = Some(is_whitespace);
+                }
+                None => {
+                    run.push(ch);
+                    run_is_whitespace = Some(is_whitespace);
+                }
+            }
+        }
+
+        if !run.is_empty() {
+            if run_is_whitespace == Some(true) {
+                self.push_space(style);
+            } else {
+                self.push_token(&run, style);
+            }
+        }
+    }
+
     fn process(&mut self, event: Event) {
         if self.in_code_block {
             match event {
@@ -112,10 +266,12 @@ impl MdRenderer {
                 }
                 // Allow blockquote end to pass through even inside a code block
                 // so that malformed markdown (unclosed code fence) doesn't corrupt
-                // the in_blockquote flag and style stack permanently.
+                // the blockquote depth and style stack permanently.
                 Event::End(TagEnd::BlockQuote(_)) => {
-                    self.in_blockquote = false;
-                    self.pop_style();
+                    if self.blockquote_depth > 0 {
+                        self.blockquote_depth -= 1;
+                        self.pop_style();
+                    }
                 }
                 _ => {}
             }
@@ -127,10 +283,7 @@ impl MdRenderer {
             Event::End(tag_end) => self.end_tag(tag_end),
             Event::Text(text) => self.text(&text),
             Event::Code(code) => self.inline_code(&code),
-            Event::SoftBreak => {
-                self.current_line
-                    .push((" ".to_string(), self.current_style()));
-            }
+            Event::SoftBreak => self.push_wrapped_text(" ", self.current_style()),
             Event::HardBreak => {
                 self.flush_line();
             }
@@ -139,12 +292,18 @@ impl MdRenderer {
                 let rule: String = "─".repeat(self.width.min(80));
                 self.current_line
                     .push((rule, Style::default().fg(Color::DarkGray)));
+                self.line_has_text_content = true;
                 self.flush_line();
             }
             Event::TaskListMarker(checked) => {
                 let marker = if checked { "[x] " } else { "[ ] " };
-                self.current_line
-                    .push((marker.to_string(), self.current_style()));
+                let style = self.current_style();
+                self.current_line.push((marker.to_string(), style));
+                if !self.line_has_text_content {
+                    if let Some(prefix) = self.list_item_prefixes.last_mut() {
+                        prefix.push((" ".repeat(UnicodeWidthStr::width(marker)), style));
+                    }
+                }
             }
             _ => {}
         }
@@ -159,7 +318,7 @@ impl MdRenderer {
             }
             Tag::Paragraph => {}
             Tag::BlockQuote(_) => {
-                self.in_blockquote = true;
+                self.blockquote_depth += 1;
                 self.push_style(Style::default().fg(Color::DarkGray));
             }
             Tag::CodeBlock(kind) => {
@@ -182,7 +341,8 @@ impl MdRenderer {
                 self.list_stack.push(start);
             }
             Tag::Item => {
-                self.flush_line();
+                self.flush_line_if_not_empty();
+                self.current_line.extend(self.blockquote_prefix());
                 let indent = self.list_indent();
                 let marker = match self.list_stack.last() {
                     Some(Some(n)) => {
@@ -194,7 +354,12 @@ impl MdRenderer {
                     }
                     _ => format!("{indent}• "),
                 };
+                let marker_style = self.current_style();
+                let marker_width = UnicodeWidthStr::width(marker.as_str());
                 self.current_line.push((marker, self.current_style()));
+                let mut continuation = self.blockquote_prefix();
+                continuation.push((" ".repeat(marker_width), marker_style));
+                self.list_item_prefixes.push(continuation);
             }
             Tag::Emphasis => {
                 self.push_style(Style::default().add_modifier(Modifier::ITALIC));
@@ -215,12 +380,12 @@ impl MdRenderer {
             }
             Tag::Image { dest_url, .. } => {
                 self.in_image = true;
-                self.current_line.push((
-                    format!("[image: {dest_url}]"),
+                self.push_wrapped_text(
+                    &format!("[image: {dest_url}]"),
                     Style::default()
                         .fg(Color::DarkGray)
                         .add_modifier(Modifier::ITALIC),
-                ));
+                );
             }
             Tag::Table(alignments) => {
                 self.in_table = true;
@@ -255,8 +420,10 @@ impl MdRenderer {
                 self.push_blank_line();
             }
             TagEnd::BlockQuote(_) => {
-                self.in_blockquote = false;
-                self.pop_style();
+                if self.blockquote_depth > 0 {
+                    self.blockquote_depth -= 1;
+                    self.pop_style();
+                }
             }
             TagEnd::CodeBlock => {
                 // handled in process() directly
@@ -268,7 +435,8 @@ impl MdRenderer {
                 }
             }
             TagEnd::Item => {
-                self.flush_line();
+                self.flush_line_if_not_empty();
+                self.list_item_prefixes.pop();
             }
             TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough => {
                 self.pop_style();
@@ -279,8 +447,10 @@ impl MdRenderer {
             TagEnd::Link => {
                 self.pop_style();
                 if let Some(url) = self.link_url.take() {
-                    self.current_line
-                        .push((format!(" ({url})"), Style::default().fg(Color::DarkGray)));
+                    self.push_wrapped_text(
+                        &format!(" ({url})"),
+                        Style::default().fg(Color::DarkGray),
+                    );
                 }
             }
             TagEnd::Table => {
@@ -311,12 +481,7 @@ impl MdRenderer {
             self.current_cell_text.push_str(text);
             return;
         }
-        if self.in_blockquote && self.current_line.is_empty() {
-            self.current_line
-                .push(("│ ".to_string(), Style::default().fg(Color::DarkGray)));
-        }
-        self.current_line
-            .push((text.to_string(), self.current_style()));
+        self.push_wrapped_text(text, self.current_style());
     }
 
     fn inline_code(&mut self, code: &str) {
@@ -327,7 +492,7 @@ impl MdRenderer {
             return;
         }
         let style = Style::default().fg(colors::inline_code());
-        self.current_line.push((format!("`{code}`"), style));
+        self.push_wrapped_text(&format!("`{code}`"), style);
     }
 
     fn end_code_block(&mut self) {
@@ -346,10 +511,7 @@ impl MdRenderer {
 
         for hl_line in &highlighted {
             let mut line: Vec<StyledSpan> = Vec::new();
-            if self.in_blockquote {
-                let bq_style = Style::default().fg(Color::DarkGray);
-                line.push(("│ ".to_string(), bq_style));
-            }
+            line.extend(self.blockquote_prefix());
             line.push(("│ ".to_string(), border_style));
             for span in hl_line {
                 line.push(span.clone());
@@ -406,7 +568,13 @@ impl MdRenderer {
 
         // Render header
         if !head.is_empty() {
-            let line = format_table_row(head, &col_widths, head_style, border_style);
+            let line = format_table_row(
+                head,
+                &col_widths,
+                &self.table_alignments,
+                head_style,
+                border_style,
+            );
             self.lines.push(line);
         }
 
@@ -425,7 +593,13 @@ impl MdRenderer {
 
         // Render body rows
         for row in body {
-            let line = format_table_row(row, &col_widths, Style::default(), border_style);
+            let line = format_table_row(
+                row,
+                &col_widths,
+                &self.table_alignments,
+                Style::default(),
+                border_style,
+            );
             self.lines.push(line);
         }
 
@@ -472,6 +646,7 @@ fn merge_styles(base: Style, overlay: Style) -> Style {
 fn format_table_row(
     row: &[String],
     col_widths: &[usize],
+    alignments: &[Alignment],
     text_style: Style,
     border_style: Style,
 ) -> Vec<StyledSpan> {
@@ -479,14 +654,45 @@ fn format_table_row(
     for (c, w) in col_widths.iter().enumerate() {
         line.push(("│ ".to_string(), border_style));
         let content = if c < row.len() { &row[c] } else { "" };
-        let display_w = UnicodeWidthStr::width(content);
+        let truncated = truncate_with_ellipsis(content, *w);
+        let display_w = UnicodeWidthStr::width(truncated.as_str());
         let padding = w.saturating_sub(display_w);
-        let padded = format!("{content}{}", " ".repeat(padding));
+        let (left_pad, right_pad) = match alignments.get(c).copied().unwrap_or(Alignment::None) {
+            Alignment::Right => (padding, 0),
+            Alignment::Center => (padding / 2, padding - (padding / 2)),
+            Alignment::Left | Alignment::None => (0, padding),
+        };
+        let padded = format!(
+            "{}{}{}",
+            " ".repeat(left_pad),
+            truncated,
+            " ".repeat(right_pad)
+        );
         line.push((padded, text_style));
         line.push((" ".to_string(), border_style));
     }
     line.push(("│".to_string(), border_style));
     line
+}
+
+fn line_width(line: &[StyledSpan]) -> usize {
+    line.iter()
+        .map(|(text, _)| UnicodeWidthStr::width(text.as_str()))
+        .sum()
+}
+
+fn prefix_fitting_width(text: &str, max_width: usize) -> usize {
+    let mut width = 0;
+    let mut end = 0;
+    for ch in text.chars() {
+        let char_width = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if width + char_width > max_width {
+            break;
+        }
+        width += char_width;
+        end += ch.len_utf8();
+    }
+    end
 }
 
 #[cfg(test)]
@@ -498,6 +704,12 @@ mod tests {
             .iter()
             .map(|spans| spans.iter().map(|(text, _)| text.as_str()).collect())
             .collect()
+    }
+
+    fn line_width(line: &[StyledSpan]) -> usize {
+        line.iter()
+            .map(|(text, _)| UnicodeWidthStr::width(text.as_str()))
+            .sum()
     }
 
     #[test]
@@ -614,6 +826,26 @@ mod tests {
     }
 
     #[test]
+    fn paragraph_wraps_to_preview_width() {
+        let result = render_markdown("alpha beta gamma delta", 20);
+        let text = lines_to_text(&result);
+        let non_empty: Vec<_> = text.into_iter().filter(|line| !line.is_empty()).collect();
+
+        assert_eq!(non_empty, vec!["alpha beta gamma", "delta"]);
+        assert!(result.iter().all(|line| line_width(line) <= 20));
+    }
+
+    #[test]
+    fn list_item_wraps_with_hanging_indent() {
+        let result = render_markdown("- alpha beta gamma delta", 20);
+        let text = lines_to_text(&result);
+        let non_empty: Vec<_> = text.into_iter().filter(|line| !line.is_empty()).collect();
+
+        assert_eq!(non_empty, vec!["• alpha beta gamma", "  delta"]);
+        assert!(result.iter().all(|line| line_width(line) <= 20));
+    }
+
+    #[test]
     fn horizontal_rule() {
         let md = "above\n\n---\n\nbelow";
         let result = render_markdown(md, 80);
@@ -662,6 +894,16 @@ mod tests {
         assert!(text.iter().any(|l| l.contains('│')));
         assert!(text.iter().any(|l| l.contains('A')));
         assert!(text.iter().any(|l| l.contains('1')));
+    }
+
+    #[test]
+    fn narrow_tables_truncate_cells_to_width() {
+        let md = "| Column | Value |\n|---|---|\n| SuperLongCell | 123456 |";
+        let result = render_markdown(md, 18);
+        let text = lines_to_text(&result);
+
+        assert!(text.iter().any(|line| line.contains('…')));
+        assert!(result.iter().all(|line| line_width(line) <= 18));
     }
 
     #[test]

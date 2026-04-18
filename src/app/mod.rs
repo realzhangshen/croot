@@ -1554,6 +1554,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn preview_cache_invalidated_when_rendered_width_changes() {
+        let (mut app, tmp) = test_app();
+        let markdown_path = tmp.path().join("README.md");
+        std::fs::write(&markdown_path, "# Title\n\nalpha beta gamma delta\n").unwrap();
+        app.tree.refresh();
+
+        let idx = app
+            .tree
+            .nodes
+            .iter()
+            .position(|node| node.path == markdown_path)
+            .expect("markdown file present");
+        app.tree.cursor = idx;
+
+        let (preview_tx, _rx) = mpsc::channel(4);
+        app.preview.visible = true;
+        app.preview.content_width = 40;
+
+        let mtime = std::fs::metadata(&markdown_path)
+            .ok()
+            .and_then(|m| m.modified().ok());
+
+        app.preview.state.current_path = Some(markdown_path);
+        app.preview.state.kind = PreviewKind::Rendered;
+        app.preview.state.cached_mtime = mtime;
+        app.preview.state.cached_render_width = Some(40);
+        app.preview.state.cached_diff_hint = Some(crate::git::diff::GitDiffHint::Skip);
+
+        let gen_before = app.preview.generation;
+        app.preview.content_width = 20;
+        app.trigger_preview_load(&preview_tx);
+
+        assert!(
+            app.preview.generation > gen_before,
+            "rendered markdown should reload when the preview width changes"
+        );
+    }
+
+    #[tokio::test]
     async fn stale_preview_generation_discarded() {
         let (mut app, _tmp) = test_app_with_files();
         let (_preview_tx, _rx) = mpsc::channel::<(u64, PathBuf, LoadedPreview)>(4);
@@ -1587,6 +1626,7 @@ mod tests {
                 ratatui::style::Style::default(),
             )]],
             "10 B".to_string(),
+            None,
             None,
             crate::git::diff::GitDiffHint::Skip,
         );

@@ -114,6 +114,9 @@ impl App {
         if self.preview.state.current_path.as_ref() == Some(&path)
             && self.preview.state.kind != PreviewKind::Loading
             && self.preview.state.cached_diff_hint == Some(git_diff_hint)
+            && (self.preview.state.kind != PreviewKind::Rendered
+                || self.preview.state.cached_render_width
+                    == Some(self.preview.content_width as usize))
         {
             let current_mtime = std::fs::metadata(&path)
                 .ok()

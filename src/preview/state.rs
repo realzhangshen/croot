@@ -101,6 +101,8 @@ pub struct PreviewState {
     pub search_highlight: Option<SearchHighlight>,
     /// Cached mtime of the currently displayed file (to skip redundant reloads).
     pub cached_mtime: Option<std::time::SystemTime>,
+    /// Cached render width for width-sensitive previews such as rendered Markdown.
+    pub cached_render_width: Option<usize>,
     /// Cached diff hint used when the current preview was generated. This
     /// is part of the cache key: if the same path+mtime is requested again
     /// but the derived hint has changed (e.g. git status went
@@ -134,6 +136,7 @@ impl PreviewState {
             selection: Selection::new(),
             search_highlight: None,
             cached_mtime: None,
+            cached_render_width: None,
             cached_diff_hint: None,
             line_diffs: None,
             render_markdown: true,
@@ -181,6 +184,7 @@ impl PreviewState {
         self.selection.clear();
         self.search_highlight = None;
         self.cached_mtime = None;
+        self.cached_render_width = None;
         self.cached_diff_hint = None;
         self.line_diffs = None;
         #[cfg(feature = "image-preview")]
@@ -197,12 +201,14 @@ impl PreviewState {
         content: Vec<Vec<StyledSpan>>,
         file_info: String,
         line_diffs: Option<Vec<LineDiffStatus>>,
+        render_width: Option<usize>,
         git_diff_hint: GitDiffHint,
     ) {
         let keep_search_highlight = self.current_path.as_ref() == Some(&path);
         self.cached_mtime = std::fs::metadata(&path)
             .ok()
             .and_then(|m| m.modified().ok());
+        self.cached_render_width = render_width;
         self.cached_diff_hint = Some(git_diff_hint);
         self.total_lines = content.len();
         self.content = content;
@@ -228,6 +234,7 @@ impl PreviewState {
         self.cached_mtime = std::fs::metadata(&path)
             .ok()
             .and_then(|m| m.modified().ok());
+        self.cached_render_width = None;
         // Image previews never show a diff gutter, so lock the hint to Skip.
         self.cached_diff_hint = Some(GitDiffHint::Skip);
         self.content.clear();
@@ -372,6 +379,7 @@ mod tests {
         assert!(state.current_path.is_none());
         assert!(state.search_highlight.is_none());
         assert!(state.cached_mtime.is_none());
+        assert!(state.cached_render_width.is_none());
         assert!(state.line_diffs.is_none());
     }
 
