@@ -202,6 +202,7 @@ impl PreviewView<'_> {
     fn render_content(&self, area: Rect, buf: &mut Buffer, state: &PreviewState) {
         let height = area.height as usize;
         let has_diff = state.line_diffs.is_some();
+        let line_highlight_bg = colors::popup_accent();
         let gutter_width = compute_gutter_width(
             self.config.show_line_numbers,
             self.config.show_git_diff,
@@ -218,6 +219,7 @@ impl PreviewView<'_> {
         let highlight_style = Style::default().add_modifier(Modifier::REVERSED);
         let search_highlight_style = Style::default()
             .fg(colors::find_match())
+            .bg(line_highlight_bg)
             .add_modifier(Modifier::UNDERLINED | Modifier::BOLD);
 
         for row in 0..height {
@@ -229,6 +231,17 @@ impl PreviewView<'_> {
             }
 
             let mut x = area.x;
+            let is_search_target_line = state
+                .search_highlight
+                .as_ref()
+                .is_some_and(|highlight| highlight.line == line_idx);
+            if is_search_target_line {
+                for fill_x in area.x..area.x + area.width {
+                    if let Some(cell) = buf.cell_mut((fill_x, y)) {
+                        cell.set_style(Style::default().bg(line_highlight_bg));
+                    }
+                }
+            }
 
             // Git diff indicator column
             if diff_col_width > 0 {
@@ -244,7 +257,12 @@ impl PreviewView<'_> {
                     LineDiffStatus::DeletedAbove => ("\u{2594}", colors::git_deleted()), // ▔
                     LineDiffStatus::Unchanged => (" ", Color::Reset),
                 };
-                buf.set_string(x, y, symbol, Style::default().fg(color));
+                let style = if is_search_target_line {
+                    Style::default().fg(color).bg(line_highlight_bg)
+                } else {
+                    Style::default().fg(color)
+                };
+                buf.set_string(x, y, symbol, style);
                 x += diff_col_width;
             }
 
@@ -255,7 +273,11 @@ impl PreviewView<'_> {
                     line_idx + 1,
                     width = (line_num_width - 1) as usize
                 );
-                let gutter_style = Style::default().fg(Color::DarkGray);
+                let gutter_style = if is_search_target_line {
+                    Style::default().fg(Color::DarkGray).bg(line_highlight_bg)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
                 buf.set_string(x, y, &line_num, gutter_style);
                 x += line_num_width;
             }
@@ -296,12 +318,17 @@ impl PreviewView<'_> {
                         let in_search_highlight = search_positions
                             .as_ref()
                             .is_some_and(|positions| positions.contains(&char_byte));
+                        let base_style = if is_search_target_line {
+                            (*style).bg(line_highlight_bg)
+                        } else {
+                            *style
+                        };
                         let s = if col >= sel_col_start && col < sel_col_end {
                             highlight_style
                         } else if in_search_highlight {
                             search_highlight_style
                         } else {
-                            *style
+                            base_style
                         };
                         if w == 0 {
                             // Zero-width combining char: append to previous cell
@@ -337,10 +364,15 @@ impl PreviewView<'_> {
                         let w = UnicodeWidthChar::width(ch).unwrap_or(0);
                         let char_byte = line_byte;
                         line_byte += ch.len_utf8();
+                        let base_style = if is_search_target_line {
+                            (*style).bg(line_highlight_bg)
+                        } else {
+                            *style
+                        };
                         let s = if search_positions.contains(&char_byte) {
                             search_highlight_style
                         } else {
-                            *style
+                            base_style
                         };
                         if w == 0 {
                             if col > 0 {
@@ -378,7 +410,12 @@ impl PreviewView<'_> {
                         char_end += ch.len_utf8();
                     }
                     let display = &text[..char_end];
-                    buf.set_string(x + col, y, display, *style);
+                    let text_style = if is_search_target_line {
+                        (*style).bg(line_highlight_bg)
+                    } else {
+                        *style
+                    };
+                    buf.set_string(x + col, y, display, text_style);
                     col += width_used as u16;
                 }
             }
@@ -503,5 +540,31 @@ mod tests {
 
         assert_eq!(cell.fg, colors::find_match());
         assert!(cell.modifier.contains(Modifier::UNDERLINED));
+    }
+
+    #[test]
+    fn preview_highlights_entire_search_target_line() {
+        let mut state = PreviewState::new();
+        state.kind = PreviewKind::Text;
+        state.total_lines = 1;
+        state.content = vec![vec![("TODO: fix".to_string(), Style::default())]];
+        state.set_search_highlight(1, "TODO");
+
+        let config = PreviewConfig::default();
+        let area = Rect::new(0, 0, 40, 4);
+        let mut buf = Buffer::empty(area);
+
+        PreviewView {
+            config: &config,
+            focused: false,
+        }
+        .render(area, &mut buf, &mut state);
+
+        let line_y = area.y + 1;
+        let line_number_cell = buf.cell((area.x, line_y)).unwrap();
+        let trailing_cell = buf.cell((area.x + area.width - 1, line_y)).unwrap();
+
+        assert_eq!(line_number_cell.bg, colors::popup_accent());
+        assert_eq!(trailing_cell.bg, colors::popup_accent());
     }
 }
