@@ -71,7 +71,7 @@ impl SearchJob {
                     let (bin, extra) = parts.split_first().unwrap_or((&fd_cmd, &[]));
                     Command::new(bin)
                         .args(extra)
-                        .args(["--type", "f", "--color", "never", "--", &query])
+                        .args(["--color", "never", "--", &query])
                         .current_dir(&root)
                         .stdout(std::process::Stdio::piped())
                         .stderr(std::process::Stdio::piped())
@@ -286,6 +286,9 @@ impl Drop for SearchJob {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     #[tokio::test]
     async fn cancel_during_debounce_produces_no_results() {
@@ -395,5 +398,57 @@ mod tests {
         // After drop, the cancel flag should be set
         // The handle is also aborted, but we can't easily check it after drop
         // since it was moved. The flag check is sufficient.
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn file_name_search_includes_directory_hits() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::create_dir(tmp.path().join("docs")).unwrap();
+
+        let fd_script = tmp.path().join("fake-fd.sh");
+        fs::write(
+            &fd_script,
+            "#!/bin/sh\n\
+type_filter=''\n\
+while [ \"$#\" -gt 0 ]; do\n\
+  if [ \"$1\" = \"--type\" ]; then\n\
+    shift\n\
+    type_filter=\"$1\"\n\
+  fi\n\
+  shift\n\
+done\n\
+if [ \"$type_filter\" != \"f\" ]; then\n\
+  printf '%s\\n' docs\n\
+fi\n",
+        )
+        .unwrap();
+        let mut perms = fs::metadata(&fd_script).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&fd_script, perms).unwrap();
+
+        let (tx, mut rx) = mpsc::channel::<SearchBatch>(16);
+        let _job = SearchJob::spawn(
+            7,
+            "docs".to_string(),
+            GlobalSearchType::FileName,
+            tmp.path().to_path_buf(),
+            fd_script.to_string_lossy().into_owned(),
+            "rg".to_string(),
+            100,
+            tx,
+            0,
+        );
+
+        let batch = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+            .await
+            .expect("timeout waiting for batch")
+            .expect("channel closed");
+
+        assert!(batch.is_final);
+        assert_eq!(batch.error, None);
+        assert_eq!(batch.results.len(), 1);
+        assert_eq!(batch.results[0].display, "docs");
+        assert_eq!(batch.results[0].path, tmp.path().join("docs"));
     }
 }

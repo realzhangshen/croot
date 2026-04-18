@@ -8,12 +8,12 @@ Press `/` to open the search overlay. If you want compatibility aliases, you can
 
 For each query, croot runs both search backends:
 
-- `fd` finds matching file names
+- `fd` finds matching file and directory names
 - `rg` finds matching file contents
 
 Results are shown together in one list:
 
-- file-name matches appear as direct file rows
+- path-name matches appear as direct rows
 - content matches are grouped by file
 - grouped text results can be collapsed or expanded in place
 - matching characters in file names and matched lines are highlighted inline
@@ -24,10 +24,10 @@ This makes the search flow closer to VS Code: type once, then decide whether you
 
 - Type to update results live
 - `Up` / `Down` move through the mixed result list
-- `Enter` selects the current file result in the tree
+- `Enter` selects the current path result in the tree
 - `Enter` on a text match selects the file, opens preview, jumps to the matched line, and highlights the matched content
 - `Enter` on a grouped text row toggles collapse
-- `Tab` reveals the underlying file in the tree; on a text match it also keeps the preview line jump and highlight
+- `Tab` reveals the underlying path in the tree; on a text match it also keeps the preview line jump and highlight
 - `Esc` closes the overlay
 
 This keeps the interaction inside croot instead of immediately suspending into an editor.
@@ -47,7 +47,7 @@ If one backend is unavailable, croot still shows results from the other and surf
 [search]
 fd_command = "fd"       # Path to fd binary
 rg_command = "rg"       # Path to rg binary
-max_results = 500       # Maximum file rows per search source
+max_results = 500       # Maximum path rows per search source
 ```
 
 ```toml

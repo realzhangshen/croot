@@ -109,7 +109,7 @@ impl Widget for GlobalSearchOverlay<'_> {
 
         let title = match self.state.global_search_type {
             GlobalSearchType::Unified => " Search Workspace ",
-            GlobalSearchType::FileName => " Search Files ",
+            GlobalSearchType::FileName => " Search Paths ",
             GlobalSearchType::Content => " Search Contents ",
         };
         let title_x = dialog.x
@@ -188,7 +188,7 @@ impl Widget for GlobalSearchOverlay<'_> {
         }
 
         let help_y = dialog.y + dialog.height.saturating_sub(2);
-        let help = "[Enter] select/toggle  [Tab] reveal file  [Esc] cancel";
+        let help = "[Enter] select/toggle  [Tab] reveal path  [Esc] cancel";
         buf.set_string(dialog.x + 2, help_y, help, colors::popup_dim());
 
         if let Some(ref err) = self.state.global_error {
@@ -205,7 +205,7 @@ impl Widget for GlobalSearchOverlay<'_> {
 
         let count_str = match self.state.global_search_type {
             GlobalSearchType::Unified => format!(
-                " {} files, {} text files, {} matches ",
+                " {} paths, {} text files, {} matches ",
                 self.state.global_results.len(),
                 self.state.grouped_results.len(),
                 self.state.content_match_count()
@@ -277,7 +277,7 @@ impl GlobalSearchOverlay<'_> {
                         continue;
                     };
                     let label = if self.state.global_search_type == GlobalSearchType::Unified {
-                        "[file] "
+                        "[path] "
                     } else {
                         ""
                     };
@@ -547,7 +547,7 @@ mod tests {
     }
 
     #[test]
-    fn unified_render_shows_file_and_text_labels() {
+    fn unified_render_shows_path_and_text_labels() {
         let mut state = make_content_state(sample_groups());
         state.global_search_type = GlobalSearchType::Unified;
         state.global_results = vec![crate::search::GlobalSearchResult {
@@ -571,7 +571,7 @@ mod tests {
             }
         }
 
-        assert!(all_text.contains("[file]"));
+        assert!(all_text.contains("[path]"));
         assert!(all_text.contains("[text]"));
     }
 
@@ -604,7 +604,7 @@ mod tests {
 
         let dialog = global_search_rect(area);
         let row_y = dialog.y + 3;
-        let match_x = dialog.x + 2 + "[file] src/".len() as u16;
+        let match_x = dialog.x + 2 + "[path] src/".len() as u16;
         let cell = buf.cell((match_x, row_y)).unwrap();
 
         assert_eq!(cell.fg, colors::find_match());

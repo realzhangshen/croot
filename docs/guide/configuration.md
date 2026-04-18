@@ -148,10 +148,10 @@ open_in_editor = "e"
 
 ```toml
 [search]
-fd_command = "fd"      # Command for file-name search
+fd_command = "fd"      # Command for path-name search
 rg_command = "rg"      # Command for content search
-max_results = 500      # Maximum file rows per backend
-                       # - fd caps direct file-name hits
+max_results = 500      # Maximum path rows per backend
+                       # - fd caps direct path-name hits
                        # - rg caps unique files in grouped text hits
                        #   (each file displays up to 20 matches)
 ```

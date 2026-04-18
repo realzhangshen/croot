@@ -16,9 +16,9 @@ croot has a small default keyboard layer and a larger set of opt-in shortcuts. D
 | `m` | Toggle Markdown rendered/raw preview |
 | `Ctrl+C` / `Super+C` | Quit, or copy selected preview text |
 
-The unified search overlay queries both file names and file contents for the same input. File-name matches appear inline with grouped content matches, and matching characters are highlighted directly in the result rows.
+The unified search overlay queries both path names and file contents for the same input. Path-name matches appear inline with grouped content matches, and matching characters are highlighted directly in the result rows.
 
-Inside the overlay, `Up` / `Down` move through results, `Enter` selects the current file or match inside croot, `Enter` on a grouped text result toggles collapse, `Tab` reveals the underlying file in the tree, and `Esc` cancels. Selecting a text match also opens preview, jumps to the matched line, and highlights the matched content.
+Inside the overlay, `Up` / `Down` move through results, `Enter` selects the current path or match inside croot, `Enter` on a grouped text result toggles collapse, `Tab` reveals the underlying path in the tree, and `Esc` cancels. Selecting a text match also opens preview, jumps to the matched line, and highlights the matched content.
 
 ## Opt-in Shortcuts
 
