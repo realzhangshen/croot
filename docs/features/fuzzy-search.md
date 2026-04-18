@@ -1,41 +1,43 @@
-# Fuzzy Search
+# Search
 
-croot offers multiple search modes for quickly finding files.
+croot now uses one unified workspace search instead of splitting search into local find, tree filter, filename search, and content search.
 
-## Local Search (`/`)
+## Unified Workspace Search
 
-Press `/` to start a fuzzy search within the current tree. Type a partial filename and matching entries highlight in real time. The match count displays in the status bar.
+Press `/` to open the search overlay. The legacy default keys `f`, `s`, and `S` also open the same overlay, so existing muscle memory still works.
 
-- `Tab` / `Down` — jump to next match
-- `Shift+Tab` / `Up` — jump to previous match
-- `Enter` — confirm and stay on match
-- `Esc` — cancel search
+For each query, croot runs both search backends:
 
-## Filter Mode (`f`)
+- `fd` finds matching file names
+- `rg` finds matching file contents
 
-Press `f` to enter filter mode. Unlike search, filter mode **hides** non-matching entries, showing only files that match your query. This is useful for large directories where you want to focus on specific file types or names.
+Results are shown together in one list:
 
-Press `Esc` to exit filter mode and restore the full tree.
+- file-name matches appear as direct file rows
+- content matches are grouped by file
+- grouped text results can be collapsed or expanded in place
 
-## Global Filename Search (`s`)
+This makes the search flow closer to VS Code: type once, then decide whether you want the file itself or a specific text hit inside it.
 
-Press `s` to search filenames across the entire project using `fd`. This opens a picker with fuzzy matching results.
+## Navigation
 
-- Type to filter results
-- `Up` / `Down` to navigate
-- `Enter` to open the selected file in the configured editor
-- `Tab` to jump to the selected file in the tree without opening it
-- `Esc` to cancel
+- Type to update results live
+- `Up` / `Down` move through the mixed result list
+- `Enter` opens the selected file or match
+- `Enter` on a grouped text row toggles collapse
+- `Tab` jumps to the selected file in the tree without opening it
+- `Esc` closes the overlay
 
-Requires [fd](https://github.com/sharkdp/fd) to be installed.
+When you open a text match, croot passes the matched line number through to the configured editor. When you jump with `Tab`, croot navigates the tree and scrolls the preview toward that line.
 
-## Global Content Search (`S`)
+## Requirements
 
-Press `S` to search file contents using `rg` (ripgrep). This finds text inside files across your project.
+Unified search depends on:
 
-Content search groups matches by file. Use `Up` / `Down` to move through results, `Enter` to open the selected match at its line, and `Tab` to jump to the file in the tree.
+- [fd](https://github.com/sharkdp/fd) for file-name search
+- [ripgrep](https://github.com/BurntSushi/ripgrep) for content search
 
-Requires [ripgrep](https://github.com/BurntSushi/ripgrep) to be installed.
+If one backend is unavailable, croot still shows results from the other and surfaces the backend error in the overlay.
 
 ## Configuration
 
@@ -43,15 +45,15 @@ Requires [ripgrep](https://github.com/BurntSushi/ripgrep) to be installed.
 [search]
 fd_command = "fd"       # Path to fd binary
 rg_command = "rg"       # Path to rg binary
-max_results = 500       # Maximum number of search results
+max_results = 500       # Maximum file rows per search source
 open_mode = "external"  # "external" opens in a GUI/background editor;
                         # "editor" suspends croot for terminal editors
 ```
 
 ```toml
 [keybindings]
-search = "/"            # Local fuzzy search
-filter = "f"            # Filter mode
-global_search = "s"     # fd filename search
-global_search_content = "S"  # rg content search
+search = "/"                 # Primary unified search entry
+filter = "f"                 # Legacy alias -> unified search
+global_search = "s"          # Legacy alias -> unified search
+global_search_content = "S"  # Legacy alias -> unified search
 ```

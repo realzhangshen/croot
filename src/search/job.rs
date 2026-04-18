@@ -14,6 +14,7 @@ use super::types::{GlobalSearchResult, GlobalSearchType};
 #[derive(Debug)]
 pub struct SearchBatch {
     pub generation: u64,
+    pub search_type: GlobalSearchType,
     pub results: Vec<GlobalSearchResult>,
     pub is_final: bool,
     pub error: Option<String>,
@@ -90,6 +91,9 @@ impl SearchJob {
                         .kill_on_drop(true)
                         .spawn()
                 }
+                GlobalSearchType::Unified => {
+                    unreachable!("spawn unified search as separate file/content jobs")
+                }
             };
 
             let mut child = match child_result {
@@ -98,10 +102,14 @@ impl SearchJob {
                     let cmd_name = match search_type {
                         GlobalSearchType::FileName => &fd_cmd,
                         GlobalSearchType::Content => &rg_cmd,
+                        GlobalSearchType::Unified => {
+                            unreachable!("unified results are merged above the job layer")
+                        }
                     };
                     let _ = tx
                         .send(SearchBatch {
                             generation,
+                            search_type,
                             results: Vec::new(),
                             is_final: true,
                             error: Some(format!("{cmd_name}: {e}")),
@@ -182,6 +190,9 @@ impl SearchJob {
                             parse_failed = true;
                         }
                     },
+                    GlobalSearchType::Unified => {
+                        unreachable!("unified results are merged above the job layer")
+                    }
                 }
 
                 if batch.len() >= BATCH_SIZE {
@@ -189,6 +200,7 @@ impl SearchJob {
                     let _ = tx
                         .send(SearchBatch {
                             generation,
+                            search_type,
                             results: intermediate,
                             is_final: false,
                             error: None,
@@ -221,6 +233,9 @@ impl SearchJob {
                         let cmd_name = match search_type {
                             GlobalSearchType::FileName => &fd_cmd,
                             GlobalSearchType::Content => &rg_cmd,
+                            GlobalSearchType::Unified => {
+                                unreachable!("unified results are merged above the job layer")
+                            }
                         };
                         Some(format!("{cmd_name} not found"))
                     } else if stderr_output.trim().is_empty() {
@@ -240,6 +255,7 @@ impl SearchJob {
             let _ = tx
                 .send(SearchBatch {
                     generation,
+                    search_type,
                     results: batch,
                     is_final: true,
                     error,

@@ -175,7 +175,7 @@ impl App {
         self.tree.cursor = self.search_state.match_indices[prev];
     }
 
-    /// Spawn an async global search (fd or rg) with debounce via `SearchJob`.
+    /// Spawn unified async search jobs (fd for file names, rg for contents).
     pub(super) fn spawn_global_search(&mut self, search_tx: &mpsc::Sender<SearchBatch>) {
         self.abort_global_search_task(false);
 
@@ -184,12 +184,31 @@ impl App {
         }
 
         self.search_state.request_id = self.search_state.request_id.wrapping_add(1);
-        self.search_state.global_loading = true;
+        self.search_state.global_results.clear();
+        self.search_state.grouped_results.clear();
+        self.search_state.global_selected = 0;
+        self.search_state.global_scroll_offset = 0;
+        self.search_state.file_loading = true;
+        self.search_state.content_loading = true;
+        self.search_state.file_error = None;
+        self.search_state.content_error = None;
+        self.search_state.recompute_global_status();
 
-        self.global_search_job = Some(SearchJob::spawn(
+        self.file_search_job = Some(SearchJob::spawn(
             self.search_state.request_id,
             self.search_state.query.clone(),
-            self.search_state.global_search_type,
+            GlobalSearchType::FileName,
+            self.root.clone(),
+            self.config.search.fd_command.clone(),
+            self.config.search.rg_command.clone(),
+            self.config.search.max_results,
+            search_tx.clone(),
+            200,
+        ));
+        self.content_search_job = Some(SearchJob::spawn(
+            self.search_state.request_id,
+            self.search_state.query.clone(),
+            GlobalSearchType::Content,
             self.root.clone(),
             self.config.search.fd_command.clone(),
             self.config.search.rg_command.clone(),
@@ -203,9 +222,15 @@ impl App {
         if invalidate_request_id {
             self.search_state.request_id = self.search_state.request_id.wrapping_add(1);
         }
-        if let Some(job) = self.global_search_job.take() {
+        if let Some(job) = self.file_search_job.take() {
             job.cancel();
         }
+        if let Some(job) = self.content_search_job.take() {
+            job.cancel();
+        }
+        self.search_state.file_loading = false;
+        self.search_state.content_loading = false;
+        self.search_state.recompute_global_status();
     }
 
     /// Close the global search overlay: abort the pending task, clear the
@@ -220,8 +245,9 @@ impl App {
         self.ui.input_mode = InputMode::Normal;
     }
 
-    /// Handle Enter in content search: toggle file header or navigate to match line.
-    pub(super) fn handle_content_search_confirm(&mut self) -> PostAction {
+    /// Handle Enter in unified search: open file result, toggle a content
+    /// header, or navigate to a content match line.
+    pub(super) fn handle_unified_search_confirm(&mut self) -> PostAction {
         let Some(item) = self
             .search_state
             .resolve_item(self.search_state.global_selected)
@@ -229,6 +255,13 @@ impl App {
             return PostAction::None;
         };
         match item {
+            GroupedItem::FileResult(idx) => {
+                let Some(result) = self.search_state.global_results.get(idx).cloned() else {
+                    return PostAction::None;
+                };
+                self.close_global_search_overlay();
+                self.search_open_action(result.path, None)
+            }
             GroupedItem::FileHeader(g) => {
                 let header_idx = self.search_state.flat_index_of_header(g);
                 let match_count = self.search_state.grouped_results[g].matches.len();
@@ -265,7 +298,7 @@ impl App {
     }
 
     /// Navigate to the selected search result in the file tree (Tab key).
-    pub(super) fn handle_content_search_goto(
+    pub(super) fn handle_unified_search_goto(
         &mut self,
         preview_tx: &mpsc::Sender<(u64, PathBuf, LoadedPreview)>,
     ) {
@@ -276,6 +309,15 @@ impl App {
             return;
         };
         match item {
+            GroupedItem::FileResult(idx) => {
+                let Some(result) = self.search_state.global_results.get(idx).cloned() else {
+                    return;
+                };
+                self.close_global_search_overlay();
+                self.tree.navigate_to_path(&result.path);
+                self.reapply_git();
+                self.trigger_preview_load(preview_tx);
+            }
             GroupedItem::FileHeader(g) => {
                 let path = self.search_state.grouped_results[g].path.clone();
                 self.close_global_search_overlay();

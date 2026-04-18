@@ -39,6 +39,7 @@ impl Widget for GlobalSearchOverlay<'_> {
         draw_border(buf, dialog, border_style);
 
         let title = match self.state.global_search_type {
+            GlobalSearchType::Unified => " Search Workspace ",
             GlobalSearchType::FileName => " Search Files ",
             GlobalSearchType::Content => " Search Contents ",
         };
@@ -97,96 +98,62 @@ impl Widget for GlobalSearchOverlay<'_> {
         let results_y = dialog.y + 3;
         let results_height = dialog.height.saturating_sub(5) as usize; // -3 top, -2 bottom
         let content_width = (dialog.width.saturating_sub(3)) as usize;
+        let has_results = self.state.has_any_results();
 
-        if self.state.global_loading {
+        if self.state.global_loading && !has_results {
             buf.set_string(
                 dialog.x + 2,
                 results_y,
-                "Searching...",
+                "Searching workspace...",
                 colors::popup_warning(),
             );
-        } else if let Some(ref err) = self.state.global_error {
-            let display = super::text_util::truncate_with_ellipsis(err, content_width);
-            buf.set_string(dialog.x + 2, results_y, display, colors::popup_error());
-        } else if self.state.global_search_type == GlobalSearchType::Content {
-            self.render_grouped_results(
-                buf,
-                dialog,
-                results_y,
-                results_height,
-                content_width,
-                base,
-            );
-        } else if self.state.global_results.is_empty() {
-            if !self.state.query.is_empty() {
+        } else if !has_results {
+            if let Some(ref err) = self.state.global_error {
+                let display = super::text_util::truncate_with_ellipsis(err, content_width);
+                buf.set_string(dialog.x + 2, results_y, display, colors::popup_error());
+            } else if !self.state.query.is_empty() {
                 buf.set_string(dialog.x + 2, results_y, "No results", colors::popup_dim());
             }
         } else {
-            let start = self.state.global_scroll_offset;
-            let end = (start + results_height).min(self.state.global_results.len());
-
-            for (i, result) in self.state.global_results[start..end].iter().enumerate() {
-                let row_y = results_y + i as u16;
-                let is_selected = start + i == self.state.global_selected;
-
-                let style = if is_selected {
-                    colors::popup_selected()
-                } else {
-                    base
-                };
-
-                if is_selected {
-                    for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
-                        if let Some(cell) = buf.cell_mut((col, row_y)) {
-                            cell.set_style(style);
-                        }
-                    }
-                }
-
-                let display =
-                    super::text_util::truncate_with_ellipsis(&result.display, content_width);
-                buf.set_string(dialog.x + 2, row_y, &display, style);
-            }
+            self.render_results(buf, dialog, results_y, results_height, content_width, base);
         }
 
         let help_y = dialog.y + dialog.height.saturating_sub(2);
-        let help = if self.state.global_search_type == GlobalSearchType::Content {
-            "[Enter] open  [Tab] go to  [Esc] cancel"
-        } else {
-            "[Enter] open  [Tab] go to  [Esc] cancel"
-        };
+        let help = "[Enter] open/toggle  [Tab] go to  [Esc] cancel";
         buf.set_string(dialog.x + 2, help_y, help, colors::popup_dim());
 
-        let (has_results, count_str) = if self.state.global_search_type == GlobalSearchType::Content
-        {
-            let total_files = self.state.grouped_results.len();
-            let total_matches: usize = self
-                .state
-                .grouped_results
-                .iter()
-                .map(|g| g.matches.len())
-                .sum();
-            if total_files > 0 {
-                (
-                    true,
-                    format!(" {} files, {} matches ", total_files, total_matches),
-                )
-            } else {
-                (false, String::new())
+        if let Some(ref err) = self.state.global_error {
+            if has_results {
+                let warn = super::text_util::truncate_with_ellipsis(err, content_width);
+                buf.set_string(
+                    dialog.x + 2,
+                    help_y.saturating_sub(1),
+                    warn,
+                    colors::popup_warning(),
+                );
             }
-        } else if !self.state.global_results.is_empty() {
-            (
-                true,
-                format!(
-                    " {}/{} ",
-                    self.state.global_selected + 1,
-                    self.state.global_results.len()
-                ),
-            )
-        } else {
-            (false, String::new())
+        }
+
+        let count_str = match self.state.global_search_type {
+            GlobalSearchType::Unified => format!(
+                " {} files, {} text files, {} matches ",
+                self.state.global_results.len(),
+                self.state.grouped_results.len(),
+                self.state.content_match_count()
+            ),
+            GlobalSearchType::FileName if !self.state.global_results.is_empty() => format!(
+                " {}/{} ",
+                self.state.global_selected + 1,
+                self.state.global_results.len()
+            ),
+            GlobalSearchType::Content if !self.state.grouped_results.is_empty() => format!(
+                " {} files, {} matches ",
+                self.state.grouped_results.len(),
+                self.state.content_match_count()
+            ),
+            _ => String::new(),
         };
-        if has_results {
+        if has_results && !count_str.is_empty() {
             let count_x = dialog
                 .x
                 .saturating_add(dialog.width.saturating_sub(count_str.width() as u16 + 2));
@@ -198,7 +165,7 @@ impl Widget for GlobalSearchOverlay<'_> {
 }
 
 impl GlobalSearchOverlay<'_> {
-    fn render_grouped_results(
+    fn render_results(
         &self,
         buf: &mut Buffer,
         dialog: Rect,
@@ -209,93 +176,88 @@ impl GlobalSearchOverlay<'_> {
     ) {
         use ratatui::style::Modifier;
 
-        if self.state.grouped_results.is_empty() {
-            if !self.state.query.is_empty() {
-                buf.set_string(dialog.x + 2, results_y, "No results", colors::popup_dim());
-            }
-            return;
-        }
+        let start = self
+            .state
+            .global_scroll_offset
+            .min(self.state.visible_item_count());
+        let end = (start + results_height).min(self.state.visible_item_count());
 
-        let scroll = self.state.global_scroll_offset;
-        let mut flat_idx: usize = 0;
-        let mut rendered: usize = 0;
+        for (row, flat_idx) in (start..end).enumerate() {
+            let row_y = results_y + row as u16;
+            let is_selected = flat_idx == self.state.global_selected;
+            let style = if is_selected {
+                colors::popup_selected()
+            } else {
+                base
+            };
 
-        for group in &self.state.grouped_results {
-            if rendered >= results_height {
-                break;
-            }
-
-            if flat_idx >= scroll {
-                let row_y = results_y + rendered as u16;
-                let is_selected = flat_idx == self.state.global_selected;
-                let style = if is_selected {
-                    colors::popup_selected()
-                } else {
-                    base
-                };
-
-                if is_selected {
-                    for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
-                        if let Some(cell) = buf.cell_mut((col, row_y)) {
-                            cell.set_style(style);
-                        }
+            if is_selected {
+                for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
+                    if let Some(cell) = buf.cell_mut((col, row_y)) {
+                        cell.set_style(style);
                     }
                 }
-
-                let indicator = if group.collapsed { "▶ " } else { "▼ " };
-                let match_label = if group.matches.len() == 1 {
-                    format!(" (1 match)")
-                } else {
-                    format!(" ({} matches)", group.matches.len())
-                };
-                let header = format!("{}{}{}", indicator, group.display, match_label);
-                let display = super::text_util::truncate_with_ellipsis(&header, content_width);
-                buf.set_string(
-                    dialog.x + 2,
-                    row_y,
-                    &display,
-                    style.add_modifier(Modifier::BOLD),
-                );
-
-                rendered += 1;
             }
-            flat_idx += 1;
 
-            if !group.collapsed {
-                for m in &group.matches {
-                    if rendered >= results_height {
-                        break;
-                    }
-                    if flat_idx >= scroll {
-                        let row_y = results_y + rendered as u16;
-                        let is_selected = flat_idx == self.state.global_selected;
-                        let style = if is_selected {
-                            colors::popup_selected()
-                        } else {
-                            base
-                        };
-
-                        if is_selected {
-                            for col in (dialog.x + 1)..(dialog.x + dialog.width.saturating_sub(1)) {
-                                if let Some(cell) = buf.cell_mut((col, row_y)) {
-                                    cell.set_style(style);
-                                }
-                            }
-                        }
-
-                        let line_text = match (m.line, &m.context) {
-                            (Some(ln), Some(ctx)) => format!("   {:>5}: {}", ln, ctx.trim()),
-                            (Some(ln), None) => format!("   {:>5}:", ln),
-                            (None, Some(ctx)) => format!("   {}", ctx.trim()),
-                            (None, None) => "   ...".to_string(),
-                        };
-                        let display =
-                            super::text_util::truncate_with_ellipsis(&line_text, content_width);
-                        buf.set_string(dialog.x + 2, row_y, &display, style);
-
-                        rendered += 1;
-                    }
-                    flat_idx += 1;
+            let Some(item) = self.state.resolve_item(flat_idx) else {
+                continue;
+            };
+            match item {
+                crate::search::GroupedItem::FileResult(idx) => {
+                    let Some(result) = self.state.global_results.get(idx) else {
+                        continue;
+                    };
+                    let label = if self.state.global_search_type == GlobalSearchType::Unified {
+                        "[file] "
+                    } else {
+                        ""
+                    };
+                    let display = super::text_util::truncate_with_ellipsis(
+                        &format!("{label}{}", result.display),
+                        content_width,
+                    );
+                    buf.set_string(dialog.x + 2, row_y, &display, style);
+                }
+                crate::search::GroupedItem::FileHeader(g) => {
+                    let Some(group) = self.state.grouped_results.get(g) else {
+                        continue;
+                    };
+                    let indicator = if group.collapsed { "▶ " } else { "▼ " };
+                    let match_label = if group.matches.len() == 1 {
+                        " (1 match)".to_string()
+                    } else {
+                        format!(" ({} matches)", group.matches.len())
+                    };
+                    let prefix = if self.state.global_search_type == GlobalSearchType::Unified {
+                        "[text] "
+                    } else {
+                        ""
+                    };
+                    let header = format!("{prefix}{indicator}{}{}", group.display, match_label);
+                    let display = super::text_util::truncate_with_ellipsis(&header, content_width);
+                    buf.set_string(
+                        dialog.x + 2,
+                        row_y,
+                        &display,
+                        style.add_modifier(Modifier::BOLD),
+                    );
+                }
+                crate::search::GroupedItem::MatchLine(g, m) => {
+                    let Some(group) = self.state.grouped_results.get(g) else {
+                        continue;
+                    };
+                    let Some(matched) = group.matches.get(m) else {
+                        continue;
+                    };
+                    let line_text = match (matched.line, &matched.context) {
+                        (Some(ln), Some(ctx)) => format!("        {:>5}: {}", ln, ctx.trim()),
+                        (Some(ln), None) => format!("        {:>5}:", ln),
+                        (None, Some(ctx)) => format!("        {}", ctx.trim()),
+                        (None, None) => "        ...".to_string(),
+                    };
+                    let display =
+                        super::text_util::truncate_with_ellipsis(&line_text, content_width);
+                    buf.set_string(dialog.x + 2, row_y, &display, style);
                 }
             }
         }
@@ -465,5 +427,34 @@ mod tests {
         let widget = GlobalSearchOverlay { state: &state };
         widget.render(area, &mut buf);
         // Should not panic
+    }
+
+    #[test]
+    fn unified_render_shows_file_and_text_labels() {
+        let mut state = make_content_state(sample_groups());
+        state.global_search_type = GlobalSearchType::Unified;
+        state.global_results = vec![crate::search::GlobalSearchResult {
+            path: PathBuf::from("src/main.rs"),
+            display: "src/main.rs".into(),
+            line: None,
+            context: None,
+        }];
+
+        let area = Rect::new(0, 0, 90, 28);
+        let mut buf = Buffer::empty(area);
+        let widget = GlobalSearchOverlay { state: &state };
+        widget.render(area, &mut buf);
+
+        let mut all_text = String::new();
+        for y in 0..area.height {
+            for x in 0..area.width {
+                if let Some(cell) = buf.cell((x, y)) {
+                    all_text.push_str(cell.symbol());
+                }
+            }
+        }
+
+        assert!(all_text.contains("[file]"));
+        assert!(all_text.contains("[text]"));
     }
 }

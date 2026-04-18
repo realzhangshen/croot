@@ -179,16 +179,18 @@ impl App {
             }
 
             Action::StartFind => {
-                self.search_state = SearchState::new(SearchMode::Find);
-                self.search_state.origin_cursor = self.tree.cursor;
-                self.search_state.origin_scroll_offset = self.tree.scroll_offset;
-                self.ui.input_mode = InputMode::Search;
+                let last_id = self.search_state.request_id;
+                self.search_state = SearchState::new(SearchMode::Global);
+                self.search_state.request_id = last_id;
+                self.search_state.global_search_type = GlobalSearchType::Unified;
+                self.ui.input_mode = InputMode::GlobalSearch;
             }
             Action::StartFilter => {
-                self.search_state = SearchState::new(SearchMode::Filter);
-                self.search_state.origin_cursor = self.tree.cursor;
-                self.search_state.origin_scroll_offset = self.tree.scroll_offset;
-                self.ui.input_mode = InputMode::Search;
+                let last_id = self.search_state.request_id;
+                self.search_state = SearchState::new(SearchMode::Global);
+                self.search_state.request_id = last_id;
+                self.search_state.global_search_type = GlobalSearchType::Unified;
+                self.ui.input_mode = InputMode::GlobalSearch;
             }
             Action::SearchChar(ch) => {
                 self.search_state.insert_char(ch);
@@ -242,14 +244,14 @@ impl App {
                 let last_id = self.search_state.request_id;
                 self.search_state = SearchState::new(SearchMode::Global);
                 self.search_state.request_id = last_id;
-                self.search_state.global_search_type = GlobalSearchType::FileName;
+                self.search_state.global_search_type = GlobalSearchType::Unified;
                 self.ui.input_mode = InputMode::GlobalSearch;
             }
             Action::StartGlobalSearchContent => {
                 let last_id = self.search_state.request_id;
                 self.search_state = SearchState::new(SearchMode::Global);
                 self.search_state.request_id = last_id;
-                self.search_state.global_search_type = GlobalSearchType::Content;
+                self.search_state.global_search_type = GlobalSearchType::Unified;
                 self.ui.input_mode = InputMode::GlobalSearch;
             }
             Action::GlobalSearchChar(ch) => {
@@ -274,11 +276,7 @@ impl App {
                 }
             }
             Action::GlobalSearchDown => {
-                let upper = if self.search_state.global_search_type == GlobalSearchType::Content {
-                    self.search_state.visible_item_count()
-                } else {
-                    self.search_state.global_results.len()
-                };
+                let upper = self.search_state.visible_item_count();
                 if upper > 0 && self.search_state.global_selected + 1 < upper {
                     self.search_state.global_selected += 1;
                     let visible = self.search_state.global_visible_height;
@@ -292,35 +290,13 @@ impl App {
                 }
             }
             Action::GlobalSearchConfirm => {
-                if self.search_state.global_search_type == GlobalSearchType::Content {
-                    post = self.handle_content_search_confirm();
-                } else if let Some(result) = self
-                    .search_state
-                    .global_results
-                    .get(self.search_state.global_selected)
-                    .cloned()
-                {
-                    self.close_global_search_overlay();
-                    post = self.search_open_action(result.path, None);
-                }
+                post = self.handle_unified_search_confirm();
             }
             Action::GlobalSearchCancel => {
                 self.close_global_search_overlay();
             }
             Action::GlobalSearchGoto => {
-                if self.search_state.global_search_type == GlobalSearchType::Content {
-                    self.handle_content_search_goto(preview_tx);
-                } else if let Some(result) = self
-                    .search_state
-                    .global_results
-                    .get(self.search_state.global_selected)
-                    .cloned()
-                {
-                    self.close_global_search_overlay();
-                    self.tree.navigate_to_path(&result.path);
-                    self.reapply_git();
-                    self.trigger_preview_load(preview_tx);
-                }
+                self.handle_unified_search_goto(preview_tx);
             }
 
             Action::OpenInEditor => {

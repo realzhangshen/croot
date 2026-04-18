@@ -13,7 +13,7 @@ The context menu provides quick access to:
 - **Copy relative path** — copies the relative path to clipboard
 - **Copy absolute path** — copies the full absolute path to clipboard
 - **Reveal in Finder** — reveals the file on macOS or opens its containing directory on Linux
-- **Refresh** / **Collapse All** / **Toggle Preview** / **Find** — workspace and directory helpers
+- **Refresh** / **Collapse All** / **Toggle Preview** / **Search** — workspace and directory helpers
 - **Rename** — rename the file or directory
 - **Delete** — delete with confirmation
 

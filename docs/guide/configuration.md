@@ -129,10 +129,10 @@ See the [Keybindings](./keybindings) page for full details.
 ```toml
 [keybindings]
 # Override built-in defaults
-search = "/"
-filter = "f"
-global_search = "s"
-global_search_content = "S"
+search = "/"                 # unified workspace search
+filter = "f"                # legacy alias -> unified workspace search
+global_search = "s"         # legacy alias -> unified workspace search
+global_search_content = "S" # legacy alias -> unified workspace search
 
 # Enable opt-in shortcuts
 quit = "q"
@@ -148,13 +148,13 @@ open_in_editor = "e"
 
 ```toml
 [search]
-fd_command = "fd"      # Command for filename search
+fd_command = "fd"      # Command for file-name search
 rg_command = "rg"      # Command for content search
-max_results = 500      # Maximum results to display
-                       # For filename search (s): caps total files shown
-                       # For content search (S): caps unique files shown
+max_results = 500      # Maximum file rows per backend
+                       # - fd caps direct file-name hits
+                       # - rg caps unique files in grouped text hits
                        #   (each file displays up to 20 matches)
-open_mode = "external" # How Enter opens search results:
+open_mode = "external" # How Enter opens unified search results:
                        #   "external" — open in background editor (default)
                        #   "editor"   — open in terminal editor (suspends TUI)
 ```

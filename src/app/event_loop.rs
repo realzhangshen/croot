@@ -162,23 +162,38 @@ impl App {
                     if let Some(batch) = result {
                         if batch.generation == self.search_state.request_id {
                             if !batch.results.is_empty() {
-                                if self.search_state.global_search_type == GlobalSearchType::Content {
-                                    let new_groups = group_search_results(batch.results);
-                                    for ng in new_groups {
-                                        if let Some(existing) = self.search_state.grouped_results.iter_mut().find(|g| g.path == ng.path) {
-                                            existing.matches.extend(ng.matches);
-                                        } else {
-                                            self.search_state.grouped_results.push(ng);
+                                match batch.search_type {
+                                    GlobalSearchType::FileName => {
+                                        self.search_state.global_results.extend(batch.results);
+                                    }
+                                    GlobalSearchType::Content => {
+                                        let new_groups = group_search_results(batch.results);
+                                        for ng in new_groups {
+                                            if let Some(existing) = self.search_state.grouped_results.iter_mut().find(|g| g.path == ng.path) {
+                                                existing.matches.extend(ng.matches);
+                                            } else {
+                                                self.search_state.grouped_results.push(ng);
+                                            }
                                         }
                                     }
-                                    self.search_state.global_results.clear();
-                                } else {
-                                    self.search_state.global_results.extend(batch.results);
+                                    GlobalSearchType::Unified => {}
                                 }
                             }
                             if batch.is_final {
-                                self.search_state.global_error = batch.error;
-                                self.search_state.global_loading = false;
+                                match batch.search_type {
+                                    GlobalSearchType::FileName => {
+                                        self.search_state.file_loading = false;
+                                        self.search_state.file_error = batch.error;
+                                        self.file_search_job = None;
+                                    }
+                                    GlobalSearchType::Content => {
+                                        self.search_state.content_loading = false;
+                                        self.search_state.content_error = batch.error;
+                                        self.content_search_job = None;
+                                    }
+                                    GlobalSearchType::Unified => {}
+                                }
+                                self.search_state.recompute_global_status();
                             }
                         }
                     }

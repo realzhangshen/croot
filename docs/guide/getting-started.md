@@ -29,7 +29,7 @@ croot opens a full-screen TUI file explorer in your terminal.
 | `Left` / `Right` | Collapse / expand directory |
 | Left click | Toggle a directory or preview a file |
 | `Home` / `End` | Jump to top / bottom |
-| `/` | Fuzzy search by filename |
+| `/` | Search file names and file contents |
 | `Esc` | Cancel search or close popup |
 | `Ctrl+C` | Quit |
 

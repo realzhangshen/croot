@@ -189,22 +189,9 @@ impl App {
             let scroll = self.search_state.global_scroll_offset;
             let clicked_index = scroll + (mouse.row - results_y) as usize;
 
-            if self.search_state.global_search_type == GlobalSearchType::Content {
-                if clicked_index < self.search_state.visible_item_count() {
-                    self.search_state.global_selected = clicked_index;
-                    return self.handle_content_search_confirm();
-                }
-            } else if clicked_index < self.search_state.global_results.len() {
+            if clicked_index < self.search_state.visible_item_count() {
                 self.search_state.global_selected = clicked_index;
-                if let Some(result) = self
-                    .search_state
-                    .global_results
-                    .get(self.search_state.global_selected)
-                    .cloned()
-                {
-                    self.close_global_search_overlay();
-                    return self.search_open_action(result.path, None);
-                }
+                return self.handle_unified_search_confirm();
             }
         }
 

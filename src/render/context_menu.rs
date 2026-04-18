@@ -134,7 +134,7 @@ impl ContextMenuState {
                     action: MenuAction::TogglePreview,
                 },
                 MenuItem {
-                    label: "Find".into(),
+                    label: "Search".into(),
                     action: MenuAction::StartFind,
                 },
             ],

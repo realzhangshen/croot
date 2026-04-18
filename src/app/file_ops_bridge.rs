@@ -151,10 +151,11 @@ impl App {
                 self.refresh_search_state();
             }
             MenuAction::StartFind => {
-                self.search_state = SearchState::new(SearchMode::Find);
-                self.search_state.origin_cursor = self.tree.cursor;
-                self.search_state.origin_scroll_offset = self.tree.scroll_offset;
-                self.ui.input_mode = InputMode::Search;
+                let last_id = self.search_state.request_id;
+                self.search_state = SearchState::new(SearchMode::Global);
+                self.search_state.request_id = last_id;
+                self.search_state.global_search_type = GlobalSearchType::Unified;
+                self.ui.input_mode = InputMode::GlobalSearch;
             }
             MenuAction::Separator => {} // inert -- separators are not selectable
         }

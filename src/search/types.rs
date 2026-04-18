@@ -19,6 +19,7 @@ pub enum MatchMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GlobalSearchType {
+    Unified,
     FileName,
     Content,
 }
@@ -50,6 +51,7 @@ pub struct FileGroup {
 /// An item in the flattened visible list for grouped content search.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GroupedItem {
+    FileResult(usize),
     FileHeader(usize),
     MatchLine(usize, usize),
 }
@@ -81,6 +83,10 @@ pub struct SearchState {
     pub grouped_results: Vec<FileGroup>,
     pub global_selected: usize,
     pub global_scroll_offset: usize,
+    pub file_loading: bool,
+    pub content_loading: bool,
+    pub file_error: Option<String>,
+    pub content_error: Option<String>,
     pub global_loading: bool,
     pub global_error: Option<String>,
     pub global_search_type: GlobalSearchType,
@@ -105,9 +111,13 @@ impl SearchState {
             grouped_results: Vec::new(),
             global_selected: 0,
             global_scroll_offset: 0,
+            file_loading: false,
+            content_loading: false,
+            file_error: None,
+            content_error: None,
             global_loading: false,
             global_error: None,
-            global_search_type: GlobalSearchType::FileName,
+            global_search_type: GlobalSearchType::Unified,
             global_visible_height: 0,
             request_id: 0,
         }
@@ -170,8 +180,11 @@ impl SearchState {
         self.grouped_results.clear();
         self.global_selected = 0;
         self.global_scroll_offset = 0;
-        self.global_loading = false;
-        self.global_error = None;
+        self.file_loading = false;
+        self.content_loading = false;
+        self.file_error = None;
+        self.content_error = None;
+        self.recompute_global_status();
     }
 
     pub fn is_empty(&self) -> bool {
@@ -209,16 +222,53 @@ impl SearchState {
     // ── Grouped content search helpers ─────────────────────────────────
 
     /// Total visible rows in grouped content search view.
-    pub fn visible_item_count(&self) -> usize {
+    pub fn content_visible_item_count(&self) -> usize {
         self.grouped_results
             .iter()
             .map(|g| if g.collapsed { 1 } else { 1 + g.matches.len() })
             .sum()
     }
 
+    pub fn content_match_count(&self) -> usize {
+        self.grouped_results.iter().map(|g| g.matches.len()).sum()
+    }
+
+    pub fn has_any_results(&self) -> bool {
+        !self.global_results.is_empty() || !self.grouped_results.is_empty()
+    }
+
+    pub fn recompute_global_status(&mut self) {
+        self.global_loading = self.file_loading || self.content_loading;
+        self.global_error = match (&self.file_error, &self.content_error) {
+            (Some(file), Some(content)) => Some(format!("files: {file}; text: {content}")),
+            (Some(file), None) => Some(format!("files: {file}")),
+            (None, Some(content)) => Some(format!("text: {content}")),
+            (None, None) => None,
+        };
+    }
+
+    /// Total visible rows in the active global search view.
+    pub fn visible_item_count(&self) -> usize {
+        match self.global_search_type {
+            GlobalSearchType::Unified => {
+                self.global_results.len() + self.content_visible_item_count()
+            }
+            GlobalSearchType::FileName => self.global_results.len(),
+            GlobalSearchType::Content => self.content_visible_item_count(),
+        }
+    }
+
     /// Map a flat visible-row index to a logical `GroupedItem`.
     pub fn resolve_item(&self, flat_idx: usize) -> Option<GroupedItem> {
-        let mut remaining = flat_idx;
+        let file_count = match self.global_search_type {
+            GlobalSearchType::Unified | GlobalSearchType::FileName => self.global_results.len(),
+            GlobalSearchType::Content => 0,
+        };
+        if flat_idx < file_count {
+            return Some(GroupedItem::FileResult(flat_idx));
+        }
+
+        let mut remaining = flat_idx.saturating_sub(file_count);
         for (gi, group) in self.grouped_results.iter().enumerate() {
             if remaining == 0 {
                 return Some(GroupedItem::FileHeader(gi));
@@ -236,7 +286,11 @@ impl SearchState {
 
     /// Flat row index of a group's header.
     pub fn flat_index_of_header(&self, group_idx: usize) -> usize {
-        let mut idx = 0;
+        let mut idx = if self.global_search_type == GlobalSearchType::Unified {
+            self.global_results.len()
+        } else {
+            0
+        };
         for (gi, group) in self.grouped_results.iter().enumerate() {
             if gi == group_idx {
                 return idx;
@@ -280,6 +334,7 @@ pub(crate) fn cursor_byte_to_column(s: &str, byte_pos: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn search_state_new_defaults() {
@@ -300,5 +355,47 @@ mod tests {
     fn match_mode_variants() {
         assert_ne!(MatchMode::Fuzzy, MatchMode::Regex);
         assert_ne!(MatchMode::Regex, MatchMode::Exact);
+    }
+
+    #[test]
+    fn unified_visible_items_include_file_results_and_content_rows() {
+        let mut state = SearchState::new(SearchMode::Global);
+        state.global_search_type = GlobalSearchType::Unified;
+        state.global_results = vec![
+            GlobalSearchResult {
+                path: PathBuf::from("src/main.rs"),
+                display: "src/main.rs".into(),
+                line: None,
+                context: None,
+            },
+            GlobalSearchResult {
+                path: PathBuf::from("src/lib.rs"),
+                display: "src/lib.rs".into(),
+                line: None,
+                context: None,
+            },
+        ];
+        state.grouped_results = vec![FileGroup {
+            path: PathBuf::from("src/app.rs"),
+            display: "src/app.rs".into(),
+            matches: vec![
+                ContentMatch {
+                    line: Some(12),
+                    context: Some("fn start_search()".into()),
+                },
+                ContentMatch {
+                    line: Some(48),
+                    context: Some("render_search_overlay();".into()),
+                },
+            ],
+            collapsed: false,
+        }];
+
+        assert_eq!(state.visible_item_count(), 5);
+        assert_eq!(state.resolve_item(0), Some(GroupedItem::FileResult(0)));
+        assert_eq!(state.resolve_item(1), Some(GroupedItem::FileResult(1)));
+        assert_eq!(state.resolve_item(2), Some(GroupedItem::FileHeader(0)));
+        assert_eq!(state.resolve_item(3), Some(GroupedItem::MatchLine(0, 0)));
+        assert_eq!(state.resolve_item(4), Some(GroupedItem::MatchLine(0, 1)));
     }
 }

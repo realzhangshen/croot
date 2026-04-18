@@ -129,7 +129,8 @@ pub struct App {
     pub(super) hover_row: Option<usize>,
     pub ui: UiOverlayState,
     pub(super) search_state: SearchState,
-    pub(super) global_search_job: Option<crate::search::SearchJob>,
+    pub(super) file_search_job: Option<crate::search::SearchJob>,
+    pub(super) content_search_job: Option<crate::search::SearchJob>,
     // OSC 8 hyperlink regions emitted after the status bar is drawn
     pub(super) hyperlink_regions: Vec<HyperlinkRegion>,
     pub(super) enhanced_keyboard: bool,
@@ -191,7 +192,8 @@ impl App {
             hover_row: None,
             ui: UiOverlayState::default(),
             search_state: SearchState::new(SearchMode::Find),
-            global_search_job: None,
+            file_search_job: None,
+            content_search_job: None,
             hyperlink_regions: Vec::new(),
             enhanced_keyboard,
             click_tracker: ClickTracker::new(),
@@ -895,16 +897,29 @@ mod tests {
         app.search_state.query = "a".to_string();
         app.search_state.cursor_pos = 1;
         app.search_state.request_id = 7;
-        app.search_state.global_loading = true;
+        app.search_state.file_loading = true;
+        app.search_state.content_loading = true;
+        app.search_state.recompute_global_status();
         // Create a dummy SearchJob with a long debounce so it stays alive
         let (dummy_tx, _dummy_rx) = mpsc::channel(1);
-        app.global_search_job = Some(SearchJob::spawn(
+        app.file_search_job = Some(SearchJob::spawn(
             7,
             "a".to_string(),
             GlobalSearchType::FileName,
             app.root.clone(),
             "sleep".to_string(),
             "rg".to_string(),
+            100,
+            dummy_tx.clone(),
+            60_000,
+        ));
+        app.content_search_job = Some(SearchJob::spawn(
+            7,
+            "a".to_string(),
+            GlobalSearchType::Content,
+            app.root.clone(),
+            "fd".to_string(),
+            "sleep".to_string(),
             100,
             dummy_tx,
             60_000,
@@ -915,7 +930,8 @@ mod tests {
         assert!(app.search_state.query.is_empty());
         assert!(!app.search_state.global_loading);
         assert!(app.search_state.global_results.is_empty());
-        assert!(app.global_search_job.is_none());
+        assert!(app.file_search_job.is_none());
+        assert!(app.content_search_job.is_none());
         assert_eq!(app.search_state.request_id, 8);
     }
 
@@ -1015,8 +1031,12 @@ mod tests {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
         app.handle_action(&Action::StartFind, &ptx, &stx);
-        assert_eq!(app.ui.input_mode, InputMode::Search);
-        assert_eq!(app.search_state.mode, SearchMode::Find);
+        assert_eq!(app.ui.input_mode, InputMode::GlobalSearch);
+        assert_eq!(app.search_state.mode, SearchMode::Global);
+        assert_eq!(
+            app.search_state.global_search_type,
+            GlobalSearchType::Unified
+        );
     }
 
     #[test]
@@ -1024,8 +1044,12 @@ mod tests {
         let (mut app, _tmp) = test_app_with_files();
         let (ptx, stx) = make_channels();
         app.handle_action(&Action::StartFilter, &ptx, &stx);
-        assert_eq!(app.ui.input_mode, InputMode::Search);
-        assert_eq!(app.search_state.mode, SearchMode::Filter);
+        assert_eq!(app.ui.input_mode, InputMode::GlobalSearch);
+        assert_eq!(app.search_state.mode, SearchMode::Global);
+        assert_eq!(
+            app.search_state.global_search_type,
+            GlobalSearchType::Unified
+        );
     }
 
     #[test]
@@ -1051,7 +1075,7 @@ mod tests {
         assert_eq!(app.ui.input_mode, InputMode::GlobalSearch);
         assert_eq!(
             app.search_state.global_search_type,
-            GlobalSearchType::FileName
+            GlobalSearchType::Unified
         );
     }
 
@@ -1063,8 +1087,38 @@ mod tests {
         assert_eq!(app.ui.input_mode, InputMode::GlobalSearch);
         assert_eq!(
             app.search_state.global_search_type,
-            GlobalSearchType::Content
+            GlobalSearchType::Unified
         );
+    }
+
+    #[test]
+    fn unified_search_down_moves_from_file_result_into_content_group() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.ui.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.global_search_type = GlobalSearchType::Unified;
+        app.search_state.global_results.push(GlobalSearchResult {
+            path: PathBuf::from("src/main.rs"),
+            display: "src/main.rs".to_string(),
+            line: None,
+            context: None,
+        });
+        app.search_state.grouped_results.push(FileGroup {
+            path: PathBuf::from("src/app.rs"),
+            display: "src/app.rs".to_string(),
+            matches: vec![ContentMatch {
+                line: Some(27),
+                context: Some("start_unified_search();".to_string()),
+            }],
+            collapsed: false,
+        });
+
+        assert_eq!(app.search_state.global_selected, 0);
+        app.handle_action(&Action::GlobalSearchDown, &ptx, &stx);
+        assert_eq!(app.search_state.global_selected, 1);
+        app.handle_action(&Action::GlobalSearchDown, &ptx, &stx);
+        assert_eq!(app.search_state.global_selected, 2);
     }
 
     #[test]
