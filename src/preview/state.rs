@@ -194,6 +194,7 @@ impl PreviewState {
     }
 
     /// Apply a loaded preview result.
+    #[allow(clippy::too_many_arguments)]
     pub fn apply(
         &mut self,
         path: PathBuf,

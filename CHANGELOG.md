@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-04-19
+
+### Added
+- Global search overlay now supports mouse-wheel result navigation plus keyboard page navigation with `Left` / `Right` (also `PageUp` / `PageDown`)
+
+### Changed
+- Pre-built binary installation example now points at the latest release tag
+
 ## [0.6.0] - 2026-04-16
 
 ### Added
@@ -292,7 +300,8 @@ _Release-only commit (CI/packaging fix). No user-facing changes._
 - Git ignored file display: removed redundant status marker, fixed directory lookup
 - macOS x86_64 CI build using correct runner (macos-14)
 
-[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/realzhangshen/croot/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/realzhangshen/croot/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/realzhangshen/croot/compare/v0.5.5...v0.6.0
 [0.5.5]: https://github.com/realzhangshen/croot/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/realzhangshen/croot/compare/v0.5.3...v0.5.4

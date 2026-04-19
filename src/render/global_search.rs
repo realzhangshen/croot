@@ -89,6 +89,7 @@ fn highlight_style(base: ratatui::style::Style, selected: bool) -> ratatui::styl
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_highlighted_text(
     buf: &mut Buffer,
     x: u16,
