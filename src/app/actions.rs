@@ -268,26 +268,16 @@ impl App {
                 }
             }
             Action::GlobalSearchUp => {
-                if self.search_state.global_selected > 0 {
-                    self.search_state.global_selected -= 1;
-                    if self.search_state.global_selected < self.search_state.global_scroll_offset {
-                        self.search_state.global_scroll_offset = self.search_state.global_selected;
-                    }
-                }
+                self.search_state.move_global_selection_up(1);
             }
             Action::GlobalSearchDown => {
-                let upper = self.search_state.visible_item_count();
-                if upper > 0 && self.search_state.global_selected + 1 < upper {
-                    self.search_state.global_selected += 1;
-                    let visible = self.search_state.global_visible_height;
-                    if visible > 0
-                        && self.search_state.global_selected
-                            >= self.search_state.global_scroll_offset + visible
-                    {
-                        self.search_state.global_scroll_offset =
-                            self.search_state.global_selected - visible + 1;
-                    }
-                }
+                self.search_state.move_global_selection_down(1);
+            }
+            Action::GlobalSearchPageUp => {
+                self.search_state.page_global_selection_up();
+            }
+            Action::GlobalSearchPageDown => {
+                self.search_state.page_global_selection_down();
             }
             Action::GlobalSearchConfirm => {
                 post = self.handle_unified_search_confirm_with_preview(preview_tx);

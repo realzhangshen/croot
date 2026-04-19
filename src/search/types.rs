@@ -324,6 +324,76 @@ impl SearchState {
             self.global_scroll_offset = self.global_selected;
         }
     }
+
+    pub fn move_global_selection_up(&mut self, amount: usize) {
+        if self.visible_item_count() == 0 {
+            self.global_selected = 0;
+            self.global_scroll_offset = 0;
+            return;
+        }
+
+        self.global_selected = self.global_selected.saturating_sub(amount);
+        if self.global_selected < self.global_scroll_offset {
+            self.global_scroll_offset = self.global_selected;
+        }
+    }
+
+    pub fn move_global_selection_down(&mut self, amount: usize) {
+        let count = self.visible_item_count();
+        if count == 0 {
+            self.global_selected = 0;
+            self.global_scroll_offset = 0;
+            return;
+        }
+
+        self.global_selected = self
+            .global_selected
+            .saturating_add(amount)
+            .min(count.saturating_sub(1));
+        let visible = self.global_visible_height;
+        if visible > 0 && self.global_selected >= self.global_scroll_offset + visible {
+            self.global_scroll_offset = self.global_selected.saturating_sub(visible - 1);
+        }
+    }
+
+    pub fn page_global_selection_up(&mut self) {
+        let count = self.visible_item_count();
+        if count == 0 {
+            self.global_selected = 0;
+            self.global_scroll_offset = 0;
+            return;
+        }
+
+        let step = self.global_visible_height.max(1);
+        self.global_selected = self.global_selected.saturating_sub(step);
+        if self.global_visible_height > 0 {
+            self.global_scroll_offset = self.global_scroll_offset.saturating_sub(step);
+        }
+        self.clamp_selection();
+    }
+
+    pub fn page_global_selection_down(&mut self) {
+        let count = self.visible_item_count();
+        if count == 0 {
+            self.global_selected = 0;
+            self.global_scroll_offset = 0;
+            return;
+        }
+
+        let step = self.global_visible_height.max(1);
+        self.global_selected = self
+            .global_selected
+            .saturating_add(step)
+            .min(count.saturating_sub(1));
+        if self.global_visible_height > 0 {
+            let max_scroll = count.saturating_sub(self.global_visible_height);
+            self.global_scroll_offset = self
+                .global_scroll_offset
+                .saturating_add(step)
+                .min(max_scroll);
+        }
+        self.clamp_selection();
+    }
 }
 
 /// Convert a byte offset within a string to its display column width.
@@ -397,5 +467,64 @@ mod tests {
         assert_eq!(state.resolve_item(2), Some(GroupedItem::FileHeader(0)));
         assert_eq!(state.resolve_item(3), Some(GroupedItem::MatchLine(0, 0)));
         assert_eq!(state.resolve_item(4), Some(GroupedItem::MatchLine(0, 1)));
+    }
+
+    #[test]
+    fn move_global_selection_down_keeps_selection_visible() {
+        let mut state = SearchState::new(SearchMode::Global);
+        state.global_visible_height = 5;
+        state.global_results = (0..20)
+            .map(|i| GlobalSearchResult {
+                path: PathBuf::from(format!("file{i}.rs")),
+                display: format!("file{i}.rs"),
+                line: None,
+                context: None,
+            })
+            .collect();
+
+        state.move_global_selection_down(6);
+
+        assert_eq!(state.global_selected, 6);
+        assert_eq!(state.global_scroll_offset, 2);
+    }
+
+    #[test]
+    fn page_global_selection_down_advances_by_a_full_page() {
+        let mut state = SearchState::new(SearchMode::Global);
+        state.global_visible_height = 4;
+        state.global_results = (0..12)
+            .map(|i| GlobalSearchResult {
+                path: PathBuf::from(format!("file{i}.rs")),
+                display: format!("file{i}.rs"),
+                line: None,
+                context: None,
+            })
+            .collect();
+
+        state.page_global_selection_down();
+
+        assert_eq!(state.global_selected, 4);
+        assert_eq!(state.global_scroll_offset, 4);
+    }
+
+    #[test]
+    fn page_global_selection_up_moves_to_previous_page() {
+        let mut state = SearchState::new(SearchMode::Global);
+        state.global_visible_height = 4;
+        state.global_results = (0..12)
+            .map(|i| GlobalSearchResult {
+                path: PathBuf::from(format!("file{i}.rs")),
+                display: format!("file{i}.rs"),
+                line: None,
+                context: None,
+            })
+            .collect();
+        state.global_selected = 8;
+        state.global_scroll_offset = 8;
+
+        state.page_global_selection_up();
+
+        assert_eq!(state.global_selected, 4);
+        assert_eq!(state.global_scroll_offset, 4);
     }
 }

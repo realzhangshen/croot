@@ -133,6 +133,10 @@ pub enum Action {
     GlobalSearchUp,
     /// Global search: move selection down.
     GlobalSearchDown,
+    /// Global search: move one page up.
+    GlobalSearchPageUp,
+    /// Global search: move one page down.
+    GlobalSearchPageDown,
     /// Bracketed paste: complete pasted text (control chars already stripped).
     Paste(String),
     None,
@@ -393,6 +397,8 @@ pub fn handle_key_global_search(key: KeyEvent) -> Action {
         KeyCode::Backspace => Action::GlobalSearchBackspace,
         KeyCode::Up | KeyCode::BackTab => Action::GlobalSearchUp,
         KeyCode::Down => Action::GlobalSearchDown,
+        KeyCode::Left | KeyCode::PageUp => Action::GlobalSearchPageUp,
+        KeyCode::Right | KeyCode::PageDown => Action::GlobalSearchPageDown,
         KeyCode::Char(c) => Action::GlobalSearchChar(c),
         _ => Action::None,
     }
@@ -805,6 +811,14 @@ mod tests {
         assert_eq!(
             handle_key_global_search(make_key(KeyCode::Down)),
             Action::GlobalSearchDown
+        );
+        assert_eq!(
+            handle_key_global_search(make_key(KeyCode::Left)),
+            Action::GlobalSearchPageUp
+        );
+        assert_eq!(
+            handle_key_global_search(make_key(KeyCode::Right)),
+            Action::GlobalSearchPageDown
         );
     }
 

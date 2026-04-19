@@ -9,7 +9,7 @@ croot has full mouse support that works alongside keyboard navigation.
 | Click | Select a file/directory |
 | Double-click | Expand/collapse directory or open file |
 | Right-click | Open context menu |
-| Scroll | Scroll the file tree |
+| Scroll | Scroll the file tree, or move through global search results when the search overlay is open |
 | Drag divider | Resize tree/preview split |
 
 ## Disabling Mouse

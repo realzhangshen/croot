@@ -137,12 +137,13 @@ fn footer_actions(max_width: usize) -> String {
     }
 
     let candidates = [
-        "[Enter] open/toggle  [Tab] reveal path  [Esc] close",
-        "[Enter] open  [Tab] reveal path  [Esc] close",
-        "[Enter] open  [Tab] path  [Esc] close",
-        "Enter open  Tab path  Esc close",
-        "Enter open  Esc close",
-        "Enter  Esc",
+        "[Enter] open/toggle  [Tab] reveal path  [←/→] page  [Esc] close",
+        "[Enter] open  [Tab] reveal path  [←/→] page  [Esc] close",
+        "[Enter] open  [Tab] path  [←/→] page  [Esc] close",
+        "Enter open  Tab path  Left/Right page  Esc close",
+        "Enter open  Left/Right page  Esc close",
+        "Enter open  Page  Esc close",
+        "Enter  Page  Esc",
     ];
 
     for candidate in candidates {
@@ -151,7 +152,7 @@ fn footer_actions(max_width: usize) -> String {
         }
     }
 
-    super::text_util::truncate_with_ellipsis("Enter open  Esc close", max_width)
+    super::text_util::truncate_with_ellipsis("Enter open  Page  Esc close", max_width)
 }
 
 fn footer_status(state: &SearchState) -> Option<(String, ratatui::style::Style)> {

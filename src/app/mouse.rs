@@ -165,10 +165,6 @@ impl App {
     ) -> PostAction {
         use crossterm::event::{MouseButton, MouseEventKind};
 
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return PostAction::None;
-        }
-
         // Must match GlobalSearchOverlay::render geometry.
         let area = self.last_terminal_area;
         let overlay = crate::render::global_search::global_search_rect(area);
@@ -177,6 +173,19 @@ impl App {
             && mouse.column < overlay.x + overlay.width
             && mouse.row >= overlay.y
             && mouse.row < overlay.y + overlay.height;
+
+        match mouse.kind {
+            MouseEventKind::ScrollUp if inside => {
+                self.search_state.move_global_selection_up(1);
+                return PostAction::None;
+            }
+            MouseEventKind::ScrollDown if inside => {
+                self.search_state.move_global_selection_down(1);
+                return PostAction::None;
+            }
+            MouseEventKind::Down(MouseButton::Left) => {}
+            _ => return PostAction::None,
+        }
 
         if !inside {
             self.close_global_search_overlay();

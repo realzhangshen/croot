@@ -24,6 +24,8 @@ This makes the search flow closer to VS Code: type once, then decide whether you
 
 - Type to update results live
 - `Up` / `Down` move through the mixed result list
+- Mouse wheel moves the current selection through the result list without leaving the overlay
+- `Right` pages forward through the current result list; `Left` pages back
 - `Enter` selects the current path result in the tree
 - `Enter` on a text match selects the file, opens preview, jumps to the matched line, and highlights the matched content
 - `Enter` on a grouped text row toggles collapse

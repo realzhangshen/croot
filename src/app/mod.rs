@@ -239,7 +239,9 @@ mod tests {
         ContentMatch, FileGroup, GlobalSearchResult, GlobalSearchType, SearchMode, SearchState,
     };
     use crate::tree::node::TreeNode;
-    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    use crossterm::event::{
+        KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    };
     use ratatui::backend::TestBackend;
     /// Helper to create a minimal App rooted in a temp directory.
     /// Returns (App, `TempDir`) -- the `TempDir` must be kept alive for the test duration.
@@ -281,6 +283,17 @@ mod tests {
         (mpsc::channel(16).0, mpsc::channel(16).0)
     }
 
+    fn populate_global_results(state: &mut SearchState, count: usize) {
+        for i in 0..count {
+            state.global_results.push(GlobalSearchResult {
+                path: PathBuf::from(format!("file{i}.rs")),
+                display: format!("file{i}.rs"),
+                line: None,
+                context: None,
+            });
+        }
+    }
+
     #[test]
     fn test_global_search_mouse_move_does_not_cancel() {
         let (mut app, _tmp) = test_app();
@@ -319,6 +332,51 @@ mod tests {
         app.handle_global_search_mouse(mouse, &ptx);
 
         assert_eq!(app.ui.input_mode, InputMode::GlobalSearch);
+    }
+
+    #[test]
+    fn test_global_search_scroll_down_moves_selection() {
+        let (mut app, _tmp) = test_app();
+        app.ui.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.global_visible_height = 5;
+        populate_global_results(&mut app.search_state, 10);
+
+        let overlay = crate::render::global_search::global_search_rect(app.last_terminal_area);
+        let mouse = MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: overlay.x + 2,
+            row: overlay.y + 4,
+            modifiers: KeyModifiers::NONE,
+        };
+        let (ptx, _prx) = mpsc::channel(1);
+        app.handle_global_search_mouse(mouse, &ptx);
+
+        assert_eq!(app.search_state.global_selected, 1);
+        assert_eq!(app.search_state.global_scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_global_search_scroll_up_moves_selection() {
+        let (mut app, _tmp) = test_app();
+        app.ui.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.global_visible_height = 5;
+        populate_global_results(&mut app.search_state, 10);
+        app.search_state.global_selected = 2;
+
+        let overlay = crate::render::global_search::global_search_rect(app.last_terminal_area);
+        let mouse = MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: overlay.x + 2,
+            row: overlay.y + 4,
+            modifiers: KeyModifiers::NONE,
+        };
+        let (ptx, _prx) = mpsc::channel(1);
+        app.handle_global_search_mouse(mouse, &ptx);
+
+        assert_eq!(app.search_state.global_selected, 1);
+        assert_eq!(app.search_state.global_scroll_offset, 0);
     }
 
     #[test]
@@ -1175,6 +1233,22 @@ mod tests {
         });
         app.handle_action(&Action::GlobalSearchUp, &ptx, &stx);
         assert_eq!(app.search_state.global_selected, 0);
+    }
+
+    #[test]
+    fn action_global_search_right_arrow_pages_down() {
+        let (mut app, _tmp) = test_app_with_files();
+        let (ptx, stx) = make_channels();
+        app.ui.input_mode = InputMode::GlobalSearch;
+        app.search_state = SearchState::new(SearchMode::Global);
+        app.search_state.global_visible_height = 4;
+        populate_global_results(&mut app.search_state, 12);
+
+        let action = handle_key_global_search(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        app.handle_action(&action, &ptx, &stx);
+
+        assert_eq!(app.search_state.global_selected, 4);
+        assert_eq!(app.search_state.global_scroll_offset, 4);
     }
 
     // -- Action handling: file ops dispatch --
